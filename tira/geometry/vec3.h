@@ -2,7 +2,7 @@
 #define TIRA_VEC3_H
 
 
-#include <stim/cuda/cudatools/callable.h>
+#include <tira/cuda/callable.h>
 #include <complex>
 #include <cmath>
 

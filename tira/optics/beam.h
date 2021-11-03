@@ -75,6 +75,10 @@ public:
 
 		//generate a guide plane wave
 		planewave<T> pw(m_direction[0] * m_k, m_direction[1] * m_k, m_direction[2] * m_k, m_E[0], m_E[1], m_E[2]);
+		if (samples == 1) {
+			result[0] = pw;
+			return result;
+		}
 
 		double theta, phi;															//variables to store the coordinates for theta/phi on a sphere
 		tira::vec3<T> dir;
