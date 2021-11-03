@@ -2,8 +2,8 @@
 #define TIRA_PLANE_H
 
 #include <iostream>
-#include <stim/math/vec3.h>
-#include <stim/cuda/cudatools/callable.h>
+#include <tira/geometry/vec3.h>
+#include <tira/cuda/callable.h>
 #include <tira/geometry/quaternion.h>
 
 

@@ -1,8 +1,8 @@
 #ifndef TIRA_QUATERNION_H
 #define TIRA_QUATERNION_H
 
-#include <stim/math/matrix_sq.h>
-#include <stim/cuda/cudatools/callable.h>
+#include <tira/geometry/matrix_sq.h>
+#include <tira/cuda/callable.h>
 
 namespace tira {
 
