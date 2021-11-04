@@ -42,7 +42,7 @@ public:
 		m_E[0] = pol[0] * E;						//convert the polarization and complex amplitude to a linearly-polarized E vector
 		m_E[1] = pol[1] * E;
 		m_E[2] = pol[2] * E;
-		m_k = 2.0 * std::numbers::pi * lambda;		//calculate and store the wavenumber
+		m_k = 2.0 * std::numbers::pi / lambda;		//calculate and store the wavenumber
 	}
 
 	/// <summary>
