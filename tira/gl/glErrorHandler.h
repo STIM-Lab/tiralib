@@ -1,8 +1,16 @@
 # pragma once
-#include <GL/glew.h>
+
+#ifdef _MSC_VER
+#define DEBUG_BREAK __debugbreak()
+#else
+#include <signal.h>
+#define DEBUG_BREAK raise(SIGTRAP)
+#endif
+
+
 #include <iostream>
 
-#define ASSERT(x) if (!(x)) __debugbreak();
+#define ASSERT(x) if (!(x)) DEBUG_BREAK;
 #define GLCALL(x) tira::glClearError();\
     x;\
     ASSERT(tira::glLogCall(#x, __FILE__, __LINE__))

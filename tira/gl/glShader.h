@@ -1,5 +1,4 @@
 # pragma once
-#include <GL/glew.h>
 #include <unordered_map>
 #include <iostream>
 #include <fstream>
@@ -116,7 +115,11 @@ namespace tira {
 			if (result == GL_FALSE) {
 				int length;
 				GLCALL(glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length));
+				#ifdef _MSC_VER
 				char* message = (char*)_malloca(length * sizeof(char));
+				#else
+				char* message = (char*)alloca(length * sizeof(char));
+				#endif
 				GLCALL(glGetShaderInfoLog(id, length, &length, message));
 				std::cout << "Failed to compile " << (type == GL_VERTEX_SHADER ? "vertex" : "fragment") << "shader" << std::endl;
 				std::cout << message << std::endl;
