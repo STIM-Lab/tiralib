@@ -7,7 +7,7 @@
 #define DEBUG_BREAK raise(SIGTRAP)
 #endif
 
-
+#include <GL/glew.h>
 #include <iostream>
 
 #define ASSERT(x) if (!(x)) DEBUG_BREAK;
