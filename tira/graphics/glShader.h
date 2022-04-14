@@ -17,172 +17,12 @@ namespace tira {
 	};
 
 	struct glShaderUniform{
+
 		std::string name;
 		GLenum type;
-		GLint size;
 		GLint location;
-	};
 
-
-	class glShader {
-	private:
-		std::string m_FilePath;
-		unsigned int m_ShaderID;
-		mutable std::unordered_map<std::string, GLint> m_UniformLocationCache;
-		// Caching for uniforms
-	public:
-		/// <summary>
-		/// Load a file containing both a fragment and vertex shader
-		/// The input file should have the shaders labeled with the following:
-		/// # shader vertex
-		/// ....
-		/// # shader fragment
-		/// ....
-		/// </summary>
-		/// <param name="filepath">File path and name</param>
-		glShader() : m_ShaderID(0) {}
-		glShader(const std::string& filepath) {
-			m_ShaderID = 0;
-			LoadShader(filepath);
-		}
-		//~glShader() {
-		//	GLCALL(glDeleteProgram(m_ShaderID));
-		//}
-
-		void LoadShader(const std::string& filepath) {
-			ShaderProgramSource source = ParseShader(filepath);
-			m_ShaderID = CreateShader(source.VertexSource, source.FragmentSource);
-		}
-
-		void Bind() const {
-			GLCALL(glUseProgram(m_ShaderID));
-		}
-
-		void Unbind() const {
-			GLCALL(glUseProgram(0));
-		}
-
-		// Set uniforms
-		// Mimic larfer project
-		void SetUniform1i(const std::string& name, float value) {
-			GLint location = GetUniformLocation(name);
-			GLCALL(glUniform1i(location, value));
-		}
-		void SetUniform1f(const std::string& name, float value) {
-			GLint location = GetUniformLocation(name);
-			GLCALL(glUniform1f(location, value));
-		}
-		void SetUniform3f(const std::string& name, float v0, float v1, float v2) {
-			GLint location = GetUniformLocation(name);
-			GLCALL(glUniform3f(location, v0, v1, v2));
-		}
-		void SetUniform4f(const std::string& name, float v0, float v1, float v2, float v3) {
-			GLint location = GetUniformLocation(name);
-			GLCALL(glUniform4f(location, v0, v1, v2, v3));
-		}
-		inline void SetUniformMat4f(const std::string& name, const glm::mat4& matrix) {
-			GLint location = GetUniformLocation(name);
-			GLCALL(glUniformMatrix4fv(location, 1, GL_FALSE, &matrix[0][0]));
-		}
-
-		std::vector< glShaderUniform > GetUniformList(){
-			GLint count;												// stores the number of uniforms
-			glGetProgramiv(m_ShaderID, GL_ACTIVE_UNIFORMS, &count);		// get the number of uniforms
-
-			GLint size; 							// size of the variable
-			GLenum type; 							// type of the variable (float, vec3 or mat4, etc)
-
-			const GLsizei bufSize = 16; 			// maximum name length
-			GLchar name[bufSize]; 					// variable name in GLSL
-			GLsizei length; 						// name length
-
-			std::vector< glShaderUniform > uniforms(count);
-			for(int i = 0; i < count; i++){
-				glGetActiveUniform(m_ShaderID, (GLuint)i, bufSize, &length, &size, &type, name);
-				uniforms[i].name = std::string(name);
-				uniforms[i].size = CalcUniformSize(type);
-				uniforms[i].type = type;
-				uniforms[i].location = GetUniformLocation(name);
-			}
-			return uniforms;
-		}
-
-	private:
-
-		ShaderProgramSource ParseShader(const std::string& filepath) {             // Slow
-			std::ifstream stream(filepath);
-			enum class ShaderType {
-				NONE = -1, VERTEX = 0, FRAGMENT = 1
-			};
-			std::string line;
-			std::stringstream ss[2];
-			ShaderType type = ShaderType::NONE;
-			while (getline(stream, line)) {
-				if (line.find("# shader") != std::string::npos) {
-					if (line.find("vertex") != std::string::npos) {
-						// set mode to vertex
-						type = ShaderType::VERTEX;
-					}
-					else if (line.find("fragment") != std::string::npos) {
-						// set mode to fragment
-						type = ShaderType::FRAGMENT;
-					}
-				}
-				else {
-					ss[(int)type] << line << "\n";
-				}
-			}
-			return { ss[0].str(), ss[1].str() };
-		}
-		unsigned int CompileShader(unsigned int type, const std::string& source) {
-			unsigned int id = glCreateShader(type);
-			const char* src = source.c_str();
-			GLCALL(glShaderSource(id, 1, &src, nullptr));
-			GLCALL(glCompileShader(id));
-
-			int result;
-			glGetShaderiv(id, GL_COMPILE_STATUS, &result);
-			if (result == GL_FALSE) {
-				int length;
-				GLCALL(glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length));
-				#ifdef _MSC_VER
-				char* message = (char*)_malloca(length * sizeof(char));
-				#else
-				char* message = (char*)alloca(length * sizeof(char));
-				#endif
-				GLCALL(glGetShaderInfoLog(id, length, &length, message));
-				std::cout << "Failed to compile " << (type == GL_VERTEX_SHADER ? "vertex" : "fragment") << "shader" << std::endl;
-				std::cout << message << std::endl;
-				GLCALL(glDeleteShader(id));
-				return 0;
-			}
-
-			return id;
-			//TODO: Error handling
-		}
-		unsigned int CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
-			unsigned int program = glCreateProgram();
-			unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
-			unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);
-			GLCALL(glAttachShader(program, vs));
-			GLCALL(glAttachShader(program, fs));
-			GLCALL(glLinkProgram(program));
-			GLCALL(glValidateProgram(program));
-
-			GLCALL(glDeleteShader(vs));
-			GLCALL(glDeleteShader(fs));
-
-			return program;
-		}
-		GLint GetUniformLocation(const std::string& name) const {
-			if (m_UniformLocationCache.find(name) != m_UniformLocationCache.end())
-				return m_UniformLocationCache[name];
-			GLint location = glGetUniformLocation(m_ShaderID, name.c_str());
-			m_UniformLocationCache[name] = location;
-			return location;
-		}
-
-		static GLint CalcUniformSize(GLenum type) {
+		GLint size() {
 			switch (type) {
 			case GL_FLOAT:
 				return sizeof(GLfloat);
@@ -329,6 +169,238 @@ namespace tira {
 			case GL_UNSIGNED_INT_ATOMIC_COUNTER:
 			default:
 				return 0;
+			}
+		}
+	};
+
+
+	class glShader {
+	protected:
+		std::string m_FilePath;
+		unsigned int m_ShaderID;
+		mutable std::unordered_map<std::string, glShaderUniform> m_UniformCache;
+		// Caching for uniforms
+	public:
+		/// <summary>
+		/// Load a file containing both a fragment and vertex shader
+		/// The input file should have the shaders labeled with the following:
+		/// # shader vertex
+		/// ....
+		/// # shader fragment
+		/// ....
+		/// </summary>
+		/// <param name="filepath">File path and name</param>
+		glShader() : m_ShaderID(0) {}
+		glShader(const std::string& filepath) {
+			m_ShaderID = 0;
+			LoadShader(filepath);
+		}
+
+		void CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
+			if (m_ShaderID != 0)
+				glDeleteProgram(m_ShaderID);
+			m_ShaderID = glCreateProgram();
+			unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
+			unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);
+			GLERROR(glAttachShader(m_ShaderID, vs));
+			GLERROR(glAttachShader(m_ShaderID, fs));
+			GLERROR(glLinkProgram(m_ShaderID));
+			GLERROR(glValidateProgram(m_ShaderID));
+
+			GLERROR(glDeleteShader(vs));
+			GLERROR(glDeleteShader(fs));
+			CacheUniforms();							// cache the new uniform variables
+		}
+
+		void LoadShader(const std::string& filepath) {
+			ShaderProgramSource source = ParseShader(filepath);
+			CreateShader(source.VertexSource, source.FragmentSource);
+		}
+
+		void Bind() const {
+			GLERROR(glUseProgram(m_ShaderID));
+		}
+
+		void Unbind() const {
+			GLERROR(glUseProgram(0));
+		}
+
+		// Set uniforms
+		void SetUniform1f(const std::string& name, float value) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform1f(location, value));
+		}
+		void SetUniform2f(const std::string& name, float v0, float v1) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform2f(location, v0, v1));
+		}
+		void SetUniform3f(const std::string& name, float v0, float v1, float v2) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform3f(location, v0, v1, v2));
+		}
+		void SetUniform4f(const std::string& name, float v0, float v1, float v2, float v3) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform4f(location, v0, v1, v2, v3));
+		}
+
+		void SetUniform1i(const std::string& name, int value) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform1i(location, value));
+		}
+		void SetUniform2i(const std::string& name, int v0, int v1) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform2i(location, v0, v1));
+		}
+		void SetUniform3i(const std::string& name, int v0, int v1, int v2) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform3i(location, v0, v1, v2));
+		}
+		void SetUniform4i(const std::string& name, int v0, int v1, int v2, int v3) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform4i(location, v0, v1, v2, v3));
+		}
+
+		void SetUniform1ui(const std::string& name, unsigned int value) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform1ui(location, value));
+		}
+		void SetUniform2ui(const std::string& name, unsigned int v0, unsigned int v1) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform2ui(location, v0, v1));
+		}
+		void SetUniform3ui(const std::string& name, unsigned int v0, unsigned int v1, unsigned int v2) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform3ui(location, v0, v1, v2));
+		}
+		void SetUniform4ui(const std::string& name, unsigned int v0, unsigned int v1, unsigned int v2, unsigned int v3) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniform4ui(location, v0, v1, v2, v3));
+		}
+
+		inline void SetUniformMat4f(const std::string& name, const glm::mat4& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix4fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat3f(const std::string& name, const glm::mat3& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix3fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat2f(const std::string& name, const glm::mat2& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix2fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat2x3f(const std::string& name, const glm::mat2x3& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix2x3fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat3x2f(const std::string& name, const glm::mat3x2& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix3x2fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat2x4f(const std::string& name, const glm::mat2x4& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix2x4fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat4x2f(const std::string& name, const glm::mat4x2& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix4x2fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat3x4f(const std::string& name, const glm::mat3x4& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix3x4fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+		inline void SetUniformMat4x3f(const std::string& name, const glm::mat4x3& matrix) {
+			GLint location = GetUniformLocation(name);
+			GLERROR(glUniformMatrix4x3fv(location, 1, GL_FALSE, &matrix[0][0]));
+		}
+
+		std::vector< glShaderUniform > GetUniformList(){
+			if (m_ShaderID == 0) return std::vector<glShaderUniform>();	// if there isn't a shader program, return an empty vector
+			GLint count;												// stores the number of uniforms
+			glGetProgramiv(m_ShaderID, GL_ACTIVE_UNIFORMS, &count);		// get the number of uniforms
+
+			GLint s; 							// size of the variable
+			GLenum type; 							// type of the variable (float, vec3 or mat4, etc)
+
+			const GLsizei bufSize = 16; 			// maximum name length
+			GLchar name[bufSize]; 					// variable name in GLSL
+			GLsizei length; 						// name length
+
+			std::vector< glShaderUniform > uniforms(count);
+			for(int i = 0; i < count; i++){
+				glGetActiveUniform(m_ShaderID, (GLuint)i, bufSize, &length, &s, &type, name);
+				uniforms[i].name = std::string(name);
+				uniforms[i].type = type;
+				uniforms[i].location = glGetUniformLocation(m_ShaderID, name);
+			}
+			return uniforms;
+		}
+
+	protected:
+
+		ShaderProgramSource ParseShader(const std::string& filepath) {             // Slow
+			std::ifstream stream(filepath);
+			enum class ShaderType {
+				NONE = -1, VERTEX = 0, FRAGMENT = 1
+			};
+			std::string line;
+			std::stringstream ss[2];
+			ShaderType type = ShaderType::NONE;
+			while (getline(stream, line)) {
+				if (line.find("# shader") != std::string::npos) {
+					if (line.find("vertex") != std::string::npos) {
+						// set mode to vertex
+						type = ShaderType::VERTEX;
+					}
+					else if (line.find("fragment") != std::string::npos) {
+						// set mode to fragment
+						type = ShaderType::FRAGMENT;
+					}
+				}
+				else {
+					ss[(int)type] << line << "\n";
+				}
+			}
+			return { ss[0].str(), ss[1].str() };
+		}
+		unsigned int CompileShader(unsigned int type, const std::string& source) {
+			unsigned int id = glCreateShader(type);
+			const char* src = source.c_str();
+			GLERROR(glShaderSource(id, 1, &src, nullptr));
+			GLERROR(glCompileShader(id));
+
+			int result;
+			glGetShaderiv(id, GL_COMPILE_STATUS, &result);
+			if (result == GL_FALSE) {
+				int length;
+				GLERROR(glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length));
+				#ifdef _MSC_VER
+				char* message = (char*)_malloca(length * sizeof(char));
+				#else
+				char* message = (char*)alloca(length * sizeof(char));
+				#endif
+				GLERROR(glGetShaderInfoLog(id, length, &length, message));
+				std::cout << "Failed to compile " << (type == GL_VERTEX_SHADER ? "vertex" : "fragment") << "shader" << std::endl;
+				std::cout << message << std::endl;
+				GLERROR(glDeleteShader(id));
+				return 0;
+			}
+
+			return id;
+			//TODO: Error handling
+		}
+		
+		GLint GetUniformLocation(const std::string& name) const {
+			if (m_UniformCache.find(name) != m_UniformCache.end())
+				return m_UniformCache[name].location;
+			return -1;
+		}
+
+		void CacheUniforms(){
+			std::vector< glShaderUniform > uniform_list = GetUniformList();
+			m_UniformCache.clear();
+			for(size_t i = 0; i < uniform_list.size(); i++){
+				m_UniformCache[uniform_list[i].name] = uniform_list[i];
 			}
 		}
 

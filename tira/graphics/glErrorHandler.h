@@ -11,9 +11,13 @@
 #include <iostream>
 
 #define ASSERT(x) if (!(x)) DEBUG_BREAK;
-#define GLCALL(x) tira::glClearError();\
+#define GLBREAK(x) tira::glClearError();\
     x;\
     ASSERT(tira::glLogCall(#x, __FILE__, __LINE__))
+
+#define GLERROR(x) tira::glClearError();\
+    x;\
+    tira::glLogCall(#x, __FILE__, __LINE__)
 
 namespace tira {
     // For multiple errors. Loop until all errors found. 

@@ -45,37 +45,20 @@ namespace tira {
 			vb.SetBuffer(vertices, bytes);
 			ib.SetBuffer(indices, count);
 			va.AddBuffer(vb, layout, offset);
-			ib.Bind();
+			//va.Bind();
+			//ib.Bind();
 		}
 
 		void Draw() {
 			va.Bind();              // Bind index array
 			ib.Bind();              // Bind index buffer
-			GLCALL(glDrawElements(GL_TRIANGLES, ib.GetCount(), GL_UNSIGNED_INT, nullptr));
+			GLERROR(glDrawElements(GL_TRIANGLES, ib.GetCount(), GL_UNSIGNED_INT, nullptr));
+		}
+
+		void Destroy() {
+			va.Destroy();
+			vb.Destroy();
+			ib.Destroy();
 		}
 	};
 }
-//namespace tira {
-//	glGeometry::glGeometry() {}
-//
-//	void glGeometry::AddMesh(const void* vertices, unsigned int bytes,
-//		glVertexBufferLayout layout,
-//		const unsigned int* indices, unsigned int count, unsigned int offset) {
-//		vb.SetBuffer(vertices, bytes);
-//		ib.SetBuffer(indices, count);
-//		va.AddBuffer(vb, layout, offset);
-//		ib.Bind();
-//	}
-//
-//	void glGeometry::Unbind() {
-//		va.Unbind();
-//		vb.Unbind();
-//		ib.Unbind();
-//	}
-//
-//	void glGeometry::Draw() {
-//		va.Bind();              // Bind index array
-//		ib.Bind();              // Bind index buffer
-//		GLCALL(glDrawElements(GL_TRIANGLES, ib.GetCount(), GL_UNSIGNED_INT, nullptr));
-//	}
-//}
