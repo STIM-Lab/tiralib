@@ -18,8 +18,6 @@ namespace tira {
 			m_Depth = m_Width = m_Height = 0;
 			m_TextureType = GL_TEXTURE_2D;
 			m_TextureID = 0;
-
-			//GLCALL(glGenTextures(1, &m_TextureID));	// generate a new OpenGL texture name
 		}
 
 		void AssignImage(const unsigned char* bytes,
@@ -40,7 +38,7 @@ namespace tira {
 
 
 			GLERROR(glBindTexture(m_TextureType, m_TextureID));	// bind the texture
-
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
