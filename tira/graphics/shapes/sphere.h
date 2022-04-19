@@ -5,7 +5,6 @@ namespace tira {
 	template <typename T>
 	class sphere : public geometry<T>{
 		void genGeometry(unsigned int stacks, unsigned int sectors) {
-			//v.clear();
 			const float PI = 3.14159;
 
 			float radius = 0.5f;
@@ -83,15 +82,6 @@ namespace tira {
 						geometry<T>::m_indices.push_back(k2 + 1);
 					}
 
-					/*// store indices for lines
-					// vertical lines for all stacks, k1 => k2
-					lineIndices.push_back(k1);
-					lineIndices.push_back(k2);
-					if (i != 0)  // horizontal lines except 1st stack, k1 => k+1
-					{
-						lineIndices.push_back(k1);
-						lineIndices.push_back(k1 + 1);
-					}*/
 				}
 			}
 		} // end GenerateSphere()

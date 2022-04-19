@@ -36,7 +36,7 @@ namespace tira{
 
 	template <typename T>
 	glGeometry glGenerateSphere(unsigned int stacks, unsigned int slices) {
-		sphere<T> s;
+		sphere<T> s(stacks, slices);
 		std::vector<T> v = s.getInterleavedVertices();
 		std::vector<unsigned int> i = s.getIndices();
 
@@ -63,5 +63,19 @@ namespace tira{
 		icosahedron.AddMesh(ico.getInterleavedVertices(), ico.getInterleavedVertexCount() * 8 * sizeof(T), layout, ico.getIndices(), ico.getIndexCount(), 0);
 
 		return icosahedron;
+	}
+
+	template <typename T>
+	glGeometry glGenerateIcosphere(unsigned int subdiv, bool smooth = false) {
+		tira::icosphere ico(0.5f, subdiv, smooth);
+		glGeometry icosphere;
+
+		glVertexBufferLayout layout;
+		layout.Push<float>(3);
+		layout.Push<float>(3);
+		layout.Push<float>(2);
+		icosphere.AddMesh(ico.getInterleavedVertices(), ico.getInterleavedVertexCount() * 8 * sizeof(T), layout, ico.getIndices(), ico.getIndexCount(), 0);
+
+		return icosphere;
 	}
 }

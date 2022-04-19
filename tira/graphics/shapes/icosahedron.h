@@ -226,10 +226,10 @@ namespace tira {
 
         void buildVertices() {
 
-            //const float S_STEP = 1 / 11.0f;         // horizontal texture step
-            //const float T_STEP = 1 / 3.0f;          // vertical texture step
-            const float S_STEP = 186 / 2048.0f;     // horizontal texture step
-            const float T_STEP = 322 / 1024.0f;     // vertical texture step
+            const float S_STEP = 1 / 11.0f;         // horizontal texture step
+            const float T_STEP = 1 / 3.0f;          // vertical texture step
+            //const float S_STEP = 186 / 2048.0f;     // horizontal texture step
+            //const float T_STEP = 322 / 1024.0f;     // vertical texture step
 
             // compute 12 vertices of icosahedron
             std::vector<float> tmpVertices = computeVertices();
