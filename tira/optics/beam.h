@@ -1,7 +1,7 @@
 #ifndef TIRA_BEAM
 #define TIRA_BEAM
 
-#include "tira/geometry/vec3.h"
+//#include "tira/geometry/vec3.h"
 #include "tira/optics/planewave.h"
 #include <vector>
 #include <numbers>
@@ -12,9 +12,9 @@ namespace tira{
 template<typename T>
 class beam {
 
-	vec3<T> m_direction;
-	vec3<T> m_focus;
-	cvec3<T> m_E;
+	glm::vec<3, T> m_direction;
+	glm::vec<3, T> m_focus;
+	glm::vec<3, std::complex<T>> m_E;
 	T m_k;
 
 

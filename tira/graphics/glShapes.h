@@ -7,17 +7,33 @@ namespace tira{
 	template <typename T>
 	glGeometry glGenerateRectangle() {
 		rectangle<T> r;
-		std::vector<T> v = r.getInterleavedVertices();
-		std::vector<unsigned int> i = r.getIndices();
+		std::vector<T> v = r.getInterleavedVertices();									// generate a vector of interleaved vertices
+		std::vector<unsigned int> i = r.getIndices();									// generate a vector of indices
 		glGeometry rectangle;
 
 		glVertexBufferLayout layout;
-		layout.Push<T>(3);
-		layout.Push<T>(3);
-		layout.Push<T>(2);
+		layout.Push<T>(3);																// add three vertex components to the layout
+		layout.Push<T>(3);																// add three normal components to the layout
+		layout.Push<T>(2);																// add two texture components to the layout
 		rectangle.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
 
 		return rectangle;
+	}
+
+	template <typename T>
+	glGeometry glGenerateCircle(unsigned int slices = 10) {
+		circle<T> c(slices);
+		std::vector<T> v = c.getInterleavedVertices();									// generate a vector of interleaved vertices
+		std::vector<unsigned int> i = c.getIndices();									// generate a vector of indices
+		glGeometry circle;
+
+		glVertexBufferLayout layout;
+		layout.Push<T>(3);																// add three vertex components to the layout
+		layout.Push<T>(3);																// add three normal components to the layout
+		layout.Push<T>(2);																// add two texture components to the layout
+		circle.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+
+		return circle;
 	}
 
     template <typename T>
@@ -45,9 +61,9 @@ namespace tira{
 		glGeometry sphere;
 
 		glVertexBufferLayout layout;
-		layout.Push<float>(3);
-		layout.Push<float>(3);
-		layout.Push<float>(2);
+		layout.Push<T>(3);
+		layout.Push<T>(3);
+		layout.Push<T>(2);
 		sphere.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
 
 		return sphere;
@@ -55,13 +71,13 @@ namespace tira{
 
 	template <typename T>
 	glGeometry glGenerateIcosahedron() {
-		tira::icosahedron<float> ico(0.5f);
+		tira::icosahedron<T> ico(0.5f);
 		glGeometry icosahedron;
 
 		glVertexBufferLayout layout;
-		layout.Push<float>(3);
-		layout.Push<float>(3);
-		layout.Push<float>(2);
+		layout.Push<T>(3);
+		layout.Push<T>(3);
+		layout.Push<T>(2);
 		icosahedron.AddMesh(ico.getInterleavedVertices(), ico.getInterleavedVertexCount() * 8 * sizeof(T), layout, ico.getIndices(), ico.getIndexCount(), 0);
 
 		return icosahedron;
@@ -73,9 +89,9 @@ namespace tira{
 		glGeometry icosphere;
 
 		glVertexBufferLayout layout;
-		layout.Push<float>(3);
-		layout.Push<float>(3);
-		layout.Push<float>(2);
+		layout.Push<T>(3);
+		layout.Push<T>(3);
+		layout.Push<T>(2);
 		icosphere.AddMesh(ico.getInterleavedVertices(), ico.getInterleavedVertexCount() * 8 * sizeof(T), layout, ico.getIndices(), ico.getIndexCount(), 0);
 
 		return icosphere;

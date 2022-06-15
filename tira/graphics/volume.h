@@ -13,6 +13,8 @@ protected:
 
 public:
 	glm::mat4 getAlignmentMatrix(){
+		glm::mat4 result;
 		// generate an alignment matrix and return it
+		return result;
 	}
 };
