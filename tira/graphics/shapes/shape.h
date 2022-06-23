@@ -18,7 +18,7 @@ namespace tira{
 		std::vector<T> getNormals() { return m_normals; }
 		std::vector<T> getTexCoords() { return m_texcoords; }
 		std::vector<unsigned int> getIndices() { return m_indices; }
-		size_t getNumVertices() { return m_vertices.size() / 3; }
+		size_t getNumVertices() { return m_vertices.size() / vertex_dim; }
 		std::vector<T> getInterleavedVertices() {
 			// create a vector to hold the interleaved vertices
 			std::vector<T> interleaved(m_vertices.size() +

@@ -23,24 +23,30 @@ namespace tira{
 				v[p * 3 + 1] = y;
 				v[p * 3 + 2] = 0;
 			}
-			v[points * 3 + 0] = 0.0;
+			v[points * 3 + 0] = 0.0;						// add the center point
 			v[points * 3 + 1] = 0.0;
 			v[points * 3 + 2] = 0.0;
 
 			geometry<T>::m_vertices.insert(geometry<T>::m_vertices.begin(), std::begin(v), std::end(v));
 
-			std::vector<T> n(points * 3);
+			std::vector<T> n(points * 3 + 3);
 			for(size_t p = 0; p < points; p++){
 				n[p * 3 + 0] = 0;
 				n[p * 3 + 1] = 0;
 				n[p * 3 + 2] = 1;
 			}
+			n[points * 3 + 0] = 0.0;						// add the center normal
+			n[points * 3 + 1] = 0.0;
+			n[points * 3 + 2] = 1.0;
 			geometry<T>::m_normals.insert(geometry<T>::m_normals.begin(), std::begin(n), std::end(n));
-			std::vector<T> t(points * 2);
+			std::vector<T> t(points * 2 + 2);
 			for(size_t p = 0; p < points; p++){
 				t[p * 2 + 0] = v[p * 3 + 0] + 0.5;
 				t[p * 2 + 1] = v[p * 3 + 1] + 0.5;
 			}
+			t[points * 2 + 0] = 0.5;						// add the center texture coordinate
+			t[points * 2 + 1] = 0.5;
+
 			geometry<T>::m_texcoords.insert(geometry<T>::m_texcoords.begin(), std::begin(t), std::end(t));
 
 			// calculate the indices
