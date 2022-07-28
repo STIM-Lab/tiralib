@@ -52,7 +52,8 @@ namespace tira {
 					externalDataType, bytes));
 			}
 			else if (m_TextureType == GL_TEXTURE_3D) {
-				GLBREAK(glTexImage3D(GL_TEXTURE_3D, 0, internalFormat, m_Width, m_Height, m_Depth, 0,
+				GLBREAK(glTexImage3D(GL_TEXTURE_3D, 0, internalFormat, 
+					m_Width, m_Height, m_Depth, 0,
 					externalFormat,			// Format of the pixel data
 					externalDataType, bytes));
 			}
@@ -64,12 +65,10 @@ namespace tira {
 			GLenum internalFormat,
 			GLenum externalFormat,
 			GLenum externalDataType) {
-			//GLCALL(glGenTextures(1, &m_TextureID));	// generate a new OpenGL texture name
 			AssignImage(bytes, width, height, depth, internalFormat, externalFormat,externalDataType);
 		}										   
 			
 		~glTexture() {
-			//GLCALL(glDeleteTextures(1, &m_TextureID));
 		}
 
 		void Destroy() {
@@ -77,7 +76,6 @@ namespace tira {
 		}
 		
 		void Bind() const {
-			//GLCALL(glActiveTexture(GL_TEXTURE0));						// 0-8 or 0-32
 			GLBREAK(glBindTexture(m_TextureType, m_TextureID));	// bind the texture
 		}
 		void Unbind() const {
