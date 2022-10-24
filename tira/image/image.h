@@ -638,8 +638,25 @@ public:
 	}
 
 	image<T> convolve2(image<T> mask){
-		std::cout<<"ERROR tira::image::convolve2 - function has been broken, and shouldn't really be in here."<<std::endl;
-		exit(1);
+		image<T> result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), C());		// output image will be smaller than the input (only valid region returned)
+
+		T sum;
+		for (size_t yi = 0; yi < result.height(); yi++) {
+			for (size_t xi = 0; xi < result.height(); xi++) {
+				for (size_t ci = 0; ci < result.channels(); ci++) {
+					sum = (T)0;
+					for (size_t vi = 0; vi < mask.height(); vi++) {
+						for (size_t ui = 0; ui < mask.width(); ui++) {
+							sum += img[idx(xi + ui, yi + vi, ci)] * mask(ui, vi, 0);
+						}
+					}
+					result(xi, yi, ci) = sum;
+				}
+			}
+		}
+		return result;
+		//std::cout<<"ERROR tira::image::convolve2 - function has been broken, and shouldn't really be in here."<<std::endl;
+		//exit(1);
 	}
 
 

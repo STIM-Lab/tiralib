@@ -180,13 +180,23 @@ namespace tira{
             else if (numChannels == 3) externalFormat = GL_RGB;
             else if (numChannels == 4) externalFormat = GL_RGBA;
             else externalFormat = GL_RGBA;
-            (*i).second.texture.AssignImage(teximage.data(),
+
+            GLenum externalType;
+            if (typeid(T) == typeid(unsigned char)) externalType = GL_UNSIGNED_BYTE;
+            else if (typeid(T) == typeid(char)) externalType = GL_BYTE;
+            else if (typeid(T) == typeid(float)) externalType = GL_FLOAT;
+            else if (typeid(T) == typeid(short)) externalType = GL_SHORT;
+            else if (typeid(T) == typeid(unsigned short)) externalType = GL_UNSIGNED_SHORT;
+            else if (typeid(T) == typeid(int)) externalType = GL_INT;
+            else if (typeid(T) == typeid(unsigned int)) externalType = GL_UNSIGNED_INT;
+            else externalType = GL_UNSIGNED_BYTE;                                               // unsigned byte is the default
+            (*i).second.texture.AssignImage((const unsigned char*)teximage.data(),
                                             teximage.width(),
                                             teximage.height(),
                                             0,
                                             internalFormat,
                                             externalFormat,
-                                            GL_UNSIGNED_BYTE);
+                                            externalType);
             (*i).second.texture.SetFilter(filter_type);
         }
 

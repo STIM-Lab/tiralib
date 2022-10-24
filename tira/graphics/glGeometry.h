@@ -149,7 +149,7 @@ namespace tira {
 		}
 
 		template <typename T>
-		static glGeometry GenerateIcosphere(unsigned int subdiv, bool smooth = false) {
+		static glGeometry GenerateIcosphere(unsigned int subdiv = 4, bool smooth = false) {
 			tira::icosphere ico(0.5f, subdiv, smooth);
 			glGeometry icosphere;
 
