@@ -23,6 +23,8 @@ namespace tira{
 template <class T>
 class image{
 
+protected:
+
 	T* img;										//pointer to the image data (interleaved RGB for color)
 	size_t R[3];
 	bool interleaved = true;					//by default the data is interleaved
@@ -248,8 +250,9 @@ public:
 			outfile.close();
 		}
 		else {
-			cimg_library::CImg<T> cimg((unsigned int)R[1], (unsigned int)R[2], 1, (unsigned int)R[0]);
+			cimg_library::CImg<T> cimg((unsigned int)X(), (unsigned int)Y(), 1, (unsigned int)C());
 			get_noninterleaved(cimg.data());
+			//get_interleaved_rgb(cimg.data());
 			cimg.save(fname.c_str());
 		}
 	}
@@ -642,7 +645,7 @@ public:
 
 		T sum;
 		for (size_t yi = 0; yi < result.height(); yi++) {
-			for (size_t xi = 0; xi < result.height(); xi++) {
+			for (size_t xi = 0; xi < result.width(); xi++) {
 				for (size_t ci = 0; ci < result.channels(); ci++) {
 					sum = (T)0;
 					for (size_t vi = 0; vi < mask.height(); vi++) {
