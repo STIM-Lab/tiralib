@@ -600,6 +600,10 @@ public:
 	}
 
 	image<T> crop(size_t x0, size_t y0, size_t w, size_t h){
+		if(x0 + w > width() || y0 + h > height()){
+			std::cout<<"ERROR: cropped image contains an invalid region."<<std::endl;
+			exit(1);
+		}
 		image<T> result(w, h, C());								//create the output cropped image
 
 		size_t srci;
