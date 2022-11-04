@@ -608,7 +608,7 @@ public:
 
 		size_t srci;
 		size_t dsti;
-		size_t line_bytes = w * C();							//calculate the number of bytes in a line
+		size_t line_bytes = w * C() * sizeof(T);				//calculate the number of bytes in a line
 		for (size_t yi = 0; yi < h; yi++) {						//for each row in the cropped image
 			srci = (y0 + yi) * X() * C() + x0 * C();			//calculate the source index
 			dsti = yi * w * C();								//calculate the destination index
