@@ -173,6 +173,10 @@ namespace tira {
 			return r;												//return the inverted image
 		}
 
+		T& operator()(size_t x, size_t y, size_t c = 0) {
+			return field<T>::_data[idx_offset(x, y, c)];
+		}
+
 		/// <summary>
 		/// Cast data types
 		/// </summary>

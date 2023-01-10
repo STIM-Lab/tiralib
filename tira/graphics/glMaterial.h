@@ -2,7 +2,7 @@
 
 #include "tira/graphics/glShader.h"
 #include "tira/graphics/glTexture.h"
-#include "tira/image/image.h"
+#include "tira/image.h"
 
 namespace tira{
 
