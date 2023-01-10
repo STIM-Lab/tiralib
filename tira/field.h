@@ -12,6 +12,9 @@ namespace tira {
 		std::vector<T> _data;							// pointer to raw field data
 		std::vector<size_t> _shape;						// dimension sizes
 
+		/// <summary>
+		/// Allocate data in the _data vector based on the values in _shape
+		/// </summary>
 		void allocate() {
 			if (_shape.size() == 0) _data.resize(0);
 			size_t s = _shape[0];
