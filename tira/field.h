@@ -103,7 +103,7 @@ namespace tira {
 			return i;
 		}
 
-		template<typename D>
+		template<typename D = T>
 		void npy(std::string filename) {					// fill the field with data from an npy file
 			std::vector<unsigned long> shape;
 			std::vector<D> data;

@@ -16,7 +16,7 @@
 
 //saving an image to a file uses the CImg library
 	//this currently throws a lot of "unreachable" warnings (as of GCC 4.8.2, nvcc 6.5.12)
-#include <tira/image/image.h>
+#include <tira/image.h>
 
 
 #define BREWER_CTRL_PTS 11
