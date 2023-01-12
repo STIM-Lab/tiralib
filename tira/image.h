@@ -17,6 +17,12 @@ namespace tira {
 		inline size_t X() const { return field<T>::_shape[1]; }
 		inline size_t Y() const { return field<T>::_shape[2]; }
 
+		/// <summary>
+		/// Allocate space for an empty image
+		/// </summary>
+		/// <param name="x">Width of the image (fast axis)</param>
+		/// <param name="y">Height of the image (slow axis)</param>
+		/// <param name="c">Number of color channels</param>
 		void init(size_t x, size_t y, size_t c = 1) {
 			field<T>::_shape.push_back(c);
 			field<T>::_shape.push_back(x);
@@ -25,6 +31,13 @@ namespace tira {
 			field<T>::allocate();
 		}
 
+		/// <summary>
+		/// Calculates the 1D array offset given spatial and color coordinates
+		/// </summary>
+		/// <param name="x">X coordinate of the image (fast axis)</param>
+		/// <param name="y">Y coordinate of the image (slow axis)</param>
+		/// <param name="c">Color channel</param>
+		/// <returns></returns>
 		inline size_t idx_offset(size_t x, size_t y, size_t c = 0) const {
 			return y * C() * X() + x * C() + c;		// y * C * X + x * C + c
 		}
