@@ -82,8 +82,8 @@ namespace tira {
 			//create an image object
 			//cimg_library::CImg<unsigned char> image(non_interleaved, x_size, y_size, 1, 3);
 			//image.save(filename.c_str());
-			image<unsigned char> I;
-			I.set_interleaved_rgb(buffer, width, height);
+			image<unsigned char> I(buffer, width, height, 3);
+			//I.set_interleaved_rgb(buffer, width, height);
 			I.save(filename);
 		}
 

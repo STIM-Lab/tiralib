@@ -26,12 +26,23 @@ namespace tira {
 
 			if (from_hat[0] == to_hat[0] && from_hat[1] == to_hat[1] && from_hat[2] == to_hat[2])
 				return glm::tmat3x3<T>(1.0);
-			if (from_hat[0] == -to_hat[0] && from_hat[1] == -to_hat[1] && from_hat[2] == -to_hat[2])
-				return glm::tmat3x3<T>(-1.0);
+			if (from_hat[0] == -to_hat[0] && from_hat[1] == -to_hat[1] && from_hat[2] == -to_hat[2]) {
+				glm::tmat3x3<T> rot(-1.0);
+				rot[0][0] = 1.0;
+				return rot;
+			}
 
 			glm::tvec3<T> cp = glm::cross(from_hat, to_hat);
 			glm::tvec3<T> axis = glm::normalize(cp);
-			T angle = std::asin(glm::length(cp));
+
+			T dot = glm::dot(from_hat, to_hat);							// calculate the dot product (used to differentiate between two angles)
+			T arcsin = std::asin(glm::length(cp));
+			T angle;
+			if (dot >= 0)
+				angle = arcsin;									// calculate the angle of rotation (inverse sin of the length of the cross product)
+			else
+				angle = M_PI - arcsin;
+			//T angle = std::asin(glm::length(cp));
 
 			glm::tquat<T> q = glm::angleAxis(angle, axis);		// generate a quaternion from the rotation properties
 
@@ -67,13 +78,19 @@ namespace tira {
 			if(k_hat[2] == 1.0) return glm::tmat3x3<T>(1.0);
 			if (k_hat[2] == -1) {
 				glm::tmat3x3<T> M = glm::tmat3x3<T>(-1.0);
-				//M[1][1] = -M[1][1];
+				M[0][0] = 1.0;
 				return M;
 			}
 
 			glm::tvec3<T> cp = glm::cross(z, k_hat);			// calculate the cross product of z and k_hat (giving us the axis of rotation and angle)
 			glm::tvec3<T> axis = glm::normalize(cp);			// calculate the axis of rotation (normalized cross product)
-			T angle = std::asin(glm::length(cp));				// calculate the angle of rotation (inverse sin of the length of the cross product)
+			T dot = glm::dot(z, k_hat);							// calculate the dot product (used to differentiate between two angles)
+			T arcsin = std::asin(glm::length(cp));
+			T angle;
+			if (dot >= 0)
+				angle = arcsin;									// calculate the angle of rotation (inverse sin of the length of the cross product)
+			else
+				angle = M_PI - arcsin;
 			
 			glm::tquat<T> q = glm::angleAxis(angle, axis);		// generate a quaternion from the rotation properties
 			glm::tquat<T> iq = glm::inverse(q);					// calculate the inverse of q

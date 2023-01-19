@@ -41,34 +41,6 @@ namespace tira {
 		inline size_t idx_offset(size_t x, size_t y, size_t c = 0) const {
 			return y * C() * X() + x * C() + c;		// y * C * X + x * C + c
 		}
-
-		/// <summary>
-		/// Copies the non-interleaved image data to the specified pointer
-		/// </summary>
-		/// <param name="data">destination of the copy (assumes the memory has been allocated)</param>
-		void get_noninterleaved(T* dest) {
-			//for each channel
-			for (size_t y = 0; y < Y(); y++) {
-				for (size_t x = 0; x < X(); x++) {
-					for (size_t c = 0; c < C(); c++) {
-						dest[c * Y() * X() + y * X() + x] = field<T>::_data[idx_offset(x, y, c)];
-					}
-				}
-			}
-		}
-
-		void set_noninterleaved(T* data, size_t width, size_t height, size_t chan) {
-			init(width, height, chan);
-
-			//for each channel
-			for (size_t y = 0; y < Y(); y++) {
-				for (size_t x = 0; x < X(); x++) {
-					for (size_t c = 0; c < C(); c++) {
-						field<T>::_data[idx_offset(x, y, c)] = data[c * Y() * X() + y * X() + x];
-					}
-				}
-			}
-		}
 		
 		
 	public:
@@ -502,6 +474,34 @@ namespace tira {
 			return result;
 			//std::cout<<"ERROR tira::image::convolve2 - function has been broken, and shouldn't really be in here."<<std::endl;
 			//exit(1);
+		}
+
+		/// <summary>
+		/// Copies the non-interleaved image data to the specified pointer
+		/// </summary>
+		/// <param name="data">destination of the copy (assumes the memory has been allocated)</param>
+		void get_noninterleaved(T* dest) {
+			//for each channel
+			for (size_t y = 0; y < Y(); y++) {
+				for (size_t x = 0; x < X(); x++) {
+					for (size_t c = 0; c < C(); c++) {
+						dest[c * Y() * X() + y * X() + x] = field<T>::_data[idx_offset(x, y, c)];
+					}
+				}
+			}
+		}
+
+		void set_noninterleaved(T* data, size_t width, size_t height, size_t chan) {
+			init(width, height, chan);
+
+			//for each channel
+			for (size_t y = 0; y < Y(); y++) {
+				for (size_t x = 0; x < X(); x++) {
+					for (size_t c = 0; c < C(); c++) {
+						field<T>::_data[idx_offset(x, y, c)] = data[c * Y() * X() + y * X() + x];
+					}
+				}
+			}
 		}
 
 
