@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Windows.h>
-#include "tira/image/image.h"
+#include "tira/image.h"
 
 #include <sstream>
 
