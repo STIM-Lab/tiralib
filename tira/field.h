@@ -104,7 +104,7 @@ namespace tira {
 		}
 
 		template<typename D = T>
-		void npy(std::string filename) {					// fill the field with data from an npy file
+		void load_npy(std::string filename) {					// fill the field with data from an npy file
 			std::vector<unsigned long> shape;
 			std::vector<D> data;
 			bool fortran_order;
@@ -142,6 +142,13 @@ namespace tira {
 			memcpy(&_data[0], &data[0], bytes());									// copy the data from the
 
 		}
+		
+		void save_npy(const std::string& filename) {
+			bool fortran_order = false;
+
+			npy::SaveArrayAsNumpy(filename, fortran_order, _shape.size(), (const unsigned long *) & _shape[0], &_data[0]);
+		}
+
 
 		size_t bytes() const {
 			return size() * sizeof(T);
