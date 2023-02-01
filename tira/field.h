@@ -149,7 +149,7 @@ namespace tira {
 		}
 		
 		void save_npy(const std::string& filename) {
-			bool fortran_order = true;
+			bool fortran_order = false;
 			std::vector<unsigned long> shape(_shape.size());
 			for (int i = 0; i < shape.size(); i++)
 				shape[i] = _shape[i];

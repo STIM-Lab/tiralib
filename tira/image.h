@@ -13,9 +13,9 @@ namespace tira {
 	class image : public field<T>{		// the image class extends field
 
 	protected:
-		inline size_t C() const { return field<T>::_shape[0]; }
+		inline size_t Y() const { return field<T>::_shape[0]; }
 		inline size_t X() const { return field<T>::_shape[1]; }
-		inline size_t Y() const { return field<T>::_shape[2]; }
+		inline size_t C() const { return field<T>::_shape[2]; }
 
 		/// <summary>
 		/// Allocate space for an empty image
@@ -24,9 +24,9 @@ namespace tira {
 		/// <param name="y">Height of the image (slow axis)</param>
 		/// <param name="c">Number of color channels</param>
 		void init(size_t x, size_t y, size_t c = 1) {
-			field<T>::_shape.push_back(c);
-			field<T>::_shape.push_back(x);
 			field<T>::_shape.push_back(y);
+			field<T>::_shape.push_back(x);
+			field<T>::_shape.push_back(c);
 
 			field<T>::allocate();
 		}
