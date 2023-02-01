@@ -108,7 +108,12 @@ namespace tira {
 			std::vector<unsigned long> shape;
 			std::vector<D> data;
 			bool fortran_order;
-			npy::LoadArrayFromNumpy<D>(filename, shape, fortran_order, data);	// load NPY array and metadata
+			try {
+				npy::LoadArrayFromNumpy<D>(filename, shape, fortran_order, data);	// load NPY array and metadata
+			}
+			catch(...){
+				exit(1);
+			}
 
 			// calculate the number of NPY array elements D can fit in a single field object T
 			size_t D_per_T = sizeof(T) / sizeof(D);

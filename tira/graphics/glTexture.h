@@ -14,6 +14,21 @@ namespace tira {
 		GLenum m_TextureType;			// GL_TEXTURE_1D, GL_TEXTURE_2D, GL_TEXTURE_3D, etc.
 
 	public:
+		template <typename D>
+		static GLint type2gl() {
+			if (typeid(D) == typeid(char)) return GL_BYTE;
+			if (typeid(D) == typeid(unsigned char)) return GL_UNSIGNED_BYTE;
+			if (typeid(D) == typeid(short)) return GL_SHORT;
+			if (typeid(D) == typeid(unsigned short)) return GL_UNSIGNED_SHORT;
+			if (typeid(D) == typeid(int)) return GL_INT;
+			if (typeid(D) == typeid(unsigned int)) return GL_UNSIGNED_INT;
+			if (typeid(D) == typeid(float)) return GL_FLOAT;
+			else {
+				std::cout << "ERROR: data type is not currently supported (may require OpenGL extensions)" << std::endl;
+				exit(1);
+			}
+		}
+
 		glTexture() {
 			m_Depth = m_Width = m_Height = 0;
 			m_TextureType = GL_TEXTURE_2D;
