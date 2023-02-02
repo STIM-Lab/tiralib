@@ -24,6 +24,10 @@ namespace tira {
 		/// <param name="y">Height of the image (slow axis)</param>
 		/// <param name="c">Number of color channels</param>
 		void init(size_t x, size_t y, size_t c = 1) {
+			if (field<T>::_shape.size() != 0) {													// if this image has already been allocated
+				field<T>::_shape.clear();														// clear the shape and data vectors to start from scratch
+				field<T>::_data.clear();
+			}
 			field<T>::_shape.push_back(y);
 			field<T>::_shape.push_back(x);
 			field<T>::_shape.push_back(c);
@@ -160,6 +164,18 @@ namespace tira {
 
 		T& operator()(size_t x, size_t y, size_t c = 0) {
 			return field<T>::_data[idx_offset(x, y, c)];
+		}
+
+		image<T> clamp(T min, T max) {
+			size_t N = size();
+			image<T> r(X(), Y(), C());
+			for (size_t n = 0; n < N; n++) {
+				if (field<T>::_data[n] < min) r._data[n] = min;
+				else if (field<T>::_data[n] > max) r._data[n] = max;
+				else r._data[n] = field<T>::_data[n];
+			}
+
+			return r;
 		}
 
 		/// <summary>
@@ -331,6 +347,7 @@ namespace tira {
 			}
 			return max_val;
 		}
+
 
 		/// <summary>
 		/// Returns the minimum value in the image
