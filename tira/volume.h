@@ -17,10 +17,7 @@ namespace tira {
 
 	protected:
 
-		inline size_t Z() const { return field<T>::_shape[0]; }
-		inline size_t Y() const { return field<T>::_shape[1]; }
-		inline size_t X() const { return field<T>::_shape[2]; }
-		inline size_t C() const { return field<T>::_shape[3]; }
+		
 
 	
 		/// <summary>
@@ -140,6 +137,12 @@ namespace tira {
 		~volume() {
 
 		}
+
+		// access methods for the volume size and number of channels
+		inline size_t Z() const { return field<T>::_shape[0]; }
+		inline size_t Y() const { return field<T>::_shape[1]; }
+		inline size_t X() const { return field<T>::_shape[2]; }
+		inline size_t C() const { return field<T>::_shape[3]; }
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
 			init(X, Y, Z, 1);
