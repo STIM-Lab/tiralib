@@ -3,6 +3,7 @@
 #include "tira/graphics/glShader.h"
 #include "tira/graphics/glTexture.h"
 #include "tira/image.h"
+#include "tira/volume.h"
 
 namespace tira{
 
@@ -107,6 +108,37 @@ namespace tira{
             m_TextureUnits = new_texture_units;
         }
 
+        template <typename T>
+        void SetTexture(std::string name, const T* texbytes, int width, int height, int depth, int channels, GLenum internalFormat = GL_RGB, GLenum filter_type = GL_LINEAR) {
+            std::unordered_map<std::string, glTextureUnit>::iterator i = m_TextureUnits.find(name); // create an iterator
+            if (i == m_TextureUnits.end()) return;               // if the texture name doesn't exist, return
+
+            GLenum externalFormat;
+            if (channels == 1) externalFormat = GL_RED;
+            else if (channels == 2) externalFormat = GL_RG;
+            else if (channels == 3) externalFormat = GL_RGB;
+            else if (channels == 4) externalFormat = GL_RGBA;
+            else externalFormat = GL_RGBA;
+
+            GLenum externalType;
+            if (typeid(T) == typeid(unsigned char)) externalType = GL_UNSIGNED_BYTE;
+            else if (typeid(T) == typeid(char)) externalType = GL_BYTE;
+            else if (typeid(T) == typeid(float)) externalType = GL_FLOAT;
+            else if (typeid(T) == typeid(short)) externalType = GL_SHORT;
+            else if (typeid(T) == typeid(unsigned short)) externalType = GL_UNSIGNED_SHORT;
+            else if (typeid(T) == typeid(int)) externalType = GL_INT;
+            else if (typeid(T) == typeid(unsigned int)) externalType = GL_UNSIGNED_INT;
+            else externalType = GL_UNSIGNED_BYTE;                                               // unsigned byte is the default
+            (*i).second.texture.AssignImage((const unsigned char*)texbytes,
+                width,
+                height,
+                depth,
+                internalFormat,
+                externalFormat,
+                externalType);
+            (*i).second.texture.SetFilter(filter_type);
+        }
+
         public:
         glMaterial() : glShader(){
             
@@ -170,34 +202,12 @@ namespace tira{
         /// <param name="filter_type">Filter type used for texture sampling (GL_LINEAR, GL_NEAREST).</param>
         template <typename T>
         void SetTexture(std::string name, tira::image<T> teximage, GLenum internalFormat = GL_RGB, GLenum filter_type = GL_LINEAR) {
-            std::unordered_map<std::string, glTextureUnit>::iterator i = m_TextureUnits.find(name); // create an iterator
-            if(i == m_TextureUnits.end()) return;               // if the texture name doesn't exist, return
+            SetTexture<T>(name, teximage.data(), teximage.width(), teximage.height(), 0, teximage.channels(), internalFormat, filter_type);
+        }
 
-            GLenum externalFormat;
-            size_t numChannels = teximage.channels();
-            if (numChannels == 1) externalFormat = GL_RED;
-            else if (numChannels == 2) externalFormat = GL_RG;
-            else if (numChannels == 3) externalFormat = GL_RGB;
-            else if (numChannels == 4) externalFormat = GL_RGBA;
-            else externalFormat = GL_RGBA;
-
-            GLenum externalType;
-            if (typeid(T) == typeid(unsigned char)) externalType = GL_UNSIGNED_BYTE;
-            else if (typeid(T) == typeid(char)) externalType = GL_BYTE;
-            else if (typeid(T) == typeid(float)) externalType = GL_FLOAT;
-            else if (typeid(T) == typeid(short)) externalType = GL_SHORT;
-            else if (typeid(T) == typeid(unsigned short)) externalType = GL_UNSIGNED_SHORT;
-            else if (typeid(T) == typeid(int)) externalType = GL_INT;
-            else if (typeid(T) == typeid(unsigned int)) externalType = GL_UNSIGNED_INT;
-            else externalType = GL_UNSIGNED_BYTE;                                               // unsigned byte is the default
-            (*i).second.texture.AssignImage((const unsigned char*)teximage.data(),
-                                            teximage.width(),
-                                            teximage.height(),
-                                            0,
-                                            internalFormat,
-                                            externalFormat,
-                                            externalType);
-            (*i).second.texture.SetFilter(filter_type);
+        template <typename T>
+        void SetTexture(std::string name, tira::volume<T> texvolume, GLenum internalFormat = GL_RGB, GLenum filter_type = GL_LINEAR) {
+            SetTexture<T>(name, texvolume.data(), texvolume.X(), texvolume.Y(), texvolume.Z(), texvolume.C(), internalFormat, filter_type);
         }
 
         /// <summary>

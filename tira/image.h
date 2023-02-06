@@ -13,9 +13,6 @@ namespace tira {
 	class image : public field<T>{		// the image class extends field
 
 	protected:
-		inline size_t Y() const { return field<T>::_shape[0]; }
-		inline size_t X() const { return field<T>::_shape[1]; }
-		inline size_t C() const { return field<T>::_shape[2]; }
 
 		/// <summary>
 		/// Allocate space for an empty image
@@ -48,6 +45,9 @@ namespace tira {
 		
 		
 	public:
+		inline size_t Y() const { return field<T>::_shape[0]; }
+		inline size_t X() const { return field<T>::_shape[1]; }
+		inline size_t C() const { return field<T>::_shape[2]; }
 
 		/// <summary>
 		/// Default constructor initializes an empty image (0x0 with 0 channels)
@@ -121,12 +121,6 @@ namespace tira {
 		}
 
 		/// <summary>
-		/// Returns the number of raw values in the image
-		/// </summary>
-		/// <returns></returns>
-		size_t size() { return C() * X() * Y(); }
-
-		/// <summary>
 		/// Assignment operator, assigns one image to another
 		/// </summary>
 		/// <param name="I"></param>
@@ -144,7 +138,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="v">Constant that all elements will be set to</param>
 		image<T> operator=(T v) {														//set all elements of the image to a given value v
-			size_t N = size();
+			size_t N = field<T>::size();
 			std::fill(field<T>::_data.begin(), field<T>::_data.end(), v);
 			return *this;
 		}
@@ -155,7 +149,7 @@ namespace tira {
 		/// <param name="rhs"></param>
 		/// <returns></returns>
 		image<T> operator+(image<T> rhs) {
-			size_t N = size();										//calculate the total number of values in the image
+			size_t N = field<T>::size();							//calculate the total number of values in the image
 			image<T> r(X(), Y(), C());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] + rhs._data[n];		//perform the inversion
@@ -167,7 +161,7 @@ namespace tira {
 		}
 
 		image<T> clamp(T min, T max) {
-			size_t N = size();
+			size_t N = field<T>::size();
 			image<T> r(X(), Y(), C());
 			for (size_t n = 0; n < N; n++) {
 				if (field<T>::_data[n] < min) r._data[n] = min;
@@ -185,7 +179,7 @@ namespace tira {
 		template<typename V>
 		operator image<V>() {
 			image<V> r(X(), Y(), C());					//create a new image
-			std::copy(&field<T>::_data[0], &field<T>::_data[0] + size(), r.data());		//copy and cast the data
+			std::copy(&field<T>::_data[0], &field<T>::_data[0] + field<T>::size(), r.data());		//copy and cast the data
 			return r;									//return the new image
 		}
 
@@ -318,7 +312,7 @@ namespace tira {
 			std::vector<size_t> s;								// allocate an array
 			s.resize(foreground(background));					// allocate space in the array
 
-			size_t N = size();
+			size_t N = field<T>::size();
 
 			size_t i = 0;
 			for (size_t n = 0; n < N; n++) {
@@ -337,7 +331,7 @@ namespace tira {
 		/// <returns></returns>
 		T maxv() {
 			T max_val = field<T>::_data[0];				//initialize the maximum value to the first one
-			size_t N = size();	//get the number of pixels
+			size_t N = field<T>::size();	//get the number of pixels
 
 			for (size_t n = 0; n < N; n++) {		//for every value
 
@@ -355,7 +349,7 @@ namespace tira {
 		/// <returns></returns>
 		T minv() {
 			T min_val = field<T>::_data[0];				//initialize the maximum value to the first one
-			size_t N = size();	//get the number of pixels
+			size_t N = field<T>::size();	//get the number of pixels
 
 			for (size_t n = 0; n < N; n++) {		//for every value
 				if (field<T>::_data[n] < min_val) {			//if the value is higher than the current max
@@ -381,7 +375,7 @@ namespace tira {
 				return result;
 			}
 
-			size_t N = size();						//get the number of values in the image
+			size_t N = field<T>::size();						//get the number of values in the image
 			T range = maxval - minval;			//calculate the current range of the image
 			T desired_range = high - low;		//calculate the desired range of the image
 			for (size_t n = 0; n < N; n++) {		//for each element in the image
@@ -471,7 +465,8 @@ namespace tira {
 		/// </summary>
 		/// <param name="mask"></param>
 		/// <returns></returns>
-		image<T> convolve2(image<T> mask) {
+		template <typename D>
+		image<T> convolve2(image<D> mask) {
 			image<T> result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), C());		// output image will be smaller than the input (only valid region returned)
 
 			T sum;
@@ -519,6 +514,13 @@ namespace tira {
 					}
 				}
 			}
+		}
+
+		template<typename D = T>
+		void load_npy(std::string filename) {
+			field<T>::load_npy<D>(filename);										// load the numpy file using the tira::field class
+			if (field<T>::_shape.size() == 2)										// if the numpy array is only 2D, add a color channel of size 1
+				field<T>::_shape.push_back(1);
 		}
 
 

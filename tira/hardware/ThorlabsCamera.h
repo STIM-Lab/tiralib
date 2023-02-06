@@ -51,7 +51,7 @@ public:
 
 	void setExposure(double milliseconds) {
 		_exposure = (long long)(milliseconds * 1000);
-		Init();
+		tl_camera_set_exposure_time(_camera_handle, _exposure);
 	}
 
 	double getExposure() {
@@ -152,7 +152,8 @@ public:
 	}
 
 	void reInit() {
-		Init();
+		//Destroy();
+		//Init();
 	}
 
 	void Destroy() {

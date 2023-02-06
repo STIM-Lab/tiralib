@@ -10,7 +10,7 @@ namespace tira {
 		GLuint m_TextureID;		// texture OpenGL name
 		//const unsigned char* m_LocalBuffer;	// pointer to pixels in CPU memory
 		int m_Width, m_Height;			// width and height (2D and 3D textures)
-		int m_Depth;					// depth = 1 for a 2D texture
+		int m_Depth;					// depth = 0 for a 2D texture
 		GLenum m_TextureType;			// GL_TEXTURE_1D, GL_TEXTURE_2D, GL_TEXTURE_3D, etc.
 
 	public:
@@ -45,8 +45,11 @@ namespace tira {
 			m_Height = height;
 			m_Depth = depth;
 
-			if(m_TextureID == 0)
+			if (m_TextureID == 0) {
+				std::cout << "Texture ID: " << m_TextureID << std::endl;
 				GLERROR(glGenTextures(1, &m_TextureID));	// generate a new OpenGL texture name
+
+			}
 
 			if (depth == 0) m_TextureType = GL_TEXTURE_2D;	// set the texture type based on input parameters
 			else m_TextureType = GL_TEXTURE_3D;

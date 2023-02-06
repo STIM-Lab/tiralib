@@ -10,7 +10,7 @@ namespace tira {
 	class field {
 	protected:
 		std::vector<T> _data;							// pointer to raw field data
-		std::vector<size_t> _shape;						// dimension sizes
+		std::vector<size_t> _shape;						// dimension sizes, specified as the slowest dimension first and the fastest dimension last (C ordering)
 
 		/// <summary>
 		/// Allocate data in the _data vector based on the values in _shape
@@ -35,13 +35,22 @@ namespace tira {
 			}
 			return off;
 		}
-		template<typename... D>
+		/*template<typename... D>
 		size_t idx_offset(size_t d, size_t i, D... more) const {	// recursive function for finding the index from an arbitrary set of coordinates
 			size_t off = i;
 			for (size_t di = d + 1; di < _shape.size(); di++) {
 				off *= _shape[di];
 			}
 			return off + idx_offset(d + 1, more...);
+		}*/
+
+		/// <summary>
+		/// Calculate the 2D index into the _data array given a set of coordinates using image-based indexing (specified fast-to-slow)
+		/// </summary>
+		/// <param name="coords"></param>
+		/// <returns></returns>
+		size_t idx_f2s(std::vector<size_t> coords) {
+
 		}
 
 		
@@ -141,7 +150,14 @@ namespace tira {
 
 			size_t FieldDims = shape.size() - Dims_per_T;						// calculate the total number of dimensions in the field
 			std::vector<size_t> new_shape(shape.begin(), shape.begin() + FieldDims);	// calculate the actual shape of the field (composed of elements T, each composed of sub-elements D)
-			setShape(new_shape);														// set the new shape of the field
+
+			if (fortran_order) {													// if the numpy array uses fortran ordering, than the indices are flipped
+				std::reverse(new_shape.begin(), new_shape.end());
+				setShape(new_shape);
+			}
+			else {
+				setShape(new_shape);													// set the new shape of the field
+			}
 			allocate();																	// allocate space for the field
 
 			memcpy(&_data[0], &data[0], bytes());									// copy the data from the
@@ -185,15 +201,15 @@ namespace tira {
 		}
 
 		// return the total number of elements in the field
-		size_t size() const {									
+		size_t size() const {							
 			
 			return _data.size();
 		}
 
-		template<typename... D>
+		/*template<typename... D>
 		T& operator()(size_t x, D... more) {							// returns a reference to the indexed value
 			return _data[idx_offset(0, x, more...)];
-		}
+		}*/
 
 		T& operator()(std::vector<size_t> x) {
 			return _data[idx(x)];
