@@ -40,7 +40,8 @@ namespace tira {
 		/// <param name="c">Color channel</param>
 		/// <returns></returns>
 		inline size_t idx_offset(size_t x, size_t y, size_t c = 0) const {
-			return y * C() * X() + x * C() + c;		// y * C * X + x * C + c
+			size_t idx =  y * C() * X() + x * C() + c;		// y * C * X + x * C + c
+			return idx;
 		}
 		
 		
@@ -518,7 +519,7 @@ namespace tira {
 
 		template<typename D = T>
 		void load_npy(std::string filename) {
-			field<T>::load_npy<D>(filename);										// load the numpy file using the tira::field class
+			field<T>::template load_npy<D>(filename);										// load the numpy file using the tira::field class
 			if (field<T>::_shape.size() == 2)										// if the numpy array is only 2D, add a color channel of size 1
 				field<T>::_shape.push_back(1);
 		}

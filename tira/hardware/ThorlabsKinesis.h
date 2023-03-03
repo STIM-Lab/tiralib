@@ -68,7 +68,7 @@ class ThorlabsStage {
 
 public:
 
-	void Init() {
+	void Init(short id = 0, int type = 70) {
 
 		TLI_InitializeSimulations();
 
@@ -81,55 +81,60 @@ public:
 
 		// get device list size 
 		short n = TLI_GetDeviceListSize();
-		if (n != 1) {
-			std::cout << "ERROR: " << n << " stage devices found (expecting 1)" << std::endl;
-			std::cout << "Entering simulation mode (no stages active)..." << std::endl;
-		}
-		else {
 			// get BBD serial numbers
-			char serialNos[100];
-			TLI_GetDeviceListByTypeExt(serialNos, 100, 70);
+		char bufSerialNos[100];
+		TLI_GetDeviceListByTypeExt(bufSerialNos, 100, type);
 
-			// output list of matching devices
-			char* searchContext = nullptr;
-			char* p = strtok_s(serialNos, ",", &searchContext);
-			m_serial_num = std::string(p);
+		// output list of matching devices
+		char* searchContext = nullptr;
+		std::vector<std::string> SerialNos;
+		char* serial_num = strtok_s(bufSerialNos, ",", &searchContext);
+		rsize_t* strmax;
+		while (serial_num) {
+			SerialNos.push_back(std::string(serial_num));
+			serial_num = strtok_s(nullptr, ",", &searchContext);
+		}
+		if (SerialNos.size() < id + 1) {
+			std::cout << "ERROR: stage id " << id << " requested, but only " << SerialNos.size() << " stages of type " << type << " were found" << std::endl;
+			exit(1);
+		}
+		m_serial_num = std::string(SerialNos[id]);
 
-			//get device details
-			TLI_DeviceInfo deviceInfo;
-			// get device info from device
-			TLI_GetDeviceInfo(m_serial_num.c_str(), &deviceInfo);
-			// get strings from device info structure
-			char desc[65];
-			strncpy_s(desc, deviceInfo.description, 64);
-			desc[64] = '\0';
-			char serialNo[9];
-			strncpy_s(serialNo, deviceInfo.serialNo, 8);
-			serialNo[8] = '\0';
+		//get device details
+		TLI_DeviceInfo deviceInfo;
+		// get device info from device
+		TLI_GetDeviceInfo(m_serial_num.c_str(), &deviceInfo);
+		// get strings from device info structure
+		char desc[65];
+		strncpy_s(desc, deviceInfo.description, 64);
+		desc[64] = '\0';
+		char serialNo[9];
+		strncpy_s(serialNo, deviceInfo.serialNo, 8);
+		serialNo[8] = '\0';
 
-			// open device
-			if (SBC_Open(m_serial_num.c_str()) == 0)
-			{
-				if (!SBC_LoadSettings(m_serial_num.c_str(), 1))
-					std::cout << "ERROR: Failed to load settings for X - SBC_LoadSettings()" << std::endl;
-				if (!SBC_LoadSettings(m_serial_num.c_str(), 2))
-					std::cout << "ERROR: Failed to load settings for Y - SBC_LoadSettings()" << std::endl;
-				if (!SBC_LoadSettings(m_serial_num.c_str(), 3))
-					std::cout << "ERROR: Failed to load settings for Z - SBC_LoadSettings()" << std::endl;
+		// open device
+		if (SBC_Open(m_serial_num.c_str()) == 0)
+		{
+			if (!SBC_LoadSettings(m_serial_num.c_str(), 1))
+				std::cout << "ERROR: Failed to load settings for X - SBC_LoadSettings()" << std::endl;
+			if (!SBC_LoadSettings(m_serial_num.c_str(), 2))
+				std::cout << "ERROR: Failed to load settings for Y - SBC_LoadSettings()" << std::endl;
+			if (!SBC_LoadSettings(m_serial_num.c_str(), 3))
+				std::cout << "ERROR: Failed to load settings for Z - SBC_LoadSettings()" << std::endl;
 
 
-				// start the device polling at 200ms intervals
-				SBC_StartPolling(m_serial_num.c_str(), 1, m_polling_rate);
-				SBC_StartPolling(m_serial_num.c_str(), 2, m_polling_rate);
-				SBC_StartPolling(m_serial_num.c_str(), 3, m_polling_rate);
+			// start the device polling at 200ms intervals
+			SBC_StartPolling(m_serial_num.c_str(), 1, m_polling_rate);
+			SBC_StartPolling(m_serial_num.c_str(), 2, m_polling_rate);
+			SBC_StartPolling(m_serial_num.c_str(), 3, m_polling_rate);
 
-				// enable device so that it can move
-				Enable();
-			}
-			m_active[0] = true;
-			m_active[1] = true;            // Y stage isn't installed yet
-			m_active[2] = true;
-		}       // end if the stages are found
+			// enable device so that it can move
+			Enable();
+		}
+		m_active[0] = true;
+		m_active[1] = true;            // Y stage isn't installed yet
+		m_active[2] = true;
+	    // end if the stages are found
 	}
 	void Destroy() {
 		// Un-initialize stages

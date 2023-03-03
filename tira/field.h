@@ -120,7 +120,8 @@ namespace tira {
 			try {
 				npy::LoadArrayFromNumpy<D>(filename, shape, fortran_order, data);	// load NPY array and metadata
 			}
-			catch(...){
+			catch(const std::runtime_error &e){
+				std::cout << e.what() << std::endl;
 				exit(1);
 			}
 
