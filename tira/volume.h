@@ -3,10 +3,8 @@
 #include <tira/image.h>
 
 #include <iomanip>
-
-// Added by HELIA (test)
 #include <filesystem>
-// end library test
+
 
 namespace tira {
 	/// This static class provides the STIM interface for loading, saving, and storing 2D images.
