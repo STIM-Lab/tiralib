@@ -2,6 +2,8 @@
 
 #include "extern/CImg.h"
 
+#include <stack>
+
 #include <tira/field.h>
 
 
@@ -42,6 +44,145 @@ namespace tira {
 		inline size_t idx_offset(size_t x, size_t y, size_t c = 0) const {
 			size_t idx =  y * C() * X() + x * C() + c;		// y * C * X + x * C + c
 			return idx;
+		}
+
+		T& at(size_t x, size_t y, size_t c = 0) {
+			return field<T>::_data[idx_offset(x, y, c)];
+		}
+
+		/// <summary>
+		/// Calculate a distance field from an input contour phi = 0
+		/// </summary>
+		/// <param name="levelset"></param>
+		/// <returns></returns>
+		tira::image<T> dist(tira::image<int>& binary_boundary) {
+
+			int w = width();
+			int h = height();
+
+
+
+			std::vector<std::tuple<int, int>> neighbors;				// vector stores a template for 4-connected indices
+			neighbors.emplace_back(0, 1);
+			neighbors.emplace_back(1, 0);
+			neighbors.emplace_back(-1, 0);
+			neighbors.emplace_back(0, -1);
+
+
+			// indentifying boundary cells
+			for (int y = 1; y < h - 1; y++) {						// for every row in the image
+				for (int x = 1; x < w - 1; x++) {					// for every column in the image
+					for (int k = 0; k < neighbors.size(); k++) {		// for every neighbor
+
+						int nx = x + get<0>(neighbors[k]);				// calculate the x coordinate of the neighbor cell
+						int ny = y + get<1>(neighbors[k]);				// calculate the y coordinate of the neighbor cell
+
+						if (at(x, y) * at(nx, ny) <= 0) {				// if the product of the current cell and neighboring cell is negative (it is a boundary cell)
+							binary_boundary(x, y) = 1;					// this cell is a boundary cell
+							binary_boundary(nx, ny) = 1;				// the neighboring cell is ALSO a boundary cell
+						}
+					}
+				}
+			}
+
+
+
+			tira::image<float> dist(w, h);										// create an image to store the distance field
+			dist = 9999.0f;																// initialize the distance field to a very large value
+
+
+			// calculate the distance for all boundary cells to the contour
+			for (int y = 1; y < h - 1; y++) {											// for every row in the image
+				for (int x = 1; x < w - 1; x++) {										// for every column in the image
+					if (binary_boundary(x, y)) {											// if the pixel (x, y) is in the boundary
+						for (int k = 0; k < neighbors.size(); k++) {						// for every neighbor
+
+							int nx = x + get<0>(neighbors[k]);								// calculate the x coordinate of the neighbor cell
+							int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
+							if (binary_boundary(nx, ny)) {												// if the neighboring cell (nx, ny) is ALSO in the boundary
+								float da = (abs(at(x, y))) / (abs(at(nx, ny) - at(x, y)));			// calculate distance from pixel(x,y) to contour da
+								float db = (abs(at(nx, ny))) / (abs(at(nx, ny) - at(x, y)));			// calculate distance from neighbor to contour db
+								dist(x, y) = std::min(dist(x, y), da);									// minimum between distance and large boundary value of pixel (x,y)
+								dist(nx, ny) = std::min(dist(nx, ny), db);								// minimum between distance and large boundary value of neighbor (nx, ny)
+							}
+						}
+					}
+				}
+			}
+			// at this point, the distance image has the correct distances in cells surround the boundary
+
+			std::vector<float> dist1d;											// create a 1d representation of the distance field
+			dist1d.resize(h * w);
+
+			int row = w;
+
+			// copy the distance field into the 1d distance field
+			for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					dist1d[y * w + x] = dist(x, y);
+				}
+			}
+
+			// initializing fast sweeiping algorithm 
+			const int NSweeps = 4;
+
+			//// sweep directions { start, end, step }
+			const int dirX[NSweeps][3] = { {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1} };
+			const int dirY[NSweeps][3] = { {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1} };
+			double aa[2];
+			double d_new, a, b;
+			int s, ix, iy, gridPos;
+			const double dx = 1.0, f = 1.0;
+
+			for (s = 0; s < NSweeps; s++) {
+
+				for (iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
+					for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
+
+						gridPos = iy * row + ix;
+
+						if (iy == 0 || iy == (h - 1)) {                    // calculation for ymin
+							if (iy == 0) {
+								aa[1] = dist1d[(iy + 1) * row + ix];
+							}
+							if (iy == (h - 1)) {
+								aa[1] = dist1d[(iy - 1) * row + ix];
+							}
+						}
+						else {
+							aa[1] = dist1d[(iy - 1) * row + ix] < dist1d[(iy + 1) * row + ix] ? dist1d[(iy - 1) * row + ix] : dist1d[(iy + 1) * row + ix];
+						}
+
+						if (ix == 0 || ix == (w - 1)) {                    // calculation for xmin
+							if (ix == 0) {
+								aa[0] = dist1d[iy * row + (ix + 1)];
+							}
+							if (ix == (w - 1)) {
+								aa[0] = dist1d[iy * row + (ix - 1)];
+							}
+						}
+						else {
+							aa[0] = dist1d[iy * row + (ix - 1)] < dist1d[iy * row + (ix + 1)] ? dist1d[iy * row + (ix - 1)] : dist1d[iy * row + (ix + 1)];
+						}
+
+						a = aa[0]; b = aa[1];
+						d_new = (fabs(a - b) < f * dx ? (a + b + sqrt(2.0 * f * f * dx * dx - (a - b) * (a - b))) * 0.5 : std::fminf(a, b) + f * dx);
+
+						dist1d[gridPos] = d_new;
+					}
+				}
+			}
+
+			for (int y = 0; y < h; y++)
+			{
+				for (int x = 0; x < w; x++)
+				{
+					dist(x, y) = dist1d[y * w + x];
+				}
+
+			}
+
+			return dist;
 		}
 		
 		
@@ -134,6 +275,22 @@ namespace tira {
 			return *this;													// return a pointer to the current object
 		}
 
+		image<T> operator+(T rhs) {
+			size_t N = field<T>::size();							//calculate the total number of values in the image
+			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] + rhs;				//add the individual pixels
+			return r;												//return the summed result
+		}
+
+		image<T> operator-(T rhs) {
+			size_t N = field<T>::size();							//calculate the total number of values in the image
+			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] - rhs;				//add the individual pixels
+			return r;												//return the summed result
+		}
+
 		/// <summary>
 		/// Set all values in the image to a single constant
 		/// </summary>
@@ -153,12 +310,12 @@ namespace tira {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
 			image<T> r(X(), Y(), C());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] + rhs._data[n];		//perform the inversion
+				r._data[n] = field<T>::_data[n] + rhs._data[n];		//add the individual pixels
 			return r;												//return the inverted image
 		}
 
 		T& operator()(size_t x, size_t y, size_t c = 0) {
-			return field<T>::_data[idx_offset(x, y, c)];
+			return at(x, y, c);
 		}
 
 		image<T> clamp(T min, T max) {
@@ -522,6 +679,108 @@ namespace tira {
 			field<T>::template load_npy<D>(filename);										// load the numpy file using the tira::field class
 			if (field<T>::_shape.size() == 2)										// if the numpy array is only 2D, add a color channel of size 1
 				field<T>::_shape.push_back(1);
+		}
+
+		image<T> dist() {
+			tira::image<int> boundary(width(), height());
+			return dist(boundary);
+		}
+
+		image<T> sdf() {
+
+			tira::image<int> boundary(width(), height());
+			image<T> distance = dist(boundary);
+			int width = distance.width();
+			int height = distance.height();
+
+			std::vector<float>SDF;
+			SDF.resize(height * width);
+
+			for (int y = 0; y < height; y++)
+			{
+				for (int x = 0; x < width; x++)
+				{
+					SDF[y * width + x] = distance(x, y);
+				}
+
+			}
+
+			std::vector <float> frozenCells;
+			frozenCells.resize(height * width);
+
+
+			// initializing frozencells
+			for (int i = 0; i < height; i++)
+			{
+				for (int j = 0; j < width; j++)
+				{
+					frozenCells[i * width + j] = boundary(j, i);
+				}
+			}
+
+			// turn the whole input distance field to negative
+			for (int i = 0; i < SDF.size(); i++) {
+				SDF[i] = -1 * SDF[i];
+			}
+
+
+			double val; int gridPos;
+			const int row = width;
+			const int nx = width - 1;
+			const int ny = height - 1;
+			int ix = 0, iy = 0;
+
+			// initialize a std::tuple to store the values of frozen cell
+			std::stack<std::tuple<int, int>> stack = {};
+
+			std::tuple<int, int> idsPair;
+
+			// find the first unfrozen cell
+			gridPos = 0;
+
+
+			while (frozenCells[gridPos]) {
+				ix += (ix < nx ? 1 : 0);
+				iy += (iy < ny ? 1 : 0);
+				gridPos = row * iy + ix;
+			}
+			stack.push({ ix, iy });
+			// a simple pixel flood
+			while (stack.size()) {
+				idsPair = stack.top();
+				stack.pop();
+				ix = std::get<0>(idsPair);
+				iy = std::get<1>(idsPair);
+				gridPos = row * iy + ix;
+				if (!frozenCells[gridPos]) {
+					val = -1.0 * SDF[gridPos];
+					SDF[gridPos] = val;
+					frozenCells[gridPos] = true; // freeze cell when done
+					if (ix > 0) {
+						stack.push({ ix - 1, iy });
+					}
+					if (ix < nx) {
+						stack.push({ ix + 1, iy });
+					}
+					if (iy > 0) {
+						stack.push({ ix, iy - 1 });
+					}
+					if (iy < ny) {
+						stack.push({ ix, iy + 1 });
+					}
+				}
+			}
+
+
+			for (int y = 0; y < height; y++)
+			{
+				for (int x = 0; x < width; x++)
+				{
+					distance(x, y) = SDF[y * width + x];
+				}
+
+			}
+			return distance;
 		}
 
 
