@@ -296,9 +296,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="v">Constant that all elements will be set to</param>
 		image<T> operator=(T v) {														//set all elements of the image to a given value v
-			size_t N = field<T>::size();
-			std::fill(field<T>::_data.begin(), field<T>::_data.end(), v);
-			return *this;
+			return field<T>::operator=(v);
 		}
 
 		/// <summary>

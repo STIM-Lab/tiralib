@@ -207,6 +207,16 @@ namespace tira {
 			return _data.size();
 		}
 
+		/// <summary>
+		/// Set all values in the image to a single constant
+		/// </summary>
+		/// <param name="v">Constant that all elements will be set to</param>
+		field<T> operator=(T v) {														//set all elements of the image to a given value v
+			size_t N = field<T>::size();
+			std::fill(field<T>::_data.begin(), field<T>::_data.end(), v);
+			return *this;
+		}
+
 		/*template<typename... D>
 		T& operator()(size_t x, D... more) {							// returns a reference to the indexed value
 			return _data[idx_offset(0, x, more...)];
@@ -345,6 +355,10 @@ namespace tira {
 			}
 			return result;
 
+		}
+
+		void resize(std::vector<size_t> new_size) {
+			setShape(new_size);
 		}
 
 
