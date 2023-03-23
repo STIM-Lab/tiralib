@@ -84,6 +84,7 @@ namespace tira {
 			// get BBD serial numbers
 			char bufSerialNos[100];
 			TLI_GetDeviceListByTypeExt(bufSerialNos, 100, type);
+			std::cout << "MUVITOME Stage Serial Number buffer: " << bufSerialNos << std::endl;
 
 			// output list of matching devices
 			char* searchContext = nullptr;

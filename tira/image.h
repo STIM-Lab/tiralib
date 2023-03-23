@@ -1,6 +1,7 @@
 #pragma once
 
 #include "extern/CImg.h"
+#undef min
 
 #include <stack>
 
@@ -100,10 +101,12 @@ namespace tira {
 							int nx = x + get<0>(neighbors[k]);								// calculate the x coordinate of the neighbor cell
 							int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
 							if (binary_boundary(nx, ny)) {												// if the neighboring cell (nx, ny) is ALSO in the boundary
-								float da = (abs(at(x, y))) / (abs(at(nx, ny) - at(x, y)));			// calculate distance from pixel(x,y) to contour da
+								float da = (abs(at(x, y))) / (abs(at(nx, ny) - at(x, y)));				// calculate distance from pixel(x,y) to contour da
 								float db = (abs(at(nx, ny))) / (abs(at(nx, ny) - at(x, y)));			// calculate distance from neighbor to contour db
-								dist(x, y) = std::min(dist(x, y), da);									// minimum between distance and large boundary value of pixel (x,y)
-								dist(nx, ny) = std::min(dist(nx, ny), db);								// minimum between distance and large boundary value of neighbor (nx, ny)
+								float dist_xy = dist(x, y);
+								float dist_nxny = dist(nx, ny);
+								dist(x, y) = std::min(dist_xy, da);									// minimum between distance and large boundary value of pixel (x,y)
+								dist(nx, ny) = std::min(dist_nxny, db);								// minimum between distance and large boundary value of neighbor (nx, ny)
 							}
 						}
 					}
