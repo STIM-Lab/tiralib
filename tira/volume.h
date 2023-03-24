@@ -283,8 +283,6 @@ namespace tira {
 			return dist;
 		}
 
-		
-
 	public:
 
 		/// <summary>
@@ -468,6 +466,126 @@ namespace tira {
 			return result;
 		}
 
+
+		//calculate gradient along dx (3D)
+		tira::volume<float> gradient_dx()
+		{
+			tira::volume<float>output(X(), Y(), Z());
+
+			for (int j = 0; j < X(); j++)
+			{
+				for (int i = 0; i < Y(); i++)
+				{
+					for (int k = 0; k < Z(); k++)
+					{
+						int j_left = j - 1;
+						int j_right = j + 1;
+						if (j_left < 0)
+						{
+							j_left = 0;
+							j_right = 1;
+							double dist_grad = at(j_right, i, k) - at(j_left, i, k);
+
+						}
+
+						else if (j_right >= X())
+						{
+							j_right = X() - 1;
+							j_left = j_right - 1;
+							double dist_grad = at(j_right,i, k) - at(j_left, i, k);
+
+						}
+
+
+						double dist_grad = (at(j_right, i, k) - at(j_left, i, k)) / 2.0f;
+
+						output(j, i, k) = dist_grad;
+					}
+				}
+			}
+
+			return output;
+		}
+
+		// calculate gradient along dy(3D)
+		tira::volume<float > gradient_dy()
+		{
+			tira::volume<float> output(X(), Y(), Z());
+
+			for (int j = 0; j < X(); j++)
+			{
+				for (int i = 0; i < Y(); i++)
+				{
+					for (int k = 0; k < Z(); k++)
+					{
+						int i_left = i - 1;
+						int i_right = i + 1;
+						if (i_left < 0)
+						{
+							i_left = 0;
+							i_right = 1;
+							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
+
+						}
+
+						else if (i_right >= Y())
+						{
+							i_right = Y() - 1;
+							i_left = i_right -1 ;
+							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
+
+						}
+
+
+						double dist_grad = (at(j, i_right, k) - at(j, i_left, k)) / 2.0f;
+
+						output(j, i, k) = dist_grad;
+					}
+				}
+			}
+
+			return output;
+		}
+
+		tira::volume<float>gradient_dz()
+		{
+			//volume<T>dxdy(X(), Y(), Z());
+
+			tira::volume<float>output(X(), Y(), Z());
+
+			for (int j = 0; j < X(); j++)
+			{
+				for (int i = 0; i < Y(); i++)
+				{
+					for (int k = 0; k < Z(); k++)
+					{
+						int k_left = k - 1;
+						int k_right = k + 1;
+						if (k_left < 0)
+						{
+							k_left = 0;
+							k_right = 1;
+							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+						}
+
+						else if (k_right >= Z())
+						{
+							k_right = Z() - 1;
+							k_left = k_right - 1;
+							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+						}
+
+
+						double dist_grad = (at(j, i, k_right) - at(j, i, k_left)) / 2.0f;
+						output(j, i, k) = dist_grad;
+					}
+				}
+			}
+
+			return output;
+		}
+
+
 		void save(std::string prefix, std::string format = "bmp") {
 
 			for (size_t zi = 0; zi < Z(); zi++) {							// for each z slice
@@ -548,6 +666,7 @@ namespace tira {
 			}
 		}
 
+		
 		/// <summary>
 		/// Load a volume from an NPY file. This function makes sure that the volume has four channels (even if there is only one color channel)
 		/// </summary>
@@ -594,6 +713,7 @@ namespace tira {
 			ss << "data type (bytes): " << sizeof(T) << std::endl;
 			return ss.str();
 		}
+		
 
 		volume<T> dist() {
 			volume<int> boundary;
@@ -715,7 +835,6 @@ namespace tira {
 			}
 			return D;
 		}
-
 
 	};	// end class volume
 
