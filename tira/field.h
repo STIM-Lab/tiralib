@@ -120,7 +120,8 @@ namespace tira {
 			try {
 				npy::LoadArrayFromNumpy<D>(filename, shape, fortran_order, data);	// load NPY array and metadata
 			}
-			catch(...){
+			catch(const std::runtime_error &e){
+				std::cout << e.what() << std::endl;
 				exit(1);
 			}
 
@@ -204,6 +205,16 @@ namespace tira {
 		size_t size() const {							
 			
 			return _data.size();
+		}
+
+		/// <summary>
+		/// Set all values in the image to a single constant
+		/// </summary>
+		/// <param name="v">Constant that all elements will be set to</param>
+		field<T> operator=(T v) {														//set all elements of the image to a given value v
+			size_t N = field<T>::size();
+			std::fill(field<T>::_data.begin(), field<T>::_data.end(), v);
+			return *this;
 		}
 
 		/*template<typename... D>
@@ -344,6 +355,10 @@ namespace tira {
 			}
 			return result;
 
+		}
+
+		void resize(std::vector<size_t> new_size) {
+			setShape(new_size);
 		}
 
 
