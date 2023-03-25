@@ -24,15 +24,29 @@ namespace tira {
 			glm::tvec3<T> from_hat = glm::normalize(from);
 			glm::tvec3<T> to_hat = glm::normalize(to);
 
-			if (from_hat[0] == to_hat[0] && from_hat[1] == to_hat[1] && from_hat[2] == to_hat[2])
+			/*if (from_hat[0] == to_hat[0] && from_hat[1] == to_hat[1] && from_hat[2] == to_hat[2])
 				return glm::tmat3x3<T>(1.0);
 			if (from_hat[0] == -to_hat[0] && from_hat[1] == -to_hat[1] && from_hat[2] == -to_hat[2]) {
 				glm::tmat3x3<T> rot(-1.0);
 				rot[0][0] = 1.0;
 				return rot;
-			}
+			}*/
 
 			glm::tvec3<T> cp = glm::cross(from_hat, to_hat);
+			T cp_length_sq = cp[0] + cp[1] + cp[2];
+			//if the cross product is zero
+			if (cp_length_sq == 0) {
+				// calculate the dot product to figure out which degenerate matrix to return
+				T dp = glm::dot(from_hat, to_hat);
+				if (dp > 0) {		// if the dot product is positive, the to and from vectors are identical
+					return glm::tmat3x3<T>(1.0);
+				}
+				if (dp < 0) {		// if the dot product is negative, then the to and from vectors are pointing in opposite directions
+					glm::tmat3x3<T> rot(-1.0);
+					rot[0][0] = 1.0;
+					return rot;
+				}
+			}
 			glm::tvec3<T> axis = glm::normalize(cp);
 
 			T dot = glm::dot(from_hat, to_hat);							// calculate the dot product (used to differentiate between two angles)
@@ -75,14 +89,18 @@ namespace tira {
 
 			glm::tvec3<T> k_hat = glm::normalize(k);			// convert k to a unit vector
 
-			if(k_hat[2] == 1.0) return glm::tmat3x3<T>(1.0);
-			if (k_hat[2] == -1) {
-				glm::tmat3x3<T> M = glm::tmat3x3<T>(-1.0);
-				M[0][0] = 1.0;
-				return M;
-			}
-
 			glm::tvec3<T> cp = glm::cross(z, k_hat);			// calculate the cross product of z and k_hat (giving us the axis of rotation and angle)
+			T cp_len_sq = cp[0] * cp[0] + cp[1] * cp[1] + cp[2] * cp[2];
+			if (cp_len_sq == 0) {
+				T z_dot_khat = glm::dot(z, k_hat);
+				if (z_dot_khat > 0) return glm::tmat3x3<T>(1.0);
+				if (z_dot_khat < 0) {
+					glm::tmat3x3<T> M = glm::tmat3x3<T>(-1.0);
+					M[0][0] = 1.0;
+					return M;
+				}
+			}
+			
 			glm::tvec3<T> axis = glm::normalize(cp);			// calculate the axis of rotation (normalized cross product)
 			T dot = glm::dot(z, k_hat);							// calculate the dot product (used to differentiate between two angles)
 			T arcsin = std::asin(glm::length(cp));
@@ -341,7 +359,7 @@ namespace tira {
 			glm::tvec3< std::complex<T> > Er(0.0, 0.0, 0.0);
 			glm::tvec3< std::complex<T> > Et(0.0, 0.0, 0.0);
 
-			glm::tvec3<T> n = glm::normalize(plane_normal);				// make sure that the plane normal is normalized
+ 			glm::tvec3<T> n = glm::normalize(plane_normal);				// make sure that the plane normal is normalized
 			glm::tvec3<T> ki_dir = glm::normalize(ki);						// calculate the direction of the k vector
 
 			// swap the plane normal if necessary (it should be pointing in the opposite direction of ki)
@@ -352,8 +370,14 @@ namespace tira {
 			T sin_theta_i = std::sqrt(1 - cos_theta_i * cos_theta_i);
 			T theta_i = std::acos(cos_theta_i);
 
+			// define the basis vectors for the calculation (plane of incidence)
+			glm::tvec3<T> z_hat = -n;
+			glm::tvec3<T> side = n * glm::dot(ki_dir, n);
+			glm::tvec3<T> diff = ki_dir - side;
+			T diff_len_sq = diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2];
+
 			// handle the degenerate case where theta_i is 0 (the plane wave hits head-on)
-			if(theta_i == 0){
+			if(diff_len_sq == 0){
 				std::complex<T> rp = (1.0 - nr) / (1.0 + nr);		// compute the Fresnel coefficients (only 2 needed)
 				std::complex<T> tp = 2.0 / (1.0 + nr);
 
@@ -381,9 +405,7 @@ namespace tira {
 				std::complex<T> cos_theta_t = std::sqrt(1.0 - sin_theta_t * sin_theta_t);
 				std::complex<T> theta_t = std::asin(sin_theta_t);
 
-				// define the basis vectors for the calculation (plane of incidence)
-				glm::tvec3<T> z_hat = -n;
-				glm::tvec3<T> side = n * glm::dot(ki_dir, n);
+				// calculate the remaining basis vectors
 				glm::tvec3<T> y_hat = glm::normalize(ki_dir - side);
 				glm::tvec3<T> x_hat = glm::cross(y_hat, z_hat);
 
