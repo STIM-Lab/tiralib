@@ -161,5 +161,22 @@ namespace tira {
 
 			return icosphere;
 		}
+
+		template <typename T>
+		static glGeometry GenerateCylinder(unsigned int stacks, unsigned int slices) {
+			cylinder<T> s(stacks, slices);
+			std::vector<T> v = s.getInterleavedVertices();
+			std::vector<unsigned int> i = s.getIndices();
+
+			glGeometry cylinder;
+
+			glVertexBufferLayout layout;
+			layout.Push<T>(3);
+			layout.Push<T>(3);
+			layout.Push<T>(2);
+			cylinder.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+
+			return cylinder;
+		}
 	};
 }

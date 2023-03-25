@@ -5,3 +5,4 @@
 #include "shapes/sphere.h"
 #include "shapes/icosahedron.h"
 #include "shapes/icosphere.h"
+#include "shapes/cylinder.h"
