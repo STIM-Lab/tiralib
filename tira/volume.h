@@ -533,7 +533,39 @@ namespace tira {
 		}
 
 
+		/// <summary>
+		/// Convolves the volume by a 3D mask and returns the result
+		/// </summary>
+		/// <param name="mask"></param>
+		/// <returns></returns>
 
+		tira::volume<float>convolve3D(tira::volume<float> mask) {
+
+			tira::volume<float>result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), Z() - (mask.Z() - 1));		// output image will be smaller than the input (only valid region returned)
+
+			float sum;
+			for (size_t yi = 0; yi < result.Y(); yi++) {
+				for (size_t xi = 0; xi < result.X(); xi++) {
+					for (size_t zi = 0; zi < result.Z(); zi++) {
+						sum = 0;
+						for (size_t vi = 0; vi < mask.Y(); vi++) {
+							for (size_t ui = 0; ui < mask.X(); ui++) {
+								for (size_t wi = 0; wi < mask.Z(); wi++) {
+
+									sum += at((xi + ui), (yi + vi), (zi + wi)) * mask(ui, vi, wi);
+
+								}
+							}
+						}
+
+						result(xi, yi, zi) = sum;
+					}
+
+				}
+			}
+
+			return result;
+		}
 
 
 
