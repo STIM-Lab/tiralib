@@ -298,8 +298,11 @@ namespace tira {
 		/// Set all values in the image to a single constant
 		/// </summary>
 		/// <param name="v">Constant that all elements will be set to</param>
-		image<T> operator=(T v) {														//set all elements of the image to a given value v
-			return field<T>::operator=(v);
+		image<T>& operator=(T v) {														//set all elements of the image to a given value v
+			size_t N = field<T>::bytes();
+			for(size_t n = 0; n < N; n++)
+				field<T>::_data[n] = v;
+			return *this;
 		}
 
 		/// <summary>
