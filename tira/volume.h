@@ -586,6 +586,107 @@ namespace tira {
 		}
 
 
+		tira::volume<float>convolve3D(tira::volume<float> mask) {
+
+			tira::volume<float>result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), Z() - (mask.Z() - 1));		// output image will be smaller than the input (only valid region returned)
+
+			float sum;
+			for (size_t yi = 0; yi < result.Y(); yi++) {
+				for (size_t xi = 0; xi < result.X(); xi++) {
+					for (size_t zi = 0; zi < result.Z(); zi++) {
+						sum = 0;
+						for (size_t vi = 0; vi < mask.Y(); vi++) {
+							for (size_t ui = 0; ui < mask.X(); ui++) {
+								for (size_t wi = 0; wi < mask.Z(); wi++) {
+
+									sum += at((xi + ui), (yi + vi), (zi + wi)) * mask(ui, vi, wi);
+									
+								}
+							}
+						}
+						
+						result(xi, yi, zi) = sum;
+					}
+
+				}
+			}
+
+			return result;
+		}
+
+		/// <summary>
+		/// Add a border to an image
+		/// </summary>
+		/// <param name="w">Width of the border in pixels</param>
+		/// <param name="value">Value used to generate the border</param>
+		/// <returns></returns>
+		
+		tira::volume<float>border_3D(size_t w) {
+
+			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
+
+			result = 0;
+			//result = value;														//assign the border value to all pixels in the new image
+			for (size_t y = 0; y < Y(); y++) {								//for each pixel in the original image
+				for (size_t x = 0; x < X(); x++) {
+					for (size_t z = 0; z < Z(); z++) {
+						size_t n = ((y + w) * (X() + w * 2) * (Z() + w * 2)) + ((x + w) * (Z() + w * 2)) + (z + w);				//calculate the index of the corresponding pixel in the result image
+						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
+						result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+					}
+				}
+			}
+			return result;
+
+		}
+		
+		/// <summary>
+		/// Generates a border by replicating edge pixels
+		/// </summary>
+		/// <param name="p">Width of the border (padding) to create</param>
+		/// <returns></returns>
+
+
+		tira::volume<float>border_replicate_3D(size_t w) {
+
+			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
+
+			result = 0;
+			//result = value;														//assign the border value to all pixels in the new image
+			for (size_t y = 0; y < Y(); y++) {								//for each pixel in the original image
+				for (size_t x = 0; x < X(); x++) {
+					for (size_t z = 0; z < Z(); z++) {
+					size_t n = ((y + w) * (X() + w * 2) * (Z() + w * 2)) + ((x + w) * (Z() + w * 2)) + (z + w);				//calculate the index of the corresponding pixel in the result image
+					size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
+					result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+				    }
+				}
+			}
+			size_t l = w;
+			size_t r = w + X() - 1;
+			size_t t = w;
+			size_t b = w + Y() - 1;
+			size_t len = w;
+			size_t len2 = w + Z() - 1;
+
+			for (size_t y = l; y <= b; y++) for (size_t x = 0; x <= r; x++) for (size_t z = 0; z <= w; z++) result(x, y, z) = result(x, t, len);			    //pad the top
+			for (size_t y = l; y <= b; y++) for (size_t x = l; x <= r; x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y ,z) = result(x, b, len2);	//pad the bottom					
+			for (size_t y = 0; y < w; y++) for (size_t x = l; x <= r; x++) for (size_t z = l; z <= len2; z++) result(x, y, z) = result(x, t, t);               //pad the left	
+			for (size_t y = b + 1; y < result.Y(); y++) for (size_t x = l; x <= r; x++) for (size_t z = l; z <= len2; z++) result(x, y, z) = result(x, t, t);  //pad the right
+			for (size_t y = 0; y <= w; y++) for (size_t x = 0; x <= r; x++) for (size_t z = 0; z <= w; z++) result(x, y, z) = result(x, b, len2);              //pad the top left	
+			for (size_t y = b+1; y < result.Y(); y++) for (size_t x = 0; x <= r; x++) for (size_t z = 0; z <= w; z++) result(x, y, z) = result(x, b, len2);    //pad the top right		
+			for (size_t y = 0; y <= w; y++) for (size_t x = l; x <= r; x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y ,z) = result(x, b, len2);  //pad the bottom left		
+			for (size_t y = b + 1; y < result.Y(); y++) for (size_t x = l; x < result.X(); x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y, z) = result(x, b, len2);//pad the bottom right
+
+
+
+			return result;
+
+		}
+
+
+
+
 		void save(std::string prefix, std::string format = "bmp") {
 
 			for (size_t zi = 0; zi < Z(); zi++) {							// for each z slice
