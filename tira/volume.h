@@ -411,6 +411,162 @@ namespace tira {
 			}
 		}
 
+		//calculate gradient along dx 
+		tira::volume<float> gradient_dx()
+		{
+			tira::volume<float>output(X(), Y(), Z());
+
+			for (int j = 0; j < X(); j++)
+			{
+				for (int i = 0; i < Y(); i++)
+				{
+					for (int k = 0; k < Z(); k++)
+					{
+						int j_left = j - 1;
+						int j_right = j + 1;
+						if (j_left < 0)
+						{
+							j_left = 0;
+							j_right = 1;
+							double dist_grad = at(j_right, i, k) - at(j_left, i, k);
+
+						}
+
+						else if (j_right >= X())
+						{
+							j_right = X() - 1;
+							j_left = j_right - 1;
+							double dist_grad = at(j_right, i, k) - at(j_left, i, k);
+
+						}
+
+
+						double dist_grad = (at(j_right, i, k) - at(j_left, i, k)) / 2.0f;
+
+						output(j, i, k) = dist_grad;
+					}
+				}
+			}
+
+			return output;
+		}
+
+		// calculate gradient along dy
+		tira::volume<float > gradient_dy()
+		{
+			tira::volume<float> output(X(), Y(), Z());
+
+			for (int j = 0; j < X(); j++)
+			{
+				for (int i = 0; i < Y(); i++)
+				{
+					for (int k = 0; k < Z(); k++)
+					{
+						int i_left = i - 1;
+						int i_right = i + 1;
+						if (i_left < 0)
+						{
+							i_left = 0;
+							i_right = 1;
+							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
+
+						}
+
+						else if (i_right >= Y())
+						{
+							i_right = Y() - 1;
+							i_left = i_right - 1;
+							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
+
+						}
+
+
+						double dist_grad = (at(j, i_right, k) - at(j, i_left, k)) / 2.0f;
+
+						output(j, i, k) = dist_grad;
+					}
+				}
+			}
+
+			return output;
+		}
+
+
+		// calculate gradient along dz
+		tira::volume<float>gradient_dz()
+		{
+
+			tira::volume<float>output(X(), Y(), Z());
+
+			for (int j = 0; j < X(); j++)
+			{
+				for (int i = 0; i < Y(); i++)
+				{
+					for (int k = 0; k < Z(); k++)
+					{
+						int k_left = k - 1;
+						int k_right = k + 1;
+						if (k_left < 0)
+						{
+							k_left = 0;
+							k_right = 1;
+							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+						}
+
+						else if (k_right >= Z())
+						{
+							k_right = Z() - 1;
+							k_left = k_right - 1;
+							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+						}
+
+
+						double dist_grad = (at(j, i, k_right) - at(j, i, k_left)) / 2.0f;
+						output(j, i, k) = dist_grad;
+					}
+				}
+			}
+
+			return output;
+		}
+
+
+		/// <summary>
+		/// Convolves the volume by a 3D mask and returns the result
+		/// </summary>
+		/// <param name="mask"></param>
+		/// <returns></returns>
+
+		tira::volume<float>convolve3D(tira::volume<float> mask) {
+
+			tira::volume<float>result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), Z() - (mask.Z() - 1));		// output image will be smaller than the input (only valid region returned)
+
+			float sum;
+			for (size_t yi = 0; yi < result.Y(); yi++) {
+				for (size_t xi = 0; xi < result.X(); xi++) {
+					for (size_t zi = 0; zi < result.Z(); zi++) {
+						sum = 0;
+						for (size_t vi = 0; vi < mask.Y(); vi++) {
+							for (size_t ui = 0; ui < mask.X(); ui++) {
+								for (size_t wi = 0; wi < mask.Z(); wi++) {
+
+									sum += at((xi + ui), (yi + vi), (zi + wi)) * mask(ui, vi, wi);
+
+								}
+							}
+						}
+
+						result(xi, yi, zi) = sum;
+					}
+
+				}
+			}
+
+			return result;
+		}
+
+
+
 		/// <summary>
 		/// Retrieve a slice of the volume as a 2D image
 		/// </summary>

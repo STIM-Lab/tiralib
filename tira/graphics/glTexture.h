@@ -82,7 +82,7 @@ namespace tira {
 			int width, int height, int depth,
 			GLenum internalFormat,
 			GLenum externalFormat,
-			GLenum externalDataType) {
+			GLenum externalDataType) : glTexture() {
 			AssignImage(bytes, width, height, depth, internalFormat, externalFormat,externalDataType);
 		}										   
 			
