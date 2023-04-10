@@ -665,6 +665,27 @@ namespace tira {
 			}
 		}
 
+		image<T> bin(size_t bx, size_t by) {
+			size_t nbx = X() / bx;												// calculate the number of bins along x and y
+			size_t nby = Y() / by;
+
+			image<T> result(nbx, nby, C());												// generate an image to store the binned result
+			result = 0;
+
+			for(size_t yb = 0; yb < nby; yb++){
+				for (size_t xb = 0; xb < nbx; xb++) {
+					for (size_t yi = 0; yi < by; yi++) {
+						for (size_t xi = 0; xi < bx; xi++) {
+							for (size_t ci = 0; ci < C(); ci++) {
+								result(xb, yb, ci) += at(xb * bx + xi, yb * by + yi, ci);
+							}
+						}
+					}
+				}
+			}
+			return result;
+		}
+
 		void set_noninterleaved(T* data, size_t width, size_t height, size_t chan) {
 			init(width, height, chan);
 
