@@ -587,6 +587,12 @@ namespace tira {
 		}
 
 
+		/// <summary>
+		/// Convolves the image by a 3D mask and returns the result
+		/// </summary>
+		/// <param name="mask"></param>
+		/// <returns></returns>
+
 		tira::volume<float>convolve3D(tira::volume<float> mask) {
 
 			tira::volume<float>result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), Z() - (mask.Z() - 1));		// output image will be smaller than the input (only valid region returned)
@@ -614,6 +620,65 @@ namespace tira {
 
 			return result;
 		}
+
+
+		/// <summary>
+		/// Convolves the image by a 1D mask and returns the result
+		/// </summary>
+		/// <param name="mask"></param>
+		/// <returns></returns>
+		
+		tira::volume<float> convolve3D_separate(float* K, int k_size) {
+	
+			tira::volume<float>result_x(X(), Y() - (k_size - 1), Z());		// output image will be smaller than the input (only valid region returned)
+
+			float sum;
+			for (size_t yi = 0; yi < result_x.Y(); yi++) {
+				for (size_t xi = 0; xi < result_x.X(); xi++) {
+					for (size_t zi = 0; zi < result_x.Z(); zi++) {
+						sum = 0;
+						for (size_t ui = 0; ui < k_size; ui++) {
+							sum += at(xi, (yi + ui), zi) * K[ui];
+						}
+						result_x(xi, yi, zi) = sum;
+					}
+				}
+			}
+
+			tira::volume<float>result_y(result_x.X() - (k_size - 1), result_x.Y(), result_x.Z());		// output image will be smaller than the input (only valid region returned)
+
+			float sum1;
+			for (size_t yi = 0; yi < result_y.Y(); yi++) {
+				for (size_t xi = 0; xi < result_y.X(); xi++) {
+					for (size_t zi = 0; zi < result_y.Z(); zi++) {
+						sum1 = 0;
+						for (size_t ui = 0; ui < k_size; ui++) {
+							sum1 += result_x((xi + ui), yi, zi) * K[ui];
+						}
+						result_y(xi, yi, zi) = sum1;
+					}
+				}
+			}
+
+			tira::volume<float>result_z(result_y.X(), result_y.Y(), result_y.Z() - (k_size - 1));		// output image will be smaller than the input (only valid region returned)
+
+			float sum2;
+			for (size_t yi = 0; yi < result_z.Y(); yi++) {
+				for (size_t xi = 0; xi < result_z.X(); xi++) {
+					for (size_t zi = 0; zi < result_z.Z(); zi++) {
+						sum2 = 0;
+						for (size_t ui = 0; ui < k_size; ui++) {
+							sum2 += result_y(xi, yi, (zi + ui)) * K[ui];
+						}
+						result_z(xi, yi, zi) = sum2;
+					}
+				}
+			}
+
+			return result_z;
+
+		}
+
 
 		/// <summary>
 		/// Add a border to an image
@@ -670,14 +735,14 @@ namespace tira {
 			size_t len = w;
 			size_t len2 = w + Z() - 1;
 
-			for (size_t y = l; y <= b; y++) for (size_t x = 0; x <= r; x++) for (size_t z = 0; z < w; z++) result(x, y, z) = result(x, t, len);			    //pad the top
-			for (size_t y = l; y <= b; y++) for (size_t x = l; x < r; x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y ,z) = result(x, b, len2);	//pad the bottom					
+			for (size_t y = l; y <= b; y++) for (size_t x = 0; x <= r; x++) for (size_t z = 0; z < w; z++) result(x, y, z) = result(x, t, len2);			    //pad the top
+			for (size_t y = l; y <= b; y++) for (size_t x = l; x < r; x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y ,z) = result(x, b, len);	//pad the bottom					
 			for (size_t y = 0; y < w; y++) for (size_t x = l; x < r; x++) for (size_t z = l; z <= len2; z++) result(x, y, z) = result(x, t, t);               //pad the left	
 			for (size_t y = b + 1; y < result.Y(); y++) for (size_t x = l; x <= r; x++) for (size_t z = l; z <= len2; z++) result(x, y, z) = result(x, t, t);  //pad the right
-			for (size_t y = 0; y < w; y++) for (size_t x = 0; x < r; x++) for (size_t z = 0; z < w; z++) result(x, y, z) = result(x, b, len2);              //pad the top left	
-			for (size_t y = b+1; y < result.Y(); y++) for (size_t x = 0; x < r; x++) for (size_t z = 0; z < w; z++) result(x, y, z) = result(x, b, len2);    //pad the top right		
-			for (size_t y = 0; y < w; y++) for (size_t x = l; x < r; x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y ,z) = result(x, b, len2);  //pad the bottom left		
-			for (size_t y = b + 1; y < result.Y(); y++) for (size_t x = l; x < result.X(); x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y, z) = result(x, b, len2);//pad the bottom right
+			for (size_t y = 0; y < w; y++) for (size_t x = 0; x < r; x++) for (size_t z = 0; z < w; z++) result(x, y, z) = result(x, b, len);              //pad the top left	
+			for (size_t y = b+1; y < result.Y(); y++) for (size_t x = 0; x < r; x++) for (size_t z = 0; z < w; z++) result(x, y, z) = result(x, b, len);    //pad the top right		
+			for (size_t y = 0; y < w; y++) for (size_t x = l; x < r; x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y ,z) = result(x, b, len);  //pad the bottom left		
+			for (size_t y = b + 1; y < result.Y(); y++) for (size_t x = l; x < result.X(); x++) for (size_t z = len2 + 1; z < result.Z(); z++) result(x, y, z) = result(x, b, len);//pad the bottom right
 
 
 
