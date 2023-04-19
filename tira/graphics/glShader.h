@@ -195,6 +195,10 @@ namespace tira {
 			m_ShaderID = 0;
 			LoadShader(filepath);
 		}
+		glShader(const std::string& vertexSource, const std::string& fragmentSource) {
+			m_ShaderID = 0;
+			CreateShader(vertexSource, fragmentSource);
+		}
 
 		void CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
 			if (m_ShaderID != 0)

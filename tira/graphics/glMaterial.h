@@ -152,6 +152,10 @@ namespace tira{
             RefreshTextures();                              // identify all texture samplers so that textures can be loaded separately
         }
 
+        glMaterial(const std::string& vertexSource, const std::string& fragmentSource) :glShader(vertexSource, fragmentSource) {
+            RefreshTextures();
+        }
+
         /// <summary>
         /// Load a shader from a single source file separated by "# shader vertex" and "# shader fragment" blocks.
         /// </summary>

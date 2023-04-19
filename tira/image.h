@@ -286,6 +286,14 @@ namespace tira {
 			return r;												//return the summed result
 		}
 
+		image<T> operator*(T rhs) {
+			size_t N = field<T>::size();							//calculate the total number of values in the image
+			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] * rhs;				//add the individual pixels
+			return r;												//return the summed result
+		}
+
 		image<T> operator-(T rhs) {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
 			image<T> r(X(), Y(), C());								//allocate space for the resulting image
@@ -299,7 +307,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="v">Constant that all elements will be set to</param>
 		image<T>& operator=(T v) {														//set all elements of the image to a given value v
-			size_t N = field<T>::bytes();
+			size_t N = field<T>::size();
 			for(size_t n = 0; n < N; n++)
 				field<T>::_data[n] = v;
 			return *this;
