@@ -162,6 +162,10 @@ public:
 	glm::vec3 getLookAt(){return p + focus*d;}
 	float getFOV(){return fov;}
 
+	glm::mat4 getMatrix() {
+		return glm::lookAt(p, p + d, up);
+	}
+
 	//output the camera settings
 	void print(std::ostream& output)
 	{
