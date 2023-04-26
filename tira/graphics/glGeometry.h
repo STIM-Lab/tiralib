@@ -162,6 +162,24 @@ namespace tira {
 			return icosphere;
 		}
 
+		
+
+
+		template <typename T>
+		static glGeometry GenerateSuperquadric(T l0, T l1, T l2, T gamma, unsigned int subdiv = 4, bool smooth = false) {
+			tira::superquadric sq(l0, l1, l2, gamma, 0.5f, subdiv, smooth);
+
+			glGeometry superquadric;
+
+			glVertexBufferLayout layout;
+			layout.Push<T>(3);
+			layout.Push<T>(3);
+			layout.Push<T>(2);
+			superquadric.AddMesh(sq.getInterleavedVertices(), sq.getInterleavedVertexCount() * 8 * sizeof(T), layout, sq.getIndices(), sq.getIndexCount(), 0);
+
+			return superquadric;
+		}
+
 		template <typename T>
 		static glGeometry GenerateCylinder(unsigned int stacks, unsigned int slices) {
 			cylinder<T> s(stacks, slices);

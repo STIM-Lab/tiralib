@@ -101,7 +101,6 @@ namespace tira {
 
     protected:
 
-    private:
         // static functions
         static void computeFaceNormal(const float v1[3], const float v2[3], const float v3[3], float n[3]) {
             const float EPSILON = 0.000001f;

@@ -232,89 +232,115 @@ namespace tira {
 		// Set uniforms
 		void SetUniform1f(const std::string& name, float value) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform1f(location, value));
 		}
 		void SetUniform2f(const std::string& name, float v0, float v1) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform2f(location, v0, v1));
 		}
 		void SetUniform3f(const std::string& name, float v0, float v1, float v2) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform3f(location, v0, v1, v2));
+		}
+		void SetUniform3f(const std::string& name, glm::vec3 v) {
+			SetUniform3f(name, v[0], v[1], v[2]);
 		}
 		void SetUniform4f(const std::string& name, float v0, float v1, float v2, float v3) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform4f(location, v0, v1, v2, v3));
+		}
+		void SetUniform4f(const std::string& name, glm::vec4 v) {
+			SetUniform4f(name, v[0], v[1], v[2], v[3]);
 		}
 
 		void SetUniform1i(const std::string& name, int value) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform1i(location, value));
 		}
 		void SetUniform2i(const std::string& name, int v0, int v1) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform2i(location, v0, v1));
 		}
 		void SetUniform3i(const std::string& name, int v0, int v1, int v2) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform3i(location, v0, v1, v2));
 		}
 		void SetUniform4i(const std::string& name, int v0, int v1, int v2, int v3) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform4i(location, v0, v1, v2, v3));
 		}
-
 		void SetUniform1ui(const std::string& name, unsigned int value) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform1ui(location, value));
 		}
 		void SetUniform2ui(const std::string& name, unsigned int v0, unsigned int v1) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform2ui(location, v0, v1));
 		}
 		void SetUniform3ui(const std::string& name, unsigned int v0, unsigned int v1, unsigned int v2) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform3ui(location, v0, v1, v2));
 		}
 		void SetUniform4ui(const std::string& name, unsigned int v0, unsigned int v1, unsigned int v2, unsigned int v3) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform4ui(location, v0, v1, v2, v3));
 		}
 
 		inline void SetUniformMat4f(const std::string& name, const glm::mat4& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix4fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat3f(const std::string& name, const glm::mat3& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix3fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat2f(const std::string& name, const glm::mat2& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix2fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat2x3f(const std::string& name, const glm::mat2x3& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix2x3fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat3x2f(const std::string& name, const glm::mat3x2& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix3x2fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat2x4f(const std::string& name, const glm::mat2x4& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix2x4fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat4x2f(const std::string& name, const glm::mat4x2& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix4x2fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat3x4f(const std::string& name, const glm::mat3x4& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix3x4fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 		inline void SetUniformMat4x3f(const std::string& name, const glm::mat4x3& matrix) {
 			GLint location = GetUniformLocation(name);
+			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix4x3fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 

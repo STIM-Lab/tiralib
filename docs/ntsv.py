@@ -82,7 +82,7 @@ class network:
         vertices = struct.unpack("I", f.read(4))[0]
         edges = struct.unpack("I", f.read(4))[0]
         
-        # load all vertices
+        # load all nodes
         V = []
         for vi in tqdm(range(vertices)):
             v = self.node()
@@ -179,4 +179,4 @@ class network:
         
 
 N = network()
-N.load("test.ntsv")
+N.load("test.nwt")

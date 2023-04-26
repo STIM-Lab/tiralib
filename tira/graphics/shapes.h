@@ -5,4 +5,5 @@
 #include "shapes/sphere.h"
 #include "shapes/icosahedron.h"
 #include "shapes/icosphere.h"
+#include "shapes/superquadric.h"
 #include "shapes/cylinder.h"
