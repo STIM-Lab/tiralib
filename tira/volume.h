@@ -835,10 +835,11 @@ namespace tira {
 
 		
 		/// <summary>
-		/// Load a volume from an NPY file. This function makes sure that the volume has four channels (even if there is only one color channel)
+		/// Load a volume from an NPY file. This function makes sure that the volume has four dimensions. If the input file is 3D, 
+		/// the fourth dimension (color) has a size of 1.
 		/// </summary>
-		/// <typeparam name="D"></typeparam>
-		/// <param name="filename"></param>
+		/// <typeparam name="D"> Data type used in the NumPy file. </typeparam>
+		/// <param name="filename"> Path and filename for the NumPy file. </param>
 		template<typename D = T>
 		void load_npy(std::string filename) {
 			field<T>::template load_npy<D>(filename);										// load the numpy file using the tira::field class

@@ -28,11 +28,14 @@ namespace tira{
 			_texture.AssignImage((unsigned char*)volData, X, Y, Z, internalFormat, externalFormat, externalDataType);
 		}
 
-		template <typename D = T>;
-		void load_npy(std::string filename)
+		template<typename D = T>
+		void load_npy(std::string filename) : load_npy<D>(filename)
 		{
-			volume<t>::template load_npy<D>(filename);
-			setData(_data.data(), _shape[0], _shape[0], _shape[0], GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+			//volume<t>::template load_npy<D>(filename);
+			size_t xn = volume<T>::X();
+			size_t yn = volume<T>::Y();
+			size_t zn = volume<T>::Z();
+			setData(field<T>::_data.data(), xn, yn, zn, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
 		}
 
 		void setFilter(GLenum filter_type){
