@@ -32,7 +32,7 @@ namespace tira{
 		void load_npy(std::string filename)
 		{
 			volume<t>::template load_npy<D>(filename);
-			setData(_data.data(), _shape[0], _shape[1], _shape[2], GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+			setData(_data.data(), _shape[0], _shape[0], _shape[0], GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
 		}
 
 		void setFilter(GLenum filter_type){
