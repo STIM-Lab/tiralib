@@ -29,9 +29,9 @@ namespace tira{
 		}
 
 		template<typename D = T>
-		void load_npy(std::string filename) : load_npy<D>(filename)
+		void load_npy(std::string filename)
 		{
-			//volume<t>::template load_npy<D>(filename);
+			volume<T>::template load_npy<D>(filename);
 			size_t xn = volume<T>::X();
 			size_t yn = volume<T>::Y();
 			size_t zn = volume<T>::Z();
