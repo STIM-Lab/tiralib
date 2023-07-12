@@ -10,6 +10,7 @@ namespace tira{
 
 	protected:
 		glTexture _texture;
+		std::vector<T> _data;
 
 	public:
 		void generate_rgb(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1){
@@ -35,7 +36,9 @@ namespace tira{
 			size_t xn = volume<T>::X();
 			size_t yn = volume<T>::Y();
 			size_t zn = volume<T>::Z();
-			setData(field<T>::_data.data(), xn, yn, zn, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+			field<T>::_data.resize(xn * yn * zn);
+			T* data = _data.data();
+			setData(data, xn, yn, zn, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
 		}
 
 		void setFilter(GLenum filter_type){
