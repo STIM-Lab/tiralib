@@ -38,6 +38,7 @@ namespace tira{
 			size_t zn = volume<T>::Z();
 			field<T>::_data.resize(xn * yn * zn);
 			T* data = _data.data();
+			memcpy(data, &volume<T>::_data[0], xn * yn * zn * sizeof(T));
 			setData(data, xn, yn, zn, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
 		}
 
