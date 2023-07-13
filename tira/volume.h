@@ -15,6 +15,8 @@ namespace tira {
 
 	protected:
 
+		std::vector<double> _s;				// store the voxel size
+
 		
 
 	
@@ -288,7 +290,9 @@ namespace tira {
 		/// <summary>
 		/// Default constructor initializes an empty volume (0x0x0 with 0 channels)
 		/// </summary>
-		volume() : field<T>() {}			//initialize all variables, don't allocate any memory
+		volume() : field<T>() {
+			_s = std::vector<double>(3, 1.0);			// by default, pixels are 1.0 along each dimension
+		}
 
 		/// <summary>
 		/// Create a new volume from scratch given a number of samples and channels
@@ -339,6 +343,28 @@ namespace tira {
 		inline size_t Y() const { return field<T>::_shape[1]; }
 		inline size_t X() const { return field<T>::_shape[2]; }
 		inline size_t C() const { return field<T>::_shape[3]; }
+
+		// access methods to return the voxel size along all three dimensions
+		inline double dx() const { return _s[0]; }
+		inline double dy() const { return _s[1]; }
+		inline double dz() const { return _s[2]; }
+
+		// access methods to return the size of the volume along all three dimensions
+		inline double sx() const { return dx() * X(); }
+		inline double sy() const { return dy() * Y(); }
+		inline double sz() const { return dz() * Z(); }
+
+		// methods to set the voxel size along all three dimensions
+		inline void dx(double x) { _s[0] = x; }
+		inline void dy(double y) { _s[1] = y; }
+		inline void dz(double z) { _s[2] = z; }
+
+		// set the voxel size
+		void set_size(double x, double y, double z) {
+			dx(x);
+			dy(y);
+			dz(z);
+		}
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
 			init(X, Y, Z, 1);
