@@ -77,6 +77,9 @@ class network:
         f = open(filename, "rb")
         
         self.identifier = f.read(14)
+        if self.identifier != bytearray("network ntsv  ", "utf-8"):
+            print("ERROR: not an ntsv file")
+            return
         self.description = f.read(58)
         
         vertices = struct.unpack("I", f.read(4))[0]
@@ -179,4 +182,4 @@ class network:
         
 
 N = network()
-N.load("test.nwt")
+N.load("test.ntsv")
