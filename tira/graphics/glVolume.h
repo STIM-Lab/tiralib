@@ -10,7 +10,6 @@ namespace tira{
 
 	protected:
 		glTexture _texture;
-		std::vector<T> _data;
 
 	public:
 		void generate_rgb(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1){
@@ -25,21 +24,23 @@ namespace tira{
 			_texture.AssignImage((unsigned char*)&volume<T>::_data[0], X, Y, Z, GL_RED, GL_RED, external_type);
 		}
 
-		void setData(void* volData, unsigned int X, unsigned int Y, unsigned int Z, GLenum internalFormat, GLenum externalFormat, GLenum externalDataType){
+		void setData(void* volData, unsigned int X, unsigned int Y, unsigned int Z, GLint internalFormat, GLenum externalFormat, GLenum externalDataType){
 			_texture.AssignImage((unsigned char*)volData, X, Y, Z, internalFormat, externalFormat, externalDataType);
 		}
 
 		template<typename D = T>
 		void load_npy(std::string filename)
 		{
-			volume<T>::template load_npy<D>(filename);
+			volume<T>::load_npy<D>(filename);
 			size_t xn = volume<T>::X();
 			size_t yn = volume<T>::Y();
 			size_t zn = volume<T>::Z();
-			field<T>::_data.resize(xn * yn * zn);
-			T* data = _data.data();
-			memcpy(data, &volume<T>::_data[0], xn * yn * zn * sizeof(T));
-			setData(data, xn, yn, zn, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+			size_t cn = volume<T>::C();
+
+			GLint internalFormat = glTexture::format2gl(cn);
+			GLenum externalFormat = glTexture::format2gl(cn);
+			GLenum externalDataType = glTexture::type2gl<T>();
+			setData((unsigned char*)&volume<T>::_data[0], xn, yn, zn, internalFormat, externalFormat, externalDataType);
 		}
 
 		void setFilter(GLenum filter_type){

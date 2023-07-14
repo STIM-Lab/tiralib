@@ -14,8 +14,10 @@ namespace tira {
 		GLenum m_TextureType;			// GL_TEXTURE_1D, GL_TEXTURE_2D, GL_TEXTURE_3D, etc.
 
 	public:
+
+		/// Helper function returns an OpenGL data type constant given a specified data type in the template
 		template <typename D>
-		static GLint type2gl() {
+		static GLenum type2gl() {
 			if (typeid(D) == typeid(char)) return GL_BYTE;
 			if (typeid(D) == typeid(unsigned char)) return GL_UNSIGNED_BYTE;
 			if (typeid(D) == typeid(short)) return GL_SHORT;
@@ -29,6 +31,22 @@ namespace tira {
 			}
 		}
 
+		/// <summary>
+		/// Helper function that returns an OpenGL format constant given a specified number of channels
+		/// </summary>
+		/// <param name="c">Number of color channels</param>
+		/// <returns></returns>
+		static GLenum format2gl(unsigned int c) {
+			if (c == 1) return GL_RED;
+			if (c == 2) return GL_RG;
+			if (c == 3) return GL_RGB;
+			if (c == 4) return GL_RGBA;
+			else {
+				std::cout << "ERROR: texture format does not currently support this number of channels" << std::endl;
+				exit(1);
+			}
+		}
+
 		glTexture() {
 			m_Depth = m_Width = m_Height = 0;
 			m_TextureType = GL_TEXTURE_2D;
@@ -37,7 +55,7 @@ namespace tira {
 
 		void AssignImage(const unsigned char* bytes,
 			int width, int height, int depth,
-			GLenum internalFormat,
+			GLint internalFormat,
 			GLenum externalFormat,
 			GLenum externalDataType) {
 
