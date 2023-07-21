@@ -104,11 +104,14 @@ namespace tira {
 			AssignImage(bytes, width, height, depth, internalFormat, externalFormat,externalDataType);
 		}										   
 			
-		~glTexture() {
-		}
+		
 
 		void Destroy() {
 			GLBREAK(glDeleteTextures(1, &m_TextureID));
+		}
+
+		~glTexture() {
+			
 		}
 		
 		void Bind() const {
