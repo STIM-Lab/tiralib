@@ -200,6 +200,8 @@ namespace tira {
 			CreateShader(vertexSource, fragmentSource);
 		}
 
+		
+
 		void CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
 			if (m_ShaderID != 0)
 				glDeleteProgram(m_ShaderID);
@@ -216,9 +218,15 @@ namespace tira {
 			CacheUniforms();							// cache the new uniform variables
 		}
 
+		void CreateShader(const std::string& bothShaders) {
+			ShaderProgramSource source_parsed = ParseShaderSource(bothShaders);
+			CreateShader(source_parsed.VertexSource, source_parsed.FragmentSource);
+		}
+
 		void LoadShader(const std::string& filepath) {
-			ShaderProgramSource source = ParseShader(filepath);
-			CreateShader(source.VertexSource, source.FragmentSource);
+			std::string source_code = ParseShaderFile(filepath);
+			ShaderProgramSource source_parsed = ParseShaderSource(source_code);
+			CreateShader(source_parsed.VertexSource, source_parsed.FragmentSource);
 		}
 
 		void Bind() const {
@@ -368,15 +376,31 @@ namespace tira {
 
 	protected:
 
-		ShaderProgramSource ParseShader(const std::string& filepath) {             // Slow
+		std::string ParseShaderFile(const std::string& filepath) {
 			std::ifstream stream(filepath);
+			
+			std::string line;
+			std::stringstream source;
+
+			while (getline(stream, line)) {
+				source << line << "\n";
+			}
+
+			return source.str();
+		}
+
+		ShaderProgramSource ParseShaderSource(const std::string& source) {             // Slow
+			
 			enum class ShaderType {
 				NONE = -1, VERTEX = 0, FRAGMENT = 1
 			};
+
+			std::stringstream source_stream(source);
 			std::string line;
 			std::stringstream ss[2];
+
 			ShaderType type = ShaderType::NONE;
-			while (getline(stream, line)) {
+			while (getline(source_stream, line)) {
 				if (line.find("# shader") != std::string::npos) {
 					if (line.find("vertex") != std::string::npos) {
 						// set mode to vertex
@@ -393,6 +417,7 @@ namespace tira {
 			}
 			return { ss[0].str(), ss[1].str() };
 		}
+
 		unsigned int CompileShader(unsigned int type, const std::string& source) {
 			unsigned int id = glCreateShader(type);
 			const char* src = source.c_str();
