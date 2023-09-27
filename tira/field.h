@@ -35,23 +35,7 @@ namespace tira {
 			}
 			return off;
 		}
-		/*template<typename... D>
-		size_t idx_offset(size_t d, size_t i, D... more) const {	// recursive function for finding the index from an arbitrary set of coordinates
-			size_t off = i;
-			for (size_t di = d + 1; di < _shape.size(); di++) {
-				off *= _shape[di];
-			}
-			return off + idx_offset(d + 1, more...);
-		}*/
 
-		/// <summary>
-		/// Calculate the 2D index into the _data array given a set of coordinates using image-based indexing (specified fast-to-slow)
-		/// </summary>
-		/// <param name="coords"></param>
-		/// <returns></returns>
-		size_t idx_f2s(std::vector<size_t> coords) {
-
-		}
 
 		
 
