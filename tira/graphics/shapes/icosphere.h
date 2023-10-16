@@ -17,7 +17,8 @@
 #include <vector>
 #include <map>
 #include <sstream>
-#include <numbers>
+#include <math.h>
+#define _USE_MATH_DEFINES
 
 namespace tira {
     class icosphere
@@ -231,14 +232,14 @@ namespace tira {
         }
         std::vector<float> computeIcosahedronVertices() {
             //const float PI = acos(-1);
-            const float H_ANGLE = std::numbers::pi / 180 * 72;    // 72 degree = 360 / 5
+            const float H_ANGLE = M_PI / 180 * 72;    // 72 degree = 360 / 5
             const float V_ANGLE = atanf(1.0f / 2);  // elevation = 26.565 degree
 
             std::vector<float> vertices(12 * 3);    // 12 vertices
             int i1, i2;                             // indices
             float z, xy;                            // coords
-            float hAngle1 = -std::numbers::pi / 2 - H_ANGLE / 2;  // start from -126 deg at 2nd row
-            float hAngle2 = -std::numbers::pi / 2;                // start from -90 deg at 3rd row
+            float hAngle1 = -M_PI / 2 - H_ANGLE / 2;  // start from -126 deg at 2nd row
+            float hAngle2 = -M_PI / 2;                // start from -90 deg at 3rd row
 
             // the first top vertex (0, 0, r)
             vertices[0] = 0;
