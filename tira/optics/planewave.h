@@ -239,15 +239,17 @@ namespace tira {
 			return P;
 		}
 
-		planewave<T>(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex, std::complex<T> Ey) {
+		// Create a plane wave with a given k vector and the corresponding perpendicular components of E.
+		planewave<T>(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex_perp, std::complex<T> Ey_perp) {
 			_k[0] = kx;
 			_k[1] = ky;
 			_k[2] = kz;
-			_E0[0] = Ex;
-			_E0[1] = Ey;
+			_E0[0] = Ex_perp;
+			_E0[1] = Ey_perp;
 
 		}
 
+		// Create a plane wave with a given k and E vector. This expects both k and E to be orthogonal.
 		planewave<T>(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex, std::complex<T> Ey, std::complex<T> Ez) {
 			_k[0] = kx;
 			_k[1] = ky;
