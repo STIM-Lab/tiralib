@@ -1,4 +1,3 @@
-#include <vector>
 #include "shapes/rectangle.h"
 #include "shapes/circle.h"
 #include "shapes/cube.h"

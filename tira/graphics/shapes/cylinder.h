@@ -1,18 +1,113 @@
 #pragma once
 
-#include <vector>
-#include "shape.h"
+#include <cmath>
+
+#include "geometry.h"
 
 namespace tira {
     template <typename T>
     class cylinder : public geometry<T> {
 		// Function for generating cylinder geometry
-        void genGeometry(unsigned int stacks, unsigned int sectors) {
-            const float PI = 3.14159;
+        void genGeometry(unsigned int stacks, unsigned int sectors, T radius, T height) {
 
-			// Set cylinder radius and height
-            float radius = 0.05f;
-			float height = 1.0f;
+			T dz = height / stacks;						// change along the z axis
+			T dtheta = 2 * M_PI / sectors;				// change in theta
+
+			T zstart = - height / 2.0f;					// start position (bottom end cap)
+
+			// CREATE THE BOTTOM END CAP
+			geometry<T>::m_vertices.push_back(0);		// add the center vertex of the bottom end cap
+			geometry<T>::m_vertices.push_back(0);
+			geometry<T>::m_vertices.push_back(zstart);
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(-1);
+			geometry<T>::m_texcoords.push_back(0);
+			geometry<T>::m_texcoords.push_back(0);
+
+			for (unsigned int ti = 0; ti < sectors; ti++) {		// generate vertices for the triangle fan
+				T theta = dtheta * ti;
+				T x = radius * cos(theta);
+				T y = radius * sin(theta);
+				geometry<T>::m_vertices.push_back(x);
+				geometry<T>::m_vertices.push_back(y);
+				geometry<T>::m_vertices.push_back(zstart);
+
+				geometry<T>::m_normals.push_back(0);
+				geometry<T>::m_normals.push_back(0);
+				geometry<T>::m_normals.push_back(-1);
+
+				geometry<T>::m_texcoords.push_back((double)ti / (double)sectors);
+				geometry<T>::m_texcoords.push_back(0);
+			}
+			for (unsigned int ti = 0; ti < sectors; ti++) {
+				geometry<T>::m_indices.push_back(ti + 1);
+				geometry<T>::m_indices.push_back(0);				
+				if (ti == sectors - 1) geometry<T>::m_indices.push_back(1);
+				else geometry<T>::m_indices.push_back(ti + 2);
+			}
+
+			// CREATE THE TUBE BODY
+
+			for (unsigned int si = 1; si <= stacks; si++) {
+				T z = zstart + si * dz;								// calculate the z coordinate of the current stack
+				for (unsigned int ti = 0; ti < sectors; ti++) {
+					T theta = dtheta * ti;
+					T cos_theta = cos(theta);
+					T sin_theta = sin(theta);
+					T x = radius * cos_theta;
+					T y = radius * sin_theta;
+
+					geometry<T>::m_vertices.push_back(x);
+					geometry<T>::m_vertices.push_back(y);
+					geometry<T>::m_vertices.push_back(z);
+
+					geometry<T>::m_normals.push_back(cos_theta);
+					geometry<T>::m_normals.push_back(sin_theta);
+					geometry<T>::m_normals.push_back(0);
+
+					geometry<T>::m_texcoords.push_back((double)ti / (double)sectors);
+					geometry<T>::m_texcoords.push_back((si * dz) / height);
+				}
+			}
+			for (unsigned int si = 0; si < stacks; si++) {
+				unsigned int s1_start = si * sectors + 1;
+				unsigned int s2_start = s1_start + sectors;
+				for (unsigned int ti = 0; ti < sectors; ti++) {
+					geometry<T>::m_indices.push_back(s1_start + ti);
+					if (ti == sectors - 1) geometry<T>::m_indices.push_back(s1_start);
+					else geometry<T>::m_indices.push_back(s1_start + ti + 1);					
+					geometry<T>::m_indices.push_back(s2_start + ti);
+
+					geometry<T>::m_indices.push_back(s2_start + ti);
+					if (ti == sectors - 1) geometry<T>::m_indices.push_back(s1_start);
+					else geometry<T>::m_indices.push_back(s1_start + ti + 1);
+					if (ti == sectors - 1) geometry<T>::m_indices.push_back(s2_start);
+					else geometry<T>::m_indices.push_back(s2_start + ti + 1);
+				}
+			}
+
+			// CREATE TOP END CAP
+			geometry<T>::m_vertices.push_back(0);		// add the center vertex of the bottom end cap
+			geometry<T>::m_vertices.push_back(0);
+			geometry<T>::m_vertices.push_back(-zstart);
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(1);
+			geometry<T>::m_texcoords.push_back(1);
+			geometry<T>::m_texcoords.push_back(0);
+
+			unsigned int si_start = stacks * sectors + 1;
+			unsigned int endcap = geometry<T>::m_vertices.size() / 3 - 1;
+			for (unsigned int ti = 0; ti < sectors; ti++) {
+				geometry<T>::m_indices.push_back(endcap);
+				geometry<T>::m_indices.push_back(si_start + ti);
+				if (ti == sectors - 1) geometry<T>::m_indices.push_back(si_start);
+				else geometry<T>::m_indices.push_back(si_start + ti + 1);
+
+			}
+
+            /*//const float PI = 3.14159;
 
 			// Declare variables for vertex position, normal, and texture coordinate
             float x, y, z, xy;											// vertex position
@@ -20,7 +115,7 @@ namespace tira {
             float s, t;													// vertex texCoord
 
 			// Calculate sector and stack steps based on the number of sectors and stacks
-			float sectorStep = 2 * PI / sectors;
+			float sectorStep = 2 * M_PI / sectors;
 			float stackStep = height / stacks;
 			float sectorAngle, stackHeight;
 
@@ -106,12 +201,12 @@ namespace tira {
 						geometry<T>::m_indices.push_back((stacks + 1) * (sectors + 1) - 1);
 					}
 				}
-			}
+			}*/
 		} // end GenerateCylinder()
 
 	public:
-		cylinder(unsigned int stacks = 10, unsigned int slices = 10) {
-			genGeometry(stacks, slices);
+		cylinder(unsigned int stacks = 10, unsigned int slices = 10, float radius = 0.5f, float height = 1.0f) {
+			genGeometry(stacks, slices, radius, height);
 		}
 	};
 

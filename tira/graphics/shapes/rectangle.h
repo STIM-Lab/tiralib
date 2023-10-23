@@ -1,7 +1,6 @@
 #pragma once
 
-#include <vector>
-#include "shape.h"
+#include "geometry.h"
 
 namespace tira{
 

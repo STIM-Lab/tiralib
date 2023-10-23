@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vector>
-#include "shape.h"
+#include <cmath>
+
+#include "geometry.h"
 
 namespace tira{
 
@@ -12,7 +13,7 @@ namespace tira{
 			std::vector<T> v(points * 3 + 3);							// generate a vector to store 3D points representing the circle
 
 			// calculate vertices
-			float d_rad = 2 * 3.14159 / points;
+			float d_rad = 2 * M_PI / points;
 			T theta, x, y;
 
 			for(size_t p = 0; p < points; p++){				// for each point

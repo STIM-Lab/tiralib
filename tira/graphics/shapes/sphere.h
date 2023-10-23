@@ -1,32 +1,44 @@
 #pragma once
 
-#include <vector>
-#include "shape.h"
+#include <cmath>
+
+#include "geometry.h"
 
 namespace tira {
 	template <typename T>
 	class sphere : public geometry<T>{
 		void genGeometry(unsigned int stacks, unsigned int sectors) {
-			const float PI = 3.14159;
 
 			float radius = 0.5f;
 			float x, y, z, xy;                              // vertex position
 			float nx, ny, nz, lengthInv = 1.0f / radius;    // vertex normal
 			float s, t;                                     // vertex texCoord
 
-			float sectorStep = 2 * PI / sectors;
-			float stackStep = PI / stacks;
+			float sectorStep = 2 * M_PI / sectors;
+			float stackStep = M_PI / stacks;
 			float sectorAngle, stackAngle;
 
-			for (int i = 0; i <= stacks; ++i)
+			// add the first vertex (top of the sphere)
+			geometry<T>::m_vertices.push_back(0);
+			geometry<T>::m_vertices.push_back(0);
+			geometry<T>::m_vertices.push_back(radius);
+
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(1);
+
+			geometry<T>::m_texcoords.push_back(0);
+			geometry<T>::m_texcoords.push_back(0);
+
+			for (int i = 1; i < stacks; ++i)
 			{
-				stackAngle = PI / 2 - i * stackStep;        // starting from pi/2 to -pi/2
+				stackAngle = M_PI / 2 - i * stackStep;      // starting from pi/2 to -pi/2
 				xy = radius * cosf(stackAngle);             // r * cos(u)
 				z = radius * sinf(stackAngle);              // r * sin(u)
 
 				// add (sectorCount+1) vertices per stack
 				// the first and last vertices have same position and normal, but different tex coords
-				for (int j = 0; j <= sectors; ++j)
+				for (int j = 0; j < sectors; ++j)
 				{
 					sectorAngle = j * sectorStep;           // starting from 0 to 2pi
 
@@ -52,6 +64,19 @@ namespace tira {
 					geometry<T>::m_texcoords.push_back(t);
 				}
 			}
+
+			// add the first vertex (top of the sphere)
+			geometry<T>::m_vertices.push_back(0);
+			geometry<T>::m_vertices.push_back(0);
+			geometry<T>::m_vertices.push_back(-radius);
+
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(0);
+			geometry<T>::m_normals.push_back(-1);
+
+			geometry<T>::m_texcoords.push_back(1);
+			geometry<T>::m_texcoords.push_back(1);
+
 			// generate CCW index list of sphere triangles
 			// k1--k1+1
 			// |  / |
@@ -62,27 +87,62 @@ namespace tira {
 			int k1, k2;
 			for (int i = 0; i < stacks; ++i)
 			{
-				k1 = i * (sectors + 1);     // beginning of current stack
-				k2 = k1 + sectors + 1;      // beginning of next stack
+				if (i == 0)
+					k1 = 0;
+				else
+					k1 = (i - 1) * sectors + 1;     // beginning of current stack
+
+				k2 = k1 + sectors;      // beginning of next stack
 
 				for (int j = 0; j < sectors; ++j, ++k1, ++k2)
 				{
 					// 2 triangles per sector excluding first and last stacks
 					// k1 => k2 => k1+1
-					if (i != 0)
-					{
+					if (i == 0) {
+						geometry<T>::m_indices.push_back(0);
+						geometry<T>::m_indices.push_back(j + 1);
+
+						if (j == sectors - 1)
+							geometry<T>::m_indices.push_back(1);
+						else
+							geometry<T>::m_indices.push_back(j + 2);
+					}
+					else if (i == (stacks - 1)) {
+						int last = geometry<T>::m_vertices.size() / 3 - 1;
 						geometry<T>::m_indices.push_back(k1);
-						geometry<T>::m_indices.push_back(k2);
-						geometry<T>::m_indices.push_back(k1 + 1);
+						geometry<T>::m_indices.push_back(last);
+						if (j == sectors - 1)
+							geometry<T>::m_indices.push_back(last - sectors);
+						else
+							geometry<T>::m_indices.push_back(k1 + 1);
+					}
+					else
+					{
+						if (j == sectors - 1) {
+							geometry<T>::m_indices.push_back(k1);
+							geometry<T>::m_indices.push_back(k2);
+							geometry<T>::m_indices.push_back(k1 - sectors + 1);
+							geometry<T>::m_indices.push_back(k1 - sectors + 1);
+							geometry<T>::m_indices.push_back(k2);
+							geometry<T>::m_indices.push_back(k2 - sectors + 1);
+						}
+						else {
+							geometry<T>::m_indices.push_back(k1);
+							geometry<T>::m_indices.push_back(k2);
+							geometry<T>::m_indices.push_back(k1 + 1);
+							geometry<T>::m_indices.push_back(k1 + 1);
+							geometry<T>::m_indices.push_back(k2);
+							geometry<T>::m_indices.push_back(k2 + 1);
+						}
 					}
 
 					// k1+1 => k2 => k2+1
-					if (i != (stacks - 1))
-					{
-						geometry<T>::m_indices.push_back(k1 + 1);
-						geometry<T>::m_indices.push_back(k2);
-						geometry<T>::m_indices.push_back(k2 + 1);
-					}
+					//if (i != (stacks - 1))
+					//{
+					//	geometry<T>::m_indices.push_back(k1 + 1);
+					//	geometry<T>::m_indices.push_back(k2);
+					//	geometry<T>::m_indices.push_back(k2 + 1);
+					//}
 
 				}
 			}
