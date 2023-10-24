@@ -16,8 +16,8 @@ namespace tira {
 
 	template <typename T>
 	class planewave {
-		std::complex<T> _E0[2];		// Ex and Ey (complex amplitude of the plane wave)
-		std::complex<T> _k[3];			// complex k vector (direction of propagation) in 3D
+		std::complex<T> _E0[3];			// E vector at the origin (p = 0)
+		std::complex<T> _k[3];			// complex k vector (direction of propagation times wavenumber) in 3D
 
 
 		static glm::tmat3x3<T> _Rot(glm::tvec3<T> from, glm::tvec3<T> to) {
@@ -240,14 +240,13 @@ namespace tira {
 		}
 
 		// Create a plane wave with a given k vector and the corresponding perpendicular components of E.
-		planewave<T>(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex_perp, std::complex<T> Ey_perp) {
+		/*planewave<T>(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex_perp, std::complex<T> Ey_perp) {
 			_k[0] = kx;
 			_k[1] = ky;
 			_k[2] = kz;
 			_E0[0] = Ex_perp;
 			_E0[1] = Ey_perp;
-
-		}
+		}*/
 
 		// Create a plane wave with a given k and E vector. This expects both k and E to be orthogonal.
 		planewave<T>(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex, std::complex<T> Ey, std::complex<T> Ez) {
@@ -255,10 +254,11 @@ namespace tira {
 			_k[1] = ky;
 			_k[2] = kz;
 			//glm::tvec3<std::complex<T>> E0(Ex, Ey, Ez);
-			glm::tmat3x3<T> iRot = _iRot();
-			glm::tvec3<std::complex<T>> E0_relative = _cMul(iRot, Ex, Ey, Ez);
-			_E0[0] = E0_relative[0];
-			_E0[1] = E0_relative[1];
+			//glm::tmat3x3<T> iRot = _iRot();
+			//glm::tvec3<std::complex<T>> E0_relative = _cMul(iRot, Ex, Ey, Ez);
+			_E0[0] = Ex;
+			_E0[1] = Ey;
+			_E0[2] = Ez;
 		}
 
 		planewave<T>(){
@@ -267,6 +267,7 @@ namespace tira {
 			_k[2] = 1;
 			_E0[0] = 1;
 			_E0[1] = 0;
+			_E0[2] = 0;
 		}
 
 		/// <summary>
@@ -274,8 +275,9 @@ namespace tira {
 		/// </summary>
 		/// <returns></returns>
 		glm::vec<3, std::complex<T>> getE0() {
-			glm::tmat3x3<T> M = _Rot();							// get the matrix mapping local coordinates into global coordinates
-			return _cMul(M, _E0[0], _E0[1], 0.0);				// multiply the local E0 coordinates by the rotation matrix
+			//glm::tmat3x3<T> M = _Rot();							// get the matrix mapping local coordinates into global coordinates
+			//return _cMul(M, _E0[0], _E0[1], 0.0);				// multiply the local E0 coordinates by the rotation matrix
+			return glm::vec<3, std::complex<T> >(_E0[0], _E0[1], _E0[2]);
 		}
 
 		/// Returns the 3-dimensional E vector at any point in space
@@ -339,7 +341,7 @@ namespace tira {
 			std::complex<T> k_dot_r = _k[0] * x + _k[1] * y + _k[2] * z;
 			std::complex<T> i(0.0, 1.0);
 			std::complex<T> phase = std::exp(i * k_dot_r);
-			return tira::planewave<T>(_k[0], _k[1], _k[2], _E0[0] * phase, _E0[1] * phase);
+			return tira::planewave<T>(_k[0], _k[1], _k[2], _E0[0] * phase, _E0[1] * phase, _E0[2] * phase);
 		}
 
 		/// Calculate the reflected and transmitted plane waves at a single boundary
