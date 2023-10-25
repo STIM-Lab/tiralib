@@ -255,12 +255,24 @@ namespace tira {
 			_k[0] = kx;
 			_k[1] = ky;
 			_k[2] = kz;
-			//glm::tvec3<std::complex<T>> E0(Ex, Ey, Ez);
-			//glm::tmat3x3<T> iRot = _iRot();
-			//glm::tvec3<std::complex<T>> E0_relative = _cMul(iRot, Ex, Ey, Ez);
-			_E0[0] = Ex;
-			_E0[1] = Ey;
-			_E0[2] = Ez;
+
+			// ORTHOGONALIZE
+			// calculate the length of the k vector
+			/*std::complex<T> k_mag = sqrt(kx * kx + ky * ky + kz * kz);
+			
+			// calculate the normalized direction of k
+			std::complex<T> dx = kx / k_mag;
+			std::complex<T> dy = ky / k_mag;
+			std::complex<T> dz = kz / k_mag;
+
+			// calculate the projection of E0 onto k
+			std::complex<T> E_dot_k = Ex * dx + Ey * dy + Ez * dz;
+			*/
+
+			// save E while correcting for any out-of-plane components
+			_E0[0] = Ex;// -dx * E_dot_k;
+			_E0[1] = Ey;// -dy * E_dot_k;
+			_E0[2] = Ez;// -dz * E_dot_k;
 		}
 
 		planewave<T>(){

@@ -1,5 +1,12 @@
 #pragma once
 
+//external libraries
+
+// Eigen is used to solve the linear system required to calculate derivatives at any specified order
+#include <Eigen/Dense>
+
+
+#include <cmath>
 #include <typeinfo>
 
 #include "extern/libnpy/npy.hpp"
@@ -34,6 +41,69 @@ namespace tira {
 				off *= _shape[di];
 			}
 			return off;
+		}
+
+		/// <summary>
+		/// Calculate the finite difference coefficients given a derivative and set of sample points
+		/// </summary>
+		/// <param name="derivative"></param>
+		/// <param name="samples"></param>
+		/// <returns></returns>
+		Eigen::VectorX<T> finite_difference_coefficients(unsigned int derivative, Eigen::VectorX<T> samples) {
+
+			unsigned int N = samples.size();
+
+			Eigen::MatrixX<T> S(N, N);
+			for (unsigned int ri = 0; ri < N; ri++) {
+				for (unsigned int ci = 0; ci < N; ci++) {
+					S(ri, ci) = pow(samples[ci], ri);
+				}
+			}
+
+			Eigen::VectorX<T> b = Eigen::VectorX<T>::Zero(N);
+			b(derivative) = tgamma(derivative + 1);
+
+			return S.colPivHouseholderQr().solve(b);
+		}
+
+		/// <summary>
+		/// Calculate the finite difference coefficients given a derivative and order of accuracy
+		/// </summary>
+		/// <param name="derivative"></param>
+		/// <param name="order"></param>
+		/// <returns></returns>
+		std::vector< std::vector<T> > finite_difference_coefficients(unsigned int derivative, unsigned int order) {
+
+			unsigned int N = order + 1;					// calculate the number of samples required to achieve the desired order
+
+			std::vector< std::vector<T> > Coefficients;
+
+			Eigen::VectorX<T> Samples(N);				// allocate a vector that will be used to store sample points
+
+			for (int ri = 0; ri < N; ri++) {			// for each shifted sample position
+				for (int ci = 0; ci < N; ci++) {		// calculate the point for each sample
+					Samples(ci) = -ri + ci;				// store that point in the Samples vector
+				}
+				std::vector<T> c(N);
+				Eigen::Map< Eigen::VectorX<T> >(&c[0], N) = finite_difference_coefficients(derivative, Samples);
+				Coefficients.push_back(c);
+			}
+			return Coefficients;
+		}
+
+		/// <summary>
+		/// Calculate the partial derivative of the field along the specified axis and return a pointer to the resulting data.
+		/// </summary>
+		/// <param name="axis">Axis along which the partial derivative is calculated</param>
+		/// <param name="d">Derivative (ex. 2 for second derivative)</param>
+		/// <param name="order">Order of accuracy (requires order+d sample points)</param>
+		/// <returns>Pointer to the derivative data in an array that is the same format as the current field</returns>
+		T* derivative_ptr(unsigned int axis, unsigned int d, unsigned int order) {
+
+			std::vector< std::vector<T> > C = finite_difference_coefficients(d, order);		// calculate the list of finite difference coefficients
+			T* derivative = new T[_data.size()];												// allocate a dynamic array for the derivative data
+			return derivative;
+
 		}
 
 
@@ -201,11 +271,6 @@ namespace tira {
 			return *this;
 		}
 
-		/*template<typename... D>
-		T& operator()(size_t x, D... more) {							// returns a reference to the indexed value
-			return _data[idx_offset(0, x, more...)];
-		}*/
-
 		T& operator()(std::vector<size_t> x) {
 			return _data[idx(x)];
 		}
@@ -349,5 +414,7 @@ namespace tira {
 		T* data() {
 			return &_data[0];
 		}
+
+		
 	};
 }
