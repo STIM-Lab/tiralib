@@ -154,7 +154,7 @@ namespace tira {
 		/// <param name="beta">Optional internal obscuration (reflective optics will generally use beta = 0</param>
 		/// <returns>An std::vector of plane waves that fill the desired solid angle</returns>
 		static std::vector< tira::planewave<T> > SolidAngleMC(T alpha, T kx, T ky, T kz, 
-		std::complex<T> Ex, std::complex<T> Ey, size_t N, 
+		std::complex<T> Ex, std::complex<T> Ey, std::complex<T> Ez, size_t N,
 		T beta = 0, glm::vec<3, T> clip = glm::vec<3, T>(0.0, 0.0, 0.0), unsigned long seed = 0) {
 			if (beta > alpha) throw "ERROR: beta cannot be larger than alpha";
 			T cos_alpha = std::cos(alpha);														// calculate the cosine of the focusing angle
@@ -191,6 +191,7 @@ namespace tira {
 					p._k[2] = D_new[2] * k;
 					p._E0[0] = (1.0 / (T)N) * Ex;
 					p._E0[1] = (1.0 / (T)N) * Ey;
+					p._E0[2] = (1.0 / (T)N) * Ez;
 					P.push_back(p);
 				}
 			}
@@ -198,7 +199,7 @@ namespace tira {
 		}
 
 		static std::vector< tira::planewave<T> > SolidAnglePolar(T alpha, T kx, T ky, T kz, 
-			std::complex<T> Ex, std::complex<T> Ey, 
+			std::complex<T> Ex, std::complex<T> Ey, std::complex<T> Ez,
 			size_t thetaN = 100, size_t phiN = 50, T beta = 0, glm::vec<3, T> clip = glm::vec<3, T>(0.0, 0.0, 0.0)) {
 			size_t N = thetaN * phiN;
 			if (beta > alpha) throw "ERROR: beta cannot be larger than alpha";
@@ -232,6 +233,7 @@ namespace tira {
 						p._k[2] = D_new[2] * k;
 						p._E0[0] = Ex * std::sin(phi) * dtheta * dphi;
 						p._E0[1] = Ey * std::sin(phi) * dtheta * dphi;
+						p._E0[2] = Ez * std::sin(phi) * dtheta * dphi;
 						P.push_back(p);
 					}
 				}
