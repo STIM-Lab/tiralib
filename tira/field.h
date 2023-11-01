@@ -74,7 +74,7 @@ namespace tira {
 		/// <returns></returns>
 		std::vector< std::vector<T> > finite_difference_coefficients(unsigned int derivative, unsigned int order) {
 
-			unsigned int N = order + 1;					// calculate the number of samples required to achieve the desired order
+			unsigned int N = order + derivative;		// calculate the number of samples required to achieve the desired order
 
 			std::vector< std::vector<T> > Coefficients;
 
@@ -100,8 +100,41 @@ namespace tira {
 		/// <returns>Pointer to the derivative data in an array that is the same format as the current field</returns>
 		T* derivative_ptr(unsigned int axis, unsigned int d, unsigned int order) {
 
+			if (axis >= _shape.size()) throw "ERROR: axis out of range of field";
 			std::vector< std::vector<T> > C = finite_difference_coefficients(d, order);		// calculate the list of finite difference coefficients
+
 			T* derivative = new T[_data.size()];												// allocate a dynamic array for the derivative data
+
+			int S = C.size();											// store the number of sample points
+			int S2 = S / 2;											// store the number of sample points on one side of the template
+			int ci;													// current template to use
+			T accum;
+			int offset;
+			std::vector<size_t> c(_shape.size());
+			std::vector<size_t> cs(_shape.size());
+			for (iterator i = begin(); i != end(); i++) {						// for each point in the field
+				c = i.coord();												// calculate the coordinate of the current axis
+				if (c[axis] < S2) {											// if the current point is within half of the window size from the edge, select a shifted template
+					ci = c[axis];
+					offset = -ci;
+				}
+				else if (c[axis] >= _shape[axis] - S2) {							// if the current point is within half of the window size from the edge, select a shifted template
+					ci = S - (_shape[axis] - c[axis]);
+					offset = -ci;
+				}
+				else {
+					ci = S2;
+					offset = -ci;
+				}
+				accum = 0;
+
+				for (int si = 0; si < S; si++) {						// for each sample in the finite difference template
+					cs = c;
+					cs[axis] += si + offset;
+					accum += C[ci][si] * read(cs);
+				}
+				derivative[idx(c)] = accum;
+			}
 			return derivative;
 
 		}
@@ -110,6 +143,100 @@ namespace tira {
 		
 
 	public:
+
+		struct iterator {
+
+			// iterator tags, used to make this more efficient for standard library algorithms
+			using iterator_category = std::bidirectional_iterator_tag;
+			using difference_type = std::ptrdiff_t;
+			using value_type = T;
+			using pointer = T*;
+			using reference = T&;
+
+			iterator(iterator &c) {
+				//_ptr = c._ptr;
+				//_idx = c._idx;
+				_coord = c._coord;
+				//_shape = c._shape;
+				//_N = c._N;
+				_field = c._field;
+			}
+
+			iterator(field<T>* f) {
+				_field = f;
+				_ptr = _field->data();
+				_coord = std::vector<size_t>(_field->shape().size(), 0);
+			}
+			
+			iterator(field<T>* f, pointer ptr) {
+				_field = f;
+				_ptr = ptr;
+				//_coord = std::vector<size_t>(_field->shape().size(), 0);
+			}
+
+			/*iterator(pointer start, std::vector<size_t> shape, std::vector<size_t> coord) {
+				
+				_shape = shape;
+				_coord = coord;
+				_N = 1;
+				_idx = 0;
+				for (unsigned int i = 0; i < shape.size(); i++) {							// calculate the total number of elements in the field
+					_N *= shape[i];
+					_idx += shape[i] * coord[i];
+				}
+				_ptr = start + _idx;
+			}*/
+
+			iterator& operator=(iterator& c) {												// copy assignment operator
+				_ptr = c._ptr;
+				//_idx = c._idx;
+				_coord = c._coord;
+				_field = c._field;
+				//_shape = c._shape;
+				//_N = c._N;
+			}
+
+			reference operator*() const { return *_ptr; }								// dereference operator
+			pointer operator->() { return _ptr; }
+
+			iterator& operator++() {													// increment operator
+
+				_ptr++;
+				//_idx++;
+
+				unsigned int D = _field->ndims();
+				_coord[D - 1]++;
+
+				//if the position overflows, update
+				for (int di = D - 1; di > 0; di--) {
+					if (_coord[di] >= _field->_shape[di]) {
+						_coord[di] = 0;
+						_coord[di - 1]++;
+					}
+				}
+				return *this;
+			}							
+			iterator& operator++(int) { iterator tmp = *this; ++(*this); return tmp; }	// increment operator (prefix)
+
+			friend bool operator== (const iterator& a, const iterator& b) { 
+				return a._ptr == b._ptr;
+			};
+			friend bool operator!= (const iterator& a, const iterator& b) { 
+				return a._ptr != b._ptr;
+			};
+			std::vector<size_t> coord() { return _coord; }
+
+			size_t idx() { return _ptr - _field->data(); }
+
+
+		private:
+			pointer _ptr;												// pointer directly to the current element
+			//size_t _idx;												// 1D index into the _data array
+			std::vector<size_t> _coord;									// N-dimensional coordinate into the field
+			//std::vector<size_t> _shape;									// shape of the field (resolution along each dimension)
+			//size_t _N;													// total number of elements in the field (defines max 1D index)
+			field<T>* _field;											// pointer to the field object being iterated over
+		};
 
 		field() {}											// default constructor sets up an empty field
 
@@ -121,6 +248,12 @@ namespace tira {
 		field(std::vector<size_t> shape) {
 			_shape = shape;
 			allocate();
+		}
+
+		field(std::vector<size_t> shape, T* ptr) {
+			setShape(shape);													// set the new shape of the field		
+			allocate();																// allocate space for the field
+			memcpy(&_data[0], ptr, bytes());										// copy the data from the							
 		}
 
 		/// <summary>
@@ -165,6 +298,8 @@ namespace tira {
 			}
 			return i;
 		}
+
+		unsigned int ndims() { return _shape.size(); }
 
 		template<typename D = T>
 		void load_npy(std::string filename) {					// fill the field with data from an npy file
@@ -289,16 +424,14 @@ namespace tira {
 		T read(const std::vector<size_t> &x) const {
 			size_t i = idx(x);
 			if (i >= _data.size()) {
-				std::cout << "ERROR: index out of range: i = " << i << " (" << _data.size() << " max)" << std::endl;
-				exit(1);
+				throw "ERROR: index out of range:";
 			}
 			return _data[i];
 		}
 
 		T read(const size_t i) const {
 			if (i >= _data.size()) {
-				std::cout << "ERROR: index out of range: i = " << i << " (" << _data.size() << " max)" << std::endl;
-				exit(1);
+				throw "ERROR: index out of range";
 			}
 			return _data[i];
 		}
@@ -330,10 +463,10 @@ namespace tira {
 			// FOR each pixel in the output (result) image
 			for (size_t ri = 0; ri < result.size(); ri++) {							// for each element in the result field
 				sum = (T)0;
-				result.coord(ri, r_coord);										// get the coordinate in the result array
+				result.coord(ri, r_coord);											// get the coordinate in the result array
 				// FOR each pixel in the kernel
 				for (size_t ki = 0; ki < K.size(); ki++) {							// for each element in the kernel
-					K.coord(ki, k_coord);										// get the coordinate in the kernel
+					K.coord(ki, k_coord);											// get the coordinate in the kernel
 					
 					// CALCULATE the coordinate into the source image
 					for (size_t ci = 0; ci < s_coord.size(); ci++) {				// for each coordinate
@@ -348,7 +481,6 @@ namespace tira {
 			}
 
 			return result;															// return the result field
-
 		}
 
 		
@@ -413,6 +545,26 @@ namespace tira {
 
 		T* data() {
 			return &_data[0];
+		}
+
+		iterator begin() { 
+			return iterator(this);
+		}
+		iterator end() { 
+			return iterator(this, data() + size());
+			//return iterator(this);
+		}
+
+		field<T> derivative(unsigned int axis, unsigned int d, unsigned int order) {
+
+			T* ptr = derivative_ptr(axis, d, order);
+
+			field<T> result(_shape, ptr);
+
+			delete ptr;
+			return result;
+
+
 		}
 
 		

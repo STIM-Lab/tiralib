@@ -7,6 +7,19 @@
 
 #include <tira/field.h>
 
+#define N_BREWER_CTRL_PTS 11
+
+static float  BREWER_PTS[N_BREWER_CTRL_PTS * 4] = { 0.192157f, 0.211765f, 0.584314f, 1.0f,
+													0.270588f, 0.458824f, 0.705882f, 1.0f,
+													0.454902f, 0.678431f, 0.819608f, 1.0f,
+													0.670588f, 0.85098f, 0.913725f, 1.0f,
+													0.878431f, 0.952941f, 0.972549f, 1.0f,
+													1.0f, 1.0f, 0.74902f, 1.0f,
+													0.996078f, 0.878431f, 0.564706f, 1.0f,
+													0.992157f, 0.682353f, 0.380392f, 1.0f,
+													0.956863f, 0.427451f, 0.262745f, 1.0f,
+													0.843137f, 0.188235f, 0.152941f, 1.0f,
+													0.647059f, 0.0f, 0.14902f, 1.0f };
 
 namespace tira {
 	/// This static class provides the STIM interface for loading, saving, and storing 2D images.
@@ -199,6 +212,12 @@ namespace tira {
 		/// </summary>
 		image() : field<T>() {}			//initialize all variables, don't allocate any memory
 
+		image(field<T> F) {
+			field<T>::_shape = F.shape();
+			field<T>::allocate();
+			memcpy(&field<T>::_data[0], F.data(), F.bytes());
+		}
+
 		/// <summary>
 		/// Create a new image from scratch given a number of samples and channels
 		/// </summary>
@@ -278,6 +297,7 @@ namespace tira {
 			return *this;													// return a pointer to the current object
 		}
 
+		
 		image<T> operator+(T rhs) {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
 			image<T> r(X(), Y(), C());								//allocate space for the resulting image
@@ -814,6 +834,60 @@ namespace tira {
 
 			}
 			return distance;
+		}
+
+		/// <summary>
+		/// Generate a color map of the image.
+		/// </summary>
+		/// <param name="minval"></param>
+		/// <param name="maxval"></param>
+		/// <returns></returns>
+		image<unsigned char> cmap(T minval, T maxval) {
+
+			if (C() != 1) {																	// throw an exception if the image is more than one channel
+				throw "Cannot create a color map from images with more than one channel!";
+			}
+			image<unsigned char> color_result(X(), Y(), 3);									// create the new color image
+			float a;																		// create a normalized value as a reference for the color map
+			for (size_t i = 0; i < field<T>::_data.size(); i++) {
+				if (minval != maxval)
+					a = (field<T>::_data[i] - minval) / (maxval - minval);
+				else
+					a = 0.5;
+
+				a = std::max(0.0f, a);																// clamp the normalized value to between zero and 1
+				a = std::min(1.0f, a);
+
+				float c = a * (float)(N_BREWER_CTRL_PTS - 1);								// get the real value to interpolate control points
+				int c_floor = (int)c;														// calculate the control point index
+				float m = c - (float)c_floor;												// calculate the fractional part of the control point index
+
+				float r, g, b;																// allocate variables to store the color
+				r = BREWER_PTS[c_floor * 4 + 0];											// use a LUT to find the "low" color value
+				g = BREWER_PTS[c_floor * 4 + 1];
+				b = BREWER_PTS[c_floor * 4 + 2];
+				if (c_floor != N_BREWER_CTRL_PTS - 1) {										// if there is a fractional component, interpolate
+					r = r * (1.0f - m) + BREWER_PTS[(c_floor + 1) * 4 + 0] * m;
+					g = g * (1.0f - m) + BREWER_PTS[(c_floor + 1) * 4 + 1] * m;
+					b = b * (1.0f - m) + BREWER_PTS[(c_floor + 1) * 4 + 2] * m;
+					if (b > 1)
+						std::cout << "ERROR" << std::endl;
+				}
+				color_result.data()[i * 3 + 0] = 255 * r;											// save the resulting color in the output image
+				color_result.data()[i * 3 + 1] = 255 * g;
+				color_result.data()[i * 3 + 2] = 255 * b;
+			}
+			return color_result;
+		}
+
+		/// <summary>
+		/// Generate a color map of the image.
+		/// </summary>
+		/// <param name="minval"></param>
+		/// <param name="maxval"></param>
+		/// <returns></returns>
+		image<unsigned char> cmap() {
+			return cmap(minv(), maxv());
 		}
 
 
