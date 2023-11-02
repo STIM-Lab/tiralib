@@ -106,19 +106,22 @@ namespace tira {
 			T* derivative = new T[_data.size()];												// allocate a dynamic array for the derivative data
 
 			int S = C.size();											// store the number of sample points
-			int S2 = S / 2;											// store the number of sample points on one side of the template
-			int ci;													// current template to use
+			int S2 = S / 2;												// store the number of sample points on one side of the template
+			int ci;														// current template to use
 			T accum;
 			int offset;
 			std::vector<size_t> c(_shape.size());
 			std::vector<size_t> cs(_shape.size());
-			for (iterator i = begin(); i != end(); i++) {						// for each point in the field
-				c = i.coord();												// calculate the coordinate of the current axis
-				if (c[axis] < S2) {											// if the current point is within half of the window size from the edge, select a shifted template
+			iterator i = begin();
+			while (i != end()) {
+				
+				//c = i.coord();											// calculate the coordinate of the current axis
+				i.coord(&c[0]);
+				if (c[axis] < S2) {										// if the current point is within half of the window size from the edge, select a shifted template
 					ci = c[axis];
 					offset = -ci;
 				}
-				else if (c[axis] >= _shape[axis] - S2) {							// if the current point is within half of the window size from the edge, select a shifted template
+				else if (c[axis] >= _shape[axis] - S2) {				// if the current point is within half of the window size from the edge, select a shifted template
 					ci = S - (_shape[axis] - c[axis]);
 					offset = -ci;
 				}
@@ -134,6 +137,7 @@ namespace tira {
 					accum += C[ci][si] * read(cs);
 				}
 				derivative[idx(c)] = accum;
+				++i;														// for each point in the field
 			}
 			return derivative;
 
@@ -174,19 +178,6 @@ namespace tira {
 				//_coord = std::vector<size_t>(_field->shape().size(), 0);
 			}
 
-			/*iterator(pointer start, std::vector<size_t> shape, std::vector<size_t> coord) {
-				
-				_shape = shape;
-				_coord = coord;
-				_N = 1;
-				_idx = 0;
-				for (unsigned int i = 0; i < shape.size(); i++) {							// calculate the total number of elements in the field
-					_N *= shape[i];
-					_idx += shape[i] * coord[i];
-				}
-				_ptr = start + _idx;
-			}*/
-
 			iterator& operator=(iterator& c) {												// copy assignment operator
 				_ptr = c._ptr;
 				//_idx = c._idx;
@@ -202,9 +193,8 @@ namespace tira {
 			iterator& operator++() {													// increment operator
 
 				_ptr++;
-				//_idx++;
 
-				unsigned int D = _field->ndims();
+				int D = _field->ndims();
 				_coord[D - 1]++;
 
 				//if the position overflows, update
@@ -213,6 +203,7 @@ namespace tira {
 						_coord[di] = 0;
 						_coord[di - 1]++;
 					}
+					else break;
 				}
 				return *this;
 			}							
@@ -225,26 +216,22 @@ namespace tira {
 				return a._ptr != b._ptr;
 			};
 			std::vector<size_t> coord() { return _coord; }
+			void coord(size_t* c) {										// copy the coordinate to a pre-allocated array
+				memcpy(c, &_coord[0], _coord.size() * sizeof(size_t)); 
+			}			
+			size_t coord(int axis) { return _coord[axis]; }
 
 			size_t idx() { return _ptr - _field->data(); }
 
 
 		private:
 			pointer _ptr;												// pointer directly to the current element
-			//size_t _idx;												// 1D index into the _data array
 			std::vector<size_t> _coord;									// N-dimensional coordinate into the field
-			//std::vector<size_t> _shape;									// shape of the field (resolution along each dimension)
-			//size_t _N;													// total number of elements in the field (defines max 1D index)
 			field<T>* _field;											// pointer to the field object being iterated over
 		};
 
 		field() {}											// default constructor sets up an empty field
 
-		/*template<typename... D>
-		field(const D... d) {
-			setShape(d...);
-			allocate();										// allocate space to store the field
-		}*/
 		field(std::vector<size_t> shape) {
 			_shape = shape;
 			allocate();
