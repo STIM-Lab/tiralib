@@ -45,6 +45,7 @@ namespace tira{
 		// save an OBJ file for this geometry
 		void obj(std::string filename) {
 			std::ofstream f(filename);										// open a file for writing
+			if (!f) throw "ERROR: unable to open OBJ file for writing";
 			size_t nV = getNumVertices();									// get the number of vertices
 			for (size_t vi = 0; vi < nV; vi++) {							// for each vertex
 				f << "v ";													// output the initial "v" to indicate the vertex

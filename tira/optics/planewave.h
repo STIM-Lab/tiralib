@@ -220,7 +220,7 @@ namespace tira {
 			for (size_t itheta = 0; itheta < thetaN; itheta++) {
 				for (size_t iphi = 0; iphi < phiN; iphi++) {
 					theta = dtheta * (T)itheta;
-					phi = beta + dphi * (T)iphi;
+					phi = beta + dphi * (T)iphi; 
 
 					x = std::cos(theta) * std::sin(phi);							// convert from spherical to cartesian coordinates
 					y = std::sin(theta) * std::sin(phi);

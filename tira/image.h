@@ -212,6 +212,11 @@ namespace tira {
 		/// </summary>
 		image() : field<T>() {}			//initialize all variables, don't allocate any memory
 
+
+		/// <summary>
+		/// Constructor creates an image from a field
+		/// </summary>
+		/// <param name="F"></param>
 		image(field<T> F) {
 			field<T>::_shape = F.shape();
 			field<T>::allocate();

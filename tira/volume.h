@@ -612,6 +612,23 @@ namespace tira {
 			return output;
 		}
 
+		/// <summary>
+		/// Returns a channel of the current volume as an independent one-channel vollume
+		/// </summary>
+		/// <param name="c">channel to return</param>
+		/// <returns></returns>
+		volume<T> channel(size_t c) const {
+			volume<T> r(X(), Y(), Z());											//create a new single-channel image
+			for (size_t x = 0; x < X(); x++) {
+				for (size_t y = 0; y < Y(); y++) {
+					for (size_t z = 0; z < Z(); z++) {
+						r._data[r.idx_offset(x, y, 0)] = field<T>::_data[idx_offset(x, y, z, c)];
+					}
+				}
+			}
+			return r;
+		}
+
 
 		/// <summary>
 		/// Convolves the image by a 3D mask and returns the result

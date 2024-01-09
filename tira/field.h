@@ -243,6 +243,10 @@ namespace tira {
 			memcpy(&_data[0], ptr, bytes());										// copy the data from the							
 		}
 
+		field(std::string npy_filename) {
+			load_npy(npy_filename);
+		}
+
 		/// <summary>
 		/// Copy constructor
 		/// </summary>
