@@ -148,7 +148,7 @@ namespace tira{
         /// Constructor to create a new material based on a shader source file.
         /// </summary>
         /// <param name="filename">Source code containing the vertex and fragment shaders</param>
-        glMaterial(std::string filename) : glShader(filename){
+        glMaterial(std::string shaderstring) : glShader(shaderstring){
             RefreshTextures();                              // identify all texture samplers so that textures can be loaded separately
         }
 

@@ -191,9 +191,9 @@ namespace tira {
 		/// </summary>
 		/// <param name="filepath">File path and name</param>
 		glShader() : m_ShaderID(0) {}
-		glShader(const std::string& filepath) {
+		glShader(const std::string& shaderstring) {
 			m_ShaderID = 0;
-			LoadShader(filepath);
+			CreateShader(shaderstring);
 		}
 		glShader(const std::string& vertexSource, const std::string& fragmentSource) {
 			m_ShaderID = 0;
@@ -412,7 +412,8 @@ namespace tira {
 					}
 				}
 				else {
-					ss[(int)type] << line << "\n";
+					if(type != ShaderType::NONE)
+						ss[(int)type] << line << "\n";
 				}
 			}
 			return { ss[0].str(), ss[1].str() };
