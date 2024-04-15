@@ -14,8 +14,8 @@ namespace tira {
 			float nx, ny, nz, lengthInv = 1.0f / radius;    // vertex normal
 			float s, t;                                     // vertex texCoord
 
-			float sectorStep = 2 * M_PI / sectors;
-			float stackStep = M_PI / stacks;
+			float sectorStep = 2 * 3.14159265358979323846 / sectors;
+			float stackStep = 3.14159265358979323846 / stacks;
 			float sectorAngle, stackAngle;
 
 			// add the first vertex (top of the sphere)
@@ -32,7 +32,7 @@ namespace tira {
 
 			for (int i = 1; i < stacks; ++i)
 			{
-				stackAngle = M_PI / 2 - i * stackStep;      // starting from pi/2 to -pi/2
+				stackAngle = 3.14159265358979323846 / 2 - i * stackStep;      // starting from pi/2 to -pi/2
 				xy = radius * cosf(stackAngle);             // r * cos(u)
 				z = radius * sinf(stackAngle);              // r * sin(u)
 

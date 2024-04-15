@@ -3,8 +3,10 @@
 //#include <stim/math/vector.h>
 //#include <stim/math/quaternion.h>
 //#include <stim/math/matrix_sq.h>
+#define GLM_ENABLE_EXPERIMENTAL
 #include "glm/glm.hpp"
 #include <glm/gtx/string_cast.hpp>
+
 #include <glm/gtc/quaternion.hpp>
 
 #include <ostream>

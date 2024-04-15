@@ -168,14 +168,14 @@ namespace tira {
         }
         std::vector<T> computeVertices() {
             //const float PI = 3.1415926f;
-            const float H_ANGLE = M_PI / 180 * 72;    // 72 degree = 360 / 5
+            const float H_ANGLE = 3.14159265358979323846 / 180 * 72;    // 72 degree = 360 / 5
             const float V_ANGLE = atanf(1.0f / 2);  // elevation = 26.565 degree
 
             std::vector<float> vertices(12 * 3);    // 12 vertices
             int i1, i2;                             // indices
             float z, xy;                            // coords
-            float hAngle1 = -M_PI / 2 - H_ANGLE / 2;  // start from -126 deg at 2nd row
-            float hAngle2 = -M_PI / 2;                // start from -90 deg at 3rd row
+            float hAngle1 = -3.14159265358979323846 / 2 - H_ANGLE / 2;  // start from -126 deg at 2nd row
+            float hAngle2 = -3.14159265358979323846 / 2;                // start from -90 deg at 3rd row
 
             // the first top vertex (0, 0, r)
             vertices[0] = 0;

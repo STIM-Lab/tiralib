@@ -11,7 +11,7 @@ namespace tira {
         void genGeometry(unsigned int stacks, unsigned int sectors, T radius, T height) {
 
 			T dz = height / stacks;						// change along the z axis
-			T dtheta = 2 * M_PI / sectors;				// change in theta
+			T dtheta = 2 * 3.14159265358979323846 / sectors;				// change in theta
 
 			T zstart = - height / 2.0f;					// start position (bottom end cap)
 

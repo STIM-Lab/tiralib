@@ -4,12 +4,27 @@
 #undef min
 
 #include <stack>
+#include <algorithm>
 
 #include <tira/field.h>
 
-#define N_BREWER_CTRL_PTS 11
+#define N_CTRL_PTS 11
 
-static float  BREWER_PTS[N_BREWER_CTRL_PTS * 4] = { 0.192157f, 0.211765f, 0.584314f, 1.0f,
+enum class ColorMap {Grey, Brewer, BrewerBlk, Magma};
+
+static float  GREY_PTS[N_CTRL_PTS * 4] = {		0 * 1.0f / (N_CTRL_PTS - 1),	0 * 1.0f / (N_CTRL_PTS - 1),	0 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													1 * 1.0f / (N_CTRL_PTS - 1),	1 * 1.0f / (N_CTRL_PTS - 1),	1 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													1 * 1.0f / (N_CTRL_PTS - 1),	2 * 1.0f / (N_CTRL_PTS - 1),	2 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													3 * 1.0f / (N_CTRL_PTS - 1),	3 * 1.0f / (N_CTRL_PTS - 1),	3 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													4 * 1.0f / (N_CTRL_PTS - 1),	4 * 1.0f / (N_CTRL_PTS - 1),	4 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													5 * 1.0f / (N_CTRL_PTS - 1),	5 * 1.0f / (N_CTRL_PTS - 1),	5 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													6 * 1.0f / (N_CTRL_PTS - 1),	6 * 1.0f / (N_CTRL_PTS - 1),	6 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													7 * 1.0f / (N_CTRL_PTS - 1),	7 * 1.0f / (N_CTRL_PTS - 1),	7 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													8 * 1.0f / (N_CTRL_PTS - 1),	8 * 1.0f / (N_CTRL_PTS - 1),	8 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													9 * 1.0f / (N_CTRL_PTS - 1),	9 * 1.0f / (N_CTRL_PTS - 1),	9 * 1.0f / (N_CTRL_PTS - 1), 1.0f,
+													10 * 1.0f / (N_CTRL_PTS - 1),	10 * 1.0f / (N_CTRL_PTS - 1),	10 * 1.0f / (N_CTRL_PTS - 1), 1.0f };
+
+static float  BREWER_PTS[N_CTRL_PTS * 4] = {		0.192157f, 0.211765f, 0.584314f, 1.0f,
 													0.270588f, 0.458824f, 0.705882f, 1.0f,
 													0.454902f, 0.678431f, 0.819608f, 1.0f,
 													0.670588f, 0.85098f, 0.913725f, 1.0f,
@@ -20,6 +35,31 @@ static float  BREWER_PTS[N_BREWER_CTRL_PTS * 4] = { 0.192157f, 0.211765f, 0.5843
 													0.956863f, 0.427451f, 0.262745f, 1.0f,
 													0.843137f, 0.188235f, 0.152941f, 1.0f,
 													0.647059f, 0.0f, 0.14902f, 1.0f };
+
+static float  BREWERBLK_PTS[N_CTRL_PTS * 4] = { 0.298, 0.443, 1.000, 1.0f,
+													0.176, 0.322, 0.878, 1.0f,
+													0.059, 0.204, 0.761, 1.0f,
+													0.000, 0.118, 0.561, 1.0f,
+													0.000, 0.059, 0.278, 1.0f,
+													0.000, 0.000, 0.000, 1.0f,
+													0.314, 0.004, 0.020, 1.0f,
+													0.624, 0.008, 0.039, 1.0f,
+													0.824, 0.067, 0.106, 1.0f,
+													0.906, 0.180, 0.216, 1.0f,
+													0.988, 0.290, 0.325, 1.0f };
+
+
+static float  MAGMA_PTS[N_CTRL_PTS * 4] = { 0.001462f, 0.000466f, 0.013866f, 1.0f,
+													0.078815f, 0.054184f, 0.211667f, 1.0f,
+													0.232077f, 0.059889f, 0.437695f, 1.0f,
+													0.390384f, 0.100379f, 0.501864f, 1.0f,
+													0.550287f, 0.161158f, 0.505719f, 1.0f,
+													0.716387f, 0.214982f, 0.47529f, 1.0f,
+													0.868793f, 0.287728f, 0.409303f, 1.0f,
+													0.967671f, 0.439703f, 0.35981f, 1.0f,
+													0.994738f, 0.62435f, 0.427397f, 1.0f,
+													0.99568f, 0.812706f, 0.572645f, 1.0f,
+													0.987053f, 0.991438f, 0.749504f, 1.0f };
 
 namespace tira {
 	/// This static class provides the STIM interface for loading, saving, and storing 2D images.
@@ -847,7 +887,7 @@ namespace tira {
 		/// <param name="minval"></param>
 		/// <param name="maxval"></param>
 		/// <returns></returns>
-		image<unsigned char> cmap(T minval, T maxval) {
+		image<unsigned char> cmap(T minval, T maxval, ColorMap colormap) {
 
 			if (C() != 1) {																	// throw an exception if the image is more than one channel
 				throw "Cannot create a color map from images with more than one channel!";
@@ -859,22 +899,38 @@ namespace tira {
 					a = (field<T>::_data[i] - minval) / (maxval - minval);
 				else
 					a = 0.5;
+				
+				a = (std::max)(0.0f, a);																// clamp the normalized value to between zero and 1
+				a = (std::min)(1.0f, a);
 
-				a = std::max(0.0f, a);																// clamp the normalized value to between zero and 1
-				a = std::min(1.0f, a);
-
-				float c = a * (float)(N_BREWER_CTRL_PTS - 1);								// get the real value to interpolate control points
+				float c = a * (float)(N_CTRL_PTS - 1);								// get the real value to interpolate control points
 				int c_floor = (int)c;														// calculate the control point index
 				float m = c - (float)c_floor;												// calculate the fractional part of the control point index
 
 				float r, g, b;																// allocate variables to store the color
-				r = BREWER_PTS[c_floor * 4 + 0];											// use a LUT to find the "low" color value
-				g = BREWER_PTS[c_floor * 4 + 1];
-				b = BREWER_PTS[c_floor * 4 + 2];
-				if (c_floor != N_BREWER_CTRL_PTS - 1) {										// if there is a fractional component, interpolate
-					r = r * (1.0f - m) + BREWER_PTS[(c_floor + 1) * 4 + 0] * m;
-					g = g * (1.0f - m) + BREWER_PTS[(c_floor + 1) * 4 + 1] * m;
-					b = b * (1.0f - m) + BREWER_PTS[(c_floor + 1) * 4 + 2] * m;
+
+				float* ctrlPts;
+				switch (colormap) {
+				case ColorMap::Grey:
+					ctrlPts = GREY_PTS;
+					break;
+				case ColorMap::Brewer:
+					ctrlPts = BREWER_PTS;
+					break;
+				case ColorMap::BrewerBlk:
+					ctrlPts = BREWERBLK_PTS;
+					break;
+				case ColorMap::Magma:
+					ctrlPts = MAGMA_PTS;
+					break;
+				}
+				r = ctrlPts[c_floor * 4 + 0];											// use a LUT to find the "low" color value
+				g = ctrlPts[c_floor * 4 + 1];
+				b = ctrlPts[c_floor * 4 + 2];
+				if (c_floor != N_CTRL_PTS - 1) {										// if there is a fractional component, interpolate
+					r = r * (1.0f - m) + ctrlPts[(c_floor + 1) * 4 + 0] * m;
+					g = g * (1.0f - m) + ctrlPts[(c_floor + 1) * 4 + 1] * m;
+					b = b * (1.0f - m) + ctrlPts[(c_floor + 1) * 4 + 2] * m;
 					if (b > 1)
 						std::cout << "ERROR" << std::endl;
 				}
@@ -891,8 +947,8 @@ namespace tira {
 		/// <param name="minval"></param>
 		/// <param name="maxval"></param>
 		/// <returns></returns>
-		image<unsigned char> cmap() {
-			return cmap(minv(), maxv());
+		image<unsigned char> cmap(ColorMap colormap = ColorMap::Brewer) {
+			return cmap(minv(), maxv(), colormap);
 		}
 
 
