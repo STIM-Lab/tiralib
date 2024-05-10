@@ -807,6 +807,10 @@ namespace tira {
 			
 			// obtaining the path string from input
 			std::size_t pos = file_mask.rfind("*");												// position of * in file_mask
+			if (pos == std::string::npos) {
+				std::cout << "Cannot compose a volume from a single image." << std::endl;
+				exit(1);
+			}
 			std::string path(file_mask.substr(0, pos));											// gets the path of the folder containing the images
 			std::string ext(file_mask.substr(pos + 1, file_mask.length() - pos));				// stores the file format (jpg, bmp, ppm, ...)
 
