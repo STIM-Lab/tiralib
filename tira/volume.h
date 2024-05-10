@@ -91,199 +91,199 @@ namespace tira {
 
 		tira::volume<float> _dist(tira::volume<int>& binary_boundary) {
 
-			// create registers to hold the size
-			int w = X();
-			int h = Y();
-			int l = Z();
+	// create registers to hold the size
+	int w = X();
+	int h = Y();
+	int l = Z();
 
-			// resize the binary boundary grid
-			binary_boundary.resize(field<T>::_shape);
+	// resize the binary boundary grid
+	binary_boundary.resize(field<T>::_shape);
 
-			std::vector<std::tuple<int, int, int>> neighbors;				// vector stores a template for 4-connected indices
-			neighbors.emplace_back(0, 0, 1);
-			neighbors.emplace_back(0, 1, 0);
-			neighbors.emplace_back(1, 0, 0);
-			neighbors.emplace_back(-1, 0, 0);
-			neighbors.emplace_back(0, -1, 0);
-			neighbors.emplace_back(0, 0, -1);
+	std::vector<std::tuple<int, int, int>> neighbors;				// vector stores a template for 4-connected indices
+	neighbors.emplace_back(0, 0, 1);
+	neighbors.emplace_back(0, 1, 0);
+	neighbors.emplace_back(1, 0, 0);
+	neighbors.emplace_back(-1, 0, 0);
+	neighbors.emplace_back(0, -1, 0);
+	neighbors.emplace_back(0, 0, -1);
 
 
 
-			// indentifying boundary cells
-			for (int y = 1; y < h - 1; y++) {						// for every row in the image
-				for (int x = 1; x < w - 1; x++) {					// for every column in the image
-					for (int z = 1; z < l - 1; z++) {					// for every length in the image
-						for (int k = 0; k < neighbors.size(); k++) {		// for every neighbor
+	// indentifying boundary cells
+	for (int y = 1; y < h - 1; y++) {						// for every row in the image
+		for (int x = 1; x < w - 1; x++) {					// for every column in the image
+			for (int z = 1; z < l - 1; z++) {					// for every length in the image
+				for (int k = 0; k < neighbors.size(); k++) {		// for every neighbor
 
-							int nx = x + get<0>(neighbors[k]);				// calculate the x coordinate of the neighbor cell
-							int ny = y + get<1>(neighbors[k]);				// calculate the y coordinate of the neighbor cell
-							int nz = z + get<2>(neighbors[k]);				// calculate the z coordinate of the neighbor cell
+					int nx = x + get<0>(neighbors[k]);				// calculate the x coordinate of the neighbor cell
+					int ny = y + get<1>(neighbors[k]);				// calculate the y coordinate of the neighbor cell
+					int nz = z + get<2>(neighbors[k]);				// calculate the z coordinate of the neighbor cell
 
-							if (at(x, y, z) * at(nx, ny, nz) <= 0) {				// if the product of the current cell and neighboring cell is negative (it is a boundary cell)
-								binary_boundary(x, y, z) = 1;					// this cell is a boundary cell
-								binary_boundary(nx, ny, nz) = 1;				// the neighboring cell is ALSO a boundary cell
-							}
-						}
+					if (at(x, y, z) * at(nx, ny, nz) <= 0) {				// if the product of the current cell and neighboring cell is negative (it is a boundary cell)
+						binary_boundary(x, y, z) = 1;					// this cell is a boundary cell
+						binary_boundary(nx, ny, nz) = 1;				// the neighboring cell is ALSO a boundary cell
 					}
 				}
 			}
-
-
-			tira::volume<float> dist(w, h, l);										// create an image to store the distance field
-			dist = 9999.0f;																// initialize the distance field to a very large value
-
-
-
-			// calculate the distance for all boundary cells to the contour
-			for (int y = 1; y < h - 1; y++) {											// for every row in the image
-				for (int x = 1; x < w - 1; x++) {										// for every column in the image
-					for (int z = 1; z < l - 1; z++) {										// for every length in the image
-						if (binary_boundary(x, y, z)) {											// if the pixel (x, y,z) is in the boundary
-							for (int k = 0; k < neighbors.size(); k++) {						// for every neighbor
-
-								int nx = x + get<0>(neighbors[k]);								// calculate the x coordinate of the neighbor cell
-								int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
-								int nz = z + get<2>(neighbors[k]);								// calculate the z coordinate of the neighbor cell
-								if (binary_boundary(nx, ny, nz)) {												// if the neighboring cell (nx, ny) is ALSO in the boundary
-									float da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from pixel(x,y) to contour da
-									float db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from neighbor to contour db
-									dist(x, y, z) = std::min(dist(x, y, z), da);									// minimum between distance and large boundary value of pixel (x,y)
-									dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);								// minimum between distance and large boundary value of neighbor (nx, ny)
-								}
-							}
-						}
-					}
-				}
-			}
-
-
-			// at this point, the distance image has the correct distances in cells surround the boundary
-
-			std::vector<float> dist1d;											// create a 1d representation of the distance field
-			dist1d.resize(h * w * l);
-
-			int row = w;
-
-			// copy the distance field into the 1d distance field
-			for (int y = 0; y < h; y++) {
-				for (int x = 0; x < w; x++) {
-					for (int z = 0; z < l; z++) {
-						dist1d[y * w * l + x * l + z] = dist(x, y, z);
-					}
-				}
-			}
-
-			// initializing fast sweeiping algorithm 
-			const int NSweeps = 8;
-
-			//// sweep directions { start, end, step }
-			const int dirX[NSweeps][3] = { {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1}, {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1} };
-			const int dirY[NSweeps][3] = { {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1}, {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1} };
-			const int dirZ[NSweeps][3] = { {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1} };
-			double aa[3], tmp, eps = 1e-6;
-			double d_new, a, b;
-			int s, ix, iy, iz, gridPos;
-			const double dx = 1.0, f = 1.0;
-
-			for (s = 0; s < NSweeps; s++) {
-
-				for (iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
-					for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
-						for (iz = dirZ[s][0]; dirZ[s][2] * iz <= dirZ[s][1]; iz += dirZ[s][2]) {
-
-							gridPos = ((iz * h + iy) * row + ix);
-
-							if (iy == 0 || iy == (h - 1)) {                    // calculation for ymin
-								if (iy == 0) {
-									aa[1] = dist1d[(iz * h + (iy + 1)) * row + ix];
-								}
-								if (iy == (h - 1)) {
-									aa[1] = dist1d[(iz * h + (iy - 1)) * row + ix];
-								}
-							}
-							else {
-								aa[1] = dist1d[(iz * h + (iy - 1)) * row + ix] < dist1d[(iz * h + (iy + 1)) * row + ix] ? dist1d[(iz * h + (iy - 1)) * row + ix] : dist1d[(iz * h + (iy + 1)) * row + ix];
-							}
-
-							if (ix == 0 || ix == (w - 1)) {                    // calculation for xmin
-								if (ix == 0) {
-									aa[0] = dist1d[(iz * h + iy) * row + (ix + 1)];
-								}
-								if (ix == (w - 1)) {
-									aa[0] = dist1d[(iz * h + iy) * row + (ix - 1)];
-								}
-							}
-							else {
-								aa[0] = dist1d[(iz * h + iy) * row + (ix - 1)] < dist1d[(iz * h + iy) * row + (ix + 1)] ? dist1d[(iz * h + iy) * row + (ix - 1)] : dist1d[(iz * h + iy) * row + (ix + 1)];
-							}
-
-							if (iz == 0 || iz == (l - 1)) {                    // calculation for Zmin
-								if (iz == 0) {
-									aa[2] = dist1d[((iz + 1) * h + iy) * row + ix];
-								}
-								if (iz == (l - 1)) {
-									aa[2] = dist1d[((iz - 1) * h + iy) * row + ix];
-								}
-							}
-							else {
-								aa[2] = dist1d[((iz - 1) * h + iy) * row + ix] < dist1d[((iz + 1) * h + iy) * row + ix] ? dist1d[((iz - 1) * h + iy) * row + ix] : dist1d[((iz + 1) * h + iy) * row + ix];
-							}
-
-
-							// simple bubble sort
-							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
-							if (aa[1] > aa[2]) { tmp = aa[1]; aa[1] = aa[2]; aa[2] = tmp; }
-							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
-
-							double d_curr = aa[0] + dx * f; // just a linear equation with the first neighbor value
-							double d_new;
-							if (d_curr <= (aa[1] + eps)) {
-								d_new = d_curr; // accept the solution
-							}
-							else {
-								// quadratic equation with coefficients involving 2 neighbor values aa
-								double a = 2.0;
-								double b = -2.0 * (aa[0] + aa[1]);
-								double c = aa[0] * aa[0] + aa[1] * aa[1] - dx * dx * f * f;
-								double D = sqrt(b * b - 4.0 * a * c);
-								// choose the minimal root
-								d_curr = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
-
-								if (d_curr <= (aa[2] + eps))
-									d_new = d_curr; // accept the solution
-								else {
-									// quadratic equation with coefficients involving all 3 neighbor values aa
-									a = 3.0;
-									b = -2.0 * (aa[0] + aa[1] + aa[2]);
-									c = aa[0] * aa[0] + aa[1] * aa[1] + aa[2] * aa[2] - dx * dx * f * f;
-									D = sqrt(b * b - 4.0 * a * c);
-									// choose the minimal root
-									d_new = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
-								}
-							}
-							// update if d_new is smaller
-							dist1d[gridPos] = dist1d[gridPos] < d_new ? dist1d[gridPos] : d_new;
-
-						}
-					}
-				}
-			}
-
-			for (int y = 0; y < h; y++)
-			{
-				for (int x = 0; x < w; x++)
-				{
-					for (int z = 0; z < l; z++)
-					{
-						dist(x, y, z) = dist1d[((z * l) + y) * w + x];
-					}
-				}
-
-			}
-
-
-			return dist;
 		}
+	}
+
+
+	tira::volume<float> dist(w, h, l);										// create an image to store the distance field
+	dist = 9999.0f;																// initialize the distance field to a very large value
+
+
+
+	// calculate the distance for all boundary cells to the contour
+	for (int y = 1; y < h - 1; y++) {											// for every row in the image
+		for (int x = 1; x < w - 1; x++) {										// for every column in the image
+			for (int z = 1; z < l - 1; z++) {										// for every length in the image
+				if (binary_boundary(x, y, z)) {											// if the pixel (x, y,z) is in the boundary
+					for (int k = 0; k < neighbors.size(); k++) {						// for every neighbor
+
+						int nx = x + get<0>(neighbors[k]);								// calculate the x coordinate of the neighbor cell
+						int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
+						int nz = z + get<2>(neighbors[k]);								// calculate the z coordinate of the neighbor cell
+						if (binary_boundary(nx, ny, nz)) {												// if the neighboring cell (nx, ny) is ALSO in the boundary
+							float da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from pixel(x,y) to contour da
+							float db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from neighbor to contour db
+							dist(x, y, z) = std::min(dist(x, y, z), da);									// minimum between distance and large boundary value of pixel (x,y)
+							dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);								// minimum between distance and large boundary value of neighbor (nx, ny)
+						}
+					}
+				}
+			}
+		}
+	}
+
+
+	// at this point, the distance image has the correct distances in cells surround the boundary
+
+	std::vector<float> dist1d;											// create a 1d representation of the distance field
+	dist1d.resize(h * w * l);
+
+	int row = w;
+
+	// copy the distance field into the 1d distance field
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++) {
+			for (int z = 0; z < l; z++) {
+				dist1d[z * (w * h) + y * w + x] = dist(x, y, z);
+			}
+		}
+	}
+
+	// initializing fast sweeiping algorithm 
+	const int NSweeps = 8;
+
+	//// sweep directions { start, end, step }
+	const int dirX[NSweeps][3] = { {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1}, {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1} };
+	const int dirY[NSweeps][3] = { {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1}, {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1} };
+	const int dirZ[NSweeps][3] = { {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1} };
+	double aa[3], tmp, eps = 1e-6;
+	double d_new, a, b;
+	int s, ix, iy, iz, gridPos;
+	const double dx = 1.0, f = 1.0;
+
+	for (s = 0; s < NSweeps; s++) {
+
+		for (iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
+			for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
+				for (iz = dirZ[s][0]; dirZ[s][2] * iz <= dirZ[s][1]; iz += dirZ[s][2]) {
+
+					gridPos = ((iz * h + iy) * row + ix);
+
+					if (iy == 0 || iy == (h - 1)) {                    // calculation for ymin
+						if (iy == 0) {
+							aa[1] = dist1d[(iz * h + (iy + 1)) * row + ix];
+						}
+						if (iy == (h - 1)) {
+							aa[1] = dist1d[(iz * h + (iy - 1)) * row + ix];
+						}
+					}
+					else {
+						aa[1] = dist1d[(iz * h + (iy - 1)) * row + ix] < dist1d[(iz * h + (iy + 1)) * row + ix] ? dist1d[(iz * h + (iy - 1)) * row + ix] : dist1d[(iz * h + (iy + 1)) * row + ix];
+					}
+
+					if (ix == 0 || ix == (w - 1)) {                    // calculation for xmin
+						if (ix == 0) {
+							aa[0] = dist1d[(iz * h + iy) * row + (ix + 1)];
+						}
+						if (ix == (w - 1)) {
+							aa[0] = dist1d[(iz * h + iy) * row + (ix - 1)];
+						}
+					}
+					else {
+						aa[0] = dist1d[(iz * h + iy) * row + (ix - 1)] < dist1d[(iz * h + iy) * row + (ix + 1)] ? dist1d[(iz * h + iy) * row + (ix - 1)] : dist1d[(iz * h + iy) * row + (ix + 1)];
+					}
+
+					if (iz == 0 || iz == (l - 1)) {                    // calculation for Zmin
+						if (iz == 0) {
+							aa[2] = dist1d[((iz + 1) * h + iy) * row + ix];
+						}
+						if (iz == (l - 1)) {
+							aa[2] = dist1d[((iz - 1) * h + iy) * row + ix];
+						}
+					}
+					else {
+						aa[2] = dist1d[((iz - 1) * h + iy) * row + ix] < dist1d[((iz + 1) * h + iy) * row + ix] ? dist1d[((iz - 1) * h + iy) * row + ix] : dist1d[((iz + 1) * h + iy) * row + ix];
+					}
+
+
+					// simple bubble sort
+					if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
+					if (aa[1] > aa[2]) { tmp = aa[1]; aa[1] = aa[2]; aa[2] = tmp; }
+					if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
+
+					double d_curr = aa[0] + dx * f; // just a linear equation with the first neighbor value
+					double d_new;
+					if (d_curr <= (aa[1] + eps)) {
+						d_new = d_curr; // accept the solution
+					}
+					else {
+						// quadratic equation with coefficients involving 2 neighbor values aa
+						double a = 2.0;
+						double b = -2.0 * (aa[0] + aa[1]);
+						double c = aa[0] * aa[0] + aa[1] * aa[1] - dx * dx * f * f;
+						double D = sqrt(b * b - 4.0 * a * c);
+						// choose the minimal root
+						d_curr = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
+
+						if (d_curr <= (aa[2] + eps))
+							d_new = d_curr; // accept the solution
+						else {
+							// quadratic equation with coefficients involving all 3 neighbor values aa
+							a = 3.0;
+							b = -2.0 * (aa[0] + aa[1] + aa[2]);
+							c = aa[0] * aa[0] + aa[1] * aa[1] + aa[2] * aa[2] - dx * dx * f * f;
+							D = sqrt(b * b - 4.0 * a * c);
+							// choose the minimal root
+							d_new = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
+						}
+					}
+					// update if d_new is smaller
+					dist1d[gridPos] = dist1d[gridPos] < d_new ? dist1d[gridPos] : d_new;
+
+				}
+			}
+		}
+	}
+
+	for (int y = 0; y < h; y++)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			for (int z = 0; z < l; z++)
+			{
+				dist(x, y, z) = dist1d[z * (w * h) + y * w + x];
+			}
+		}
+
+	}
+
+
+	return dist;
+}
 
 	public:
 
