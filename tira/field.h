@@ -2,14 +2,11 @@
 
 //external libraries
 
-// Eigen is used to solve the linear system required to calculate derivatives at any specified order
-#include <Eigen/Dense>
-
-
 #include <cmath>
 #include <typeinfo>
 
 #include "extern/libnpy/npy.hpp"
+#include "tira/solvers.h"
 
 namespace tira {
 
@@ -44,29 +41,6 @@ namespace tira {
 		}
 
 		/// <summary>
-		/// Calculate the finite difference coefficients given a derivative and set of sample points
-		/// </summary>
-		/// <param name="derivative"></param>
-		/// <param name="samples"></param>
-		/// <returns></returns>
-		Eigen::VectorX<T> finite_difference_coefficients(unsigned int derivative, Eigen::VectorX<T> samples) {
-
-			unsigned int N = samples.size();
-
-			Eigen::MatrixX<T> S(N, N);
-			for (unsigned int ri = 0; ri < N; ri++) {
-				for (unsigned int ci = 0; ci < N; ci++) {
-					S(ri, ci) = pow(samples[ci], ri);
-				}
-			}
-
-			Eigen::VectorX<T> b = Eigen::VectorX<T>::Zero(N);
-			b(derivative) = tgamma(derivative + 1);
-
-			return S.colPivHouseholderQr().solve(b);
-		}
-
-		/// <summary>
 		/// Calculate the finite difference coefficients given a derivative and order of accuracy
 		/// </summary>
 		/// <param name="derivative"></param>
@@ -78,15 +52,24 @@ namespace tira {
 
 			std::vector< std::vector<T> > Coefficients;
 
-			Eigen::VectorX<T> Samples(N);				// allocate a vector that will be used to store sample points
+			std::vector<T> Samples(N);					// allocate a vector that will be used to store sample points
 
 			for (int ri = 0; ri < N; ri++) {			// for each shifted sample position
 				for (int ci = 0; ci < N; ci++) {		// calculate the point for each sample
-					Samples(ci) = -ri + ci;				// store that point in the Samples vector
+					Samples[ci] = -ri + ci;				// store that point in the Samples vector
 				}
-				std::vector<T> c(N);
-				Eigen::Map< Eigen::VectorX<T> >(&c[0], N) = finite_difference_coefficients(derivative, Samples);
-				Coefficients.push_back(c);
+				std::vector<T> A(N * N);
+				for (unsigned int ri = 0; ri < N; ri++) {
+					for (unsigned int ci = 0; ci < N; ci++) {
+						A[ri * N + ci] = pow(Samples[ci], ri);
+					}
+				}
+				std::vector<T> b(N, 0.0);
+				b[derivative] = tgamma(derivative + 1);
+				std::vector<T> x(N);
+				tira::solvers::Ax_b(&A[0], &b[0], &x[0], N);
+				
+				Coefficients.push_back(x);
 			}
 			return Coefficients;
 		}
