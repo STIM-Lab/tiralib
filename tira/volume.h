@@ -15,8 +15,6 @@ namespace tira {
 
 	protected:
 
-		std::vector<double> _s;				// store the voxel size
-
 		
 
 	
@@ -168,7 +166,7 @@ namespace tira {
 			for (int y = 0; y < h; y++) {
 				for (int x = 0; x < w; x++) {
 					for (int z = 0; z < l; z++) {
-						dist1d[y * w * l + x * l + z] = dist(x, y, z);
+						dist1d[z * (w * h) + y * w + x] = dist(x, y, z);
 					}
 				}
 			}
@@ -275,7 +273,7 @@ namespace tira {
 				{
 					for (int z = 0; z < l; z++)
 					{
-						dist(x, y, z) = dist1d[((z * l) + y) * w + x];
+						dist(x, y, z) = dist1d[z * (w * h) + y * w + x];
 					}
 				}
 
@@ -290,9 +288,7 @@ namespace tira {
 		/// <summary>
 		/// Default constructor initializes an empty volume (0x0x0 with 0 channels)
 		/// </summary>
-		volume() : field<T>() {
-			_s = std::vector<double>(3, 1.0);			// by default, pixels are 1.0 along each dimension
-		}
+		volume() : field<T>() {}			//initialize all variables, don't allocate any memory
 
 		/// <summary>
 		/// Create a new volume from scratch given a number of samples and channels
@@ -343,28 +339,6 @@ namespace tira {
 		inline size_t Y() const { return field<T>::_shape[1]; }
 		inline size_t X() const { return field<T>::_shape[2]; }
 		inline size_t C() const { return field<T>::_shape[3]; }
-
-		// access methods to return the voxel size along all three dimensions
-		inline double dx() const { return _s[0]; }
-		inline double dy() const { return _s[1]; }
-		inline double dz() const { return _s[2]; }
-
-		// access methods to return the size of the volume along all three dimensions
-		inline double sx() const { return dx() * X(); }
-		inline double sy() const { return dy() * Y(); }
-		inline double sz() const { return dz() * Z(); }
-
-		// methods to set the voxel size along all three dimensions
-		inline void dx(double x) { _s[0] = x; }
-		inline void dy(double y) { _s[1] = y; }
-		inline void dz(double z) { _s[2] = z; }
-
-		// set the voxel size
-		void set_size(double x, double y, double z) {
-			dx(x);
-			dy(y);
-			dz(z);
-		}
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
 			init(X, Y, Z, 1);
@@ -612,23 +586,6 @@ namespace tira {
 			return output;
 		}
 
-		/// <summary>
-		/// Returns a channel of the current volume as an independent one-channel vollume
-		/// </summary>
-		/// <param name="c">channel to return</param>
-		/// <returns></returns>
-		volume<T> channel(size_t c) const {
-			volume<T> r(X(), Y(), Z());											//create a new single-channel image
-			for (size_t x = 0; x < X(); x++) {
-				for (size_t y = 0; y < Y(); y++) {
-					for (size_t z = 0; z < Z(); z++) {
-						r._data[r.idx_offset(x, y, 0)] = field<T>::_data[idx_offset(x, y, z, c)];
-					}
-				}
-			}
-			return r;
-		}
-
 
 		/// <summary>
 		/// Convolves the image by a 3D mask and returns the result
@@ -734,12 +691,12 @@ namespace tira {
 
 			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
 
-			result = 0;
+			result = 30;
 			//result = value;														//assign the border value to all pixels in the new image
 			for (size_t y = 0; y < Y(); y++) {								//for each pixel in the original image
 				for (size_t x = 0; x < X(); x++) {
 					for (size_t z = 0; z < Z(); z++) {
-						size_t n = ((y + w) * (X() + w * 2) * (Z() + w * 2)) + ((x + w) * (Z() + w * 2)) + (z + w);				//calculate the index of the corresponding pixel in the result image
+						size_t n = ((z + w) * (X() + w * 2) * (Y() + w * 2)) + ((y + w) * (X() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
 						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
 						result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
 					}
@@ -765,10 +722,10 @@ namespace tira {
 			for (size_t y = 0; y < Y(); y++) {								//for each pixel in the original image
 				for (size_t x = 0; x < X(); x++) {
 					for (size_t z = 0; z < Z(); z++) {
-					size_t n = ((y + w) * (X() + w * 2) * (Z() + w * 2)) + ((x + w) * (Z() + w * 2)) + (z + w);				//calculate the index of the corresponding pixel in the result image
-					size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
-					result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
-				    }
+						size_t n = ((z + w) * (X() + w * 2) * (Z() + w * 2)) + ((y + w) * (Z() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
+						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
+						result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+					}
 				}
 			}
 			size_t l = w;
@@ -882,11 +839,10 @@ namespace tira {
 
 		
 		/// <summary>
-		/// Load a volume from an NPY file. This function makes sure that the volume has four dimensions. If the input file is 3D, 
-		/// the fourth dimension (color) has a size of 1.
+		/// Load a volume from an NPY file. This function makes sure that the volume has four channels (even if there is only one color channel)
 		/// </summary>
-		/// <typeparam name="D"> Data type used in the NumPy file. </typeparam>
-		/// <param name="filename"> Path and filename for the NumPy file. </param>
+		/// <typeparam name="D"></typeparam>
+		/// <param name="filename"></param>
 		template<typename D = T>
 		void load_npy(std::string filename) {
 			field<T>::template load_npy<D>(filename);										// load the numpy file using the tira::field class
@@ -952,7 +908,7 @@ namespace tira {
 				{
 					for (int z = 0; z < length; z++)
 					{
-						SDF[((z * length) + y) * width + x] = D(x, y, z);
+						SDF[((z * height) + y) * width + x] = D(x, y, z);
 					}
 				}
 
@@ -969,7 +925,7 @@ namespace tira {
 				{
 					for (int z = 0; z < length; z++)
 					{
-						frozenCells[((z * length) + y) * width + x] = boundary(x, y, z);
+						frozenCells[((z * height) + y) * width + x] = boundary(x, y, z);
 					}
 				}
 			}
@@ -1043,7 +999,7 @@ namespace tira {
 				{
 					for (int z = 0; z < length; z++)
 					{
-						D(x, y, z) = SDF[((z * length) + y) * width + x];
+						D(x, y, z) = SDF[((z * height) + y) * width + x];
 					}
 				}
 
