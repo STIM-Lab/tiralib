@@ -140,12 +140,15 @@ namespace tira {
 			using pointer = T*;
 			using reference = T&;
 
+			iterator() {
+				_ptr = NULL;
+				_coord.assign(0);
+				_field = NULL;
+			}
+
 			iterator(iterator &c) {
-				//_ptr = c._ptr;
-				//_idx = c._idx;
+				_ptr = c._ptr;
 				_coord = c._coord;
-				//_shape = c._shape;
-				//_N = c._N;
 				_field = c._field;
 			}
 
@@ -158,16 +161,12 @@ namespace tira {
 			iterator(field<T>* f, pointer ptr) {
 				_field = f;
 				_ptr = ptr;
-				//_coord = std::vector<size_t>(_field->shape().size(), 0);
 			}
 
 			iterator& operator=(iterator& c) {												// copy assignment operator
 				_ptr = c._ptr;
-				//_idx = c._idx;
 				_coord = c._coord;
 				_field = c._field;
-				//_shape = c._shape;
-				//_N = c._N;
 			}
 
 			reference operator*() const { return *_ptr; }								// dereference operator
@@ -511,6 +510,36 @@ namespace tira {
 			return result;
 
 		}
+
+		field<T> crop(std::vector<size_t> min_coord, std::vector<size_t> max_coord) const {
+
+			size_t D = _shape.size();												// get the number of dimensions
+			std::vector<size_t> new_dims(D);
+			for (size_t di = 0; di < D; di++) {										// calculate the size of the output field
+				new_dims[di] = max_coord[di] - min_coord[di];
+			}
+
+			field<T> result(new_dims);
+			std::vector<size_t> s_coord(_shape.size());								// stores the source field coordinate
+			std::vector<size_t> r_coord(_shape.size());								// stores the result field coordinate
+			// FOR each pixel in the output (result) image
+			for (size_t ri = 0; ri < result.size(); ri++) {							// for each element in the result field
+				result.coord(ri, r_coord);											// get the coordinate in the result array
+
+				// CALCULATE the coordinate into the source image
+				for (size_t ci = 0; ci < s_coord.size(); ci++) {				// for each coordinate
+					s_coord[ci] = r_coord[ci] + min_coord[ci];					// offset the coordinate by the kernel coordinate
+				}
+				size_t s_idx = idx(s_coord);									// calculate the index into the source field
+				T s_val = _data[s_idx];											// get the value from the source field
+
+				result(r_coord) = s_val;											// store the accumulated value in the result field
+			}
+
+			return result;															// return the result field
+		}
+
+
 
 		void resize(std::vector<size_t> new_size) {
 			setShape(new_size);
