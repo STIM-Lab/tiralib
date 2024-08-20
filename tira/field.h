@@ -142,7 +142,7 @@ namespace tira {
 
 			iterator() {
 				_ptr = NULL;
-				_coord.assign(0);
+				//_coord.assign(0);
 				_field = NULL;
 			}
 
