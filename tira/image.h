@@ -719,8 +719,6 @@ namespace tira {
 				}
 			}
 			return result;
-			//std::cout<<"ERROR tira::image::convolve2 - function has been broken, and shouldn't really be in here."<<std::endl;
-			//exit(1);
 		}
 
 		/// <summary>
