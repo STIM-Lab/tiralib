@@ -379,6 +379,51 @@ namespace tira {
 			return *this;
 		}
 
+		field<T> operator+(field<T> rhs) {
+			field<T> result(_shape);
+			size_t N = field<T>::size();
+			for(size_t ni = 0; ni < N; ni++) {
+				result._data[ni] = _data[ni] + rhs._data[ni];
+			}
+			return result;
+		}
+
+		field<T> operator-(field<T> rhs) {
+			field<T> result(_shape);
+			size_t N = field<T>::size();
+			for(size_t ni = 0; ni < N; ni++) {
+				result._data[ni] = _data[ni] - rhs._data[ni];
+			}
+			return result;
+		}
+
+		field<T> operator*(field<T> rhs) {
+			field<T> result(_shape);
+			size_t N = field<T>::size();
+			for(size_t ni = 0; ni < N; ni++) {
+				result._data[ni] = _data[ni] * rhs._data[ni];
+			}
+			return result;
+		}
+
+		field<T> operator/(field<T> rhs) {
+			field<T> result(_shape);
+			size_t N = field<T>::size();
+			for(size_t ni = 0; ni < N; ni++) {
+				result._data[ni] = _data[ni] / rhs._data[ni];
+			}
+			return result;
+		}
+
+		field<T> operator*(T rhs) {
+			field<T> result(_shape);
+			size_t N = field<T>::size();
+			for(size_t ni = 0; ni < N; ni++) {
+				result._data[ni] = _data[ni] * rhs;
+			}
+			return result;
+		}
+
 		T& operator()(std::vector<size_t> x) {
 			return _data[idx(x)];
 		}
