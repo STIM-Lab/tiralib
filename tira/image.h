@@ -76,14 +76,15 @@ namespace tira {
 		/// <param name="x">Width of the image (fast axis)</param>
 		/// <param name="y">Height of the image (slow axis)</param>
 		/// <param name="c">Number of color channels</param>
-		void init(size_t x, size_t y, size_t c = 1) {
+		void init(size_t x, size_t y, size_t c = 0) {
 			if (field<T>::_shape.size() != 0) {													// if this image has already been allocated
 				field<T>::_shape.clear();														// clear the shape and data vectors to start from scratch
 				field<T>::_data.clear();
 			}
 			field<T>::_shape.push_back(y);
 			field<T>::_shape.push_back(x);
-			field<T>::_shape.push_back(c);
+			if(c > 0)
+				field<T>::_shape.push_back(c);
 
 			field<T>::allocate();
 		}
@@ -245,7 +246,10 @@ namespace tira {
 	public:
 		inline size_t Y() const { return field<T>::_shape[0]; }
 		inline size_t X() const { return field<T>::_shape[1]; }
-		inline size_t C() const { return field<T>::_shape[2]; }
+		inline size_t C() const {
+			if(field<T>::_shape.size() <=2) return 1;
+			return field<T>::_shape[2];
+		}
 
 		/// <summary>
 		/// Default constructor initializes an empty image (0x0 with 0 channels)
@@ -269,7 +273,7 @@ namespace tira {
 		/// <param name="x">size of the image along the X (fast) axis</param>
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="c">number of channels</param>
-		image(size_t x, size_t y = 1, size_t c = 1) {
+		image(size_t x, size_t y = 1, size_t c = 0) {
 			init(x, y, c);
 		}
 
@@ -280,7 +284,7 @@ namespace tira {
 		/// <param name="x">size of the image along the X (fast) axis</param>
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="c">number of channels (channels are interleaved)</param>
-		image(T* data, size_t x, size_t y, size_t c = 1) : image(x, y, c) {
+		image(T* data, size_t x, size_t y, size_t c = 0) : image(x, y, c) {
 			memcpy(&field<T>::_data[0], data, field<T>::bytes());									// use memcpy to copy the raw data into the field array
 		}
 
@@ -446,7 +450,9 @@ namespace tira {
 			image<T> r(X(), Y());											//create a new single-channel image
 			for (size_t x = 0; x < X(); x++) {
 				for (size_t y = 0; y < Y(); y++) {
-					r._data[r.idx_offset(x, y, 0)] = field<T>::_data[idx_offset(x, y, c)];
+					size_t source_i = idx_offset(x, y, c);
+					size_t dest_i = r.idx_offset(x, y, 0);
+					r._data[dest_i] = field<T>::_data[source_i];
 				}
 			}
 			return r;
@@ -669,6 +675,10 @@ namespace tira {
 			return result;
 		}
 
+		image<T> border_remove(size_t w) {
+			return crop(w, w, X() - 2 * w, Y() - 2 * w);
+		}
+
 		/// <summary>
 		/// Crops an image to a desired size
 		/// </summary>
@@ -887,7 +897,7 @@ namespace tira {
 		/// <returns></returns>
 		image<unsigned char> cmap(T minval, T maxval, ColorMap colormap) {
 
-			if (C() != 1) {																	// throw an exception if the image is more than one channel
+			if (C() > 1) {																	// throw an exception if the image is more than one channel
 				throw "Cannot create a color map from images with more than one channel!";
 			}
 			image<unsigned char> color_result(X(), Y(), 3);									// create the new color image

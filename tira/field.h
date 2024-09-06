@@ -98,26 +98,26 @@ namespace tira {
 			iterator i = begin();
 			while (i != end()) {
 				
-				//c = i.coord();											// calculate the coordinate of the current axis
-				i.coord(&c[0]);
-				if (c[axis] < S2) {										// if the current point is within half of the window size from the edge, select a shifted template
+				i.coord(&c[0]);								// get the coordinate c for the current iterator location
+				if (c[axis] < S2) {							// if the current point is within half of the window size from the starting edge, select a shifted template
 					ci = c[axis];
 					offset = -ci;
 				}
-				else if (c[axis] >= _shape[axis] - S2) {				// if the current point is within half of the window size from the edge, select a shifted template
+				else if (c[axis] >= _shape[axis] - S2) {	// if the current point is within half of the window size from the trailing edge, select a shifted template
 					ci = S - (_shape[axis] - c[axis]);
 					offset = -ci;
 				}
-				else {
+				else {										// we have enough data on both sides to use the center template
 					ci = S2;
 					offset = -ci;
 				}
-				accum = 0;
+				accum = 0;									// initialize the sum for the template to zero
 
-				for (int si = 0; si < S; si++) {						// for each sample in the finite difference template
-					cs = c;
-					cs[axis] += si + offset;
-					accum += C[ci][si] * read(cs);
+				for (int si = 0; si < S; si++) {			// for each sample in the finite difference template
+					cs = c;									// initialize the first template location to the current coordinate
+					cs[axis] += si + offset;				// adjust based on which template is being used
+					T val = C[ci][si] * read(cs);			// calculate the product of the image and template
+					accum += val;							// save the result in the sum
 				}
 				derivative[idx(c)] = accum;
 				++i;														// for each point in the field

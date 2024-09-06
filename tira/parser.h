@@ -77,6 +77,25 @@ public:
 		return data;
 	}
 
+	template <typename T>
+	std::vector< std::vector<T> > get(std::string name) {
+		Entries e = _options[name];
+
+		std::vector< std::vector<T> > data;
+		size_t E = e.size();						// number of entries
+		data.resize(E);
+
+		for(size_t ei = 0; ei < E; ei++) {			// for each entry
+			size_t A = e[ei].size();				// number of arguments
+			data[ei].resize(A);						// allocate space for all of the arguments
+			for(size_t ai = 0; ai < A; ai++) {
+				data[ei][ai] = (T) atof(e[ei][ai].c_str());
+			}
+		}
+
+		return data;
+	}
+
 	// returns the number of entries for an option name
 	size_t count(std::string name) {
 		return _options[name].size();

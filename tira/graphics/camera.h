@@ -89,14 +89,14 @@ public:
 		dolly(_view * delta);
 	}
 
-	void pan(float theta_x, float theta_y, float theta_z) {
+	void pan(const float theta_x, const float theta_y, const float theta_z) {
 		
-		glm::quat qx = glm::angleAxis(theta_x, _up);				//x rotation is around the up axis		
-		glm::vec3 side = glm::cross(_up, _view);				//y rotation is around the side axis
-		glm::quat qy = glm::angleAxis(theta_y, side);
-		glm::quat qz = glm::angleAxis(theta_z, _view);				//z rotation is around the direction vector		
-		glm::quat final = qz * qy * qx;								//combine the rotations in x, y, z order		
-		glm::mat3 rotation = glm::mat3_cast(final);					//get the rotation matrix		
+		const glm::quat qx = glm::angleAxis(theta_x, _up);				//x rotation is around the up axis
+		const glm::vec3 side = glm::cross(_up, _view);				//y rotation is around the side axis
+		const glm::quat qy = glm::angleAxis(theta_y, side);
+		const glm::quat qz = glm::angleAxis(theta_z, _view);				//z rotation is around the direction vector
+		const glm::quat final = qz * qy * qx;								//combine the rotations in x, y, z order
+		const glm::mat3 rotation = glm::mat3_cast(final);					//get the rotation matrix
 		_view = rotation * _view;									//apply the rotation
 		_up = rotation * _up;
 
@@ -120,18 +120,18 @@ public:
 	// orbits the camera around the focal point by the specified angles (in radians)
 	void orbit(const float theta_x, const float theta_y) {
 		//find the focal point
-		glm::vec3 focal_point = _position + _focus * _view;
+		const glm::vec3 focal_point = _position + _focus * _view;
 
 		//center the coordinate system on the focal point
 		glm::vec3 centered = _position - (focal_point - glm::vec3(0, 0, 0));
 
 		//create the x rotation (around the up vector)
-		glm::quat qx = glm::angleAxis(theta_x, _up);
+		const glm::quat qx = glm::angleAxis(theta_x, _up);
 		centered = glm::vec3(0, 0, 0) + glm::mat3_cast(qx)*(centered - glm::vec3(0, 0, 0));
 
 		//get a side vector for theta_y rotation
-		glm::vec3 side = glm::normalize(glm::cross(_up, glm::vec3(0, 0, 0) - centered));
-		glm::quat qy = glm::angleAxis(theta_y, side);
+		const glm::vec3 side = glm::normalize(glm::cross(_up, glm::vec3(0, 0, 0) - centered));
+		const glm::quat qy = glm::angleAxis(theta_y, side);
 		centered = glm::vec3(0, 0, 0) + glm::mat3_cast(qy)*(centered - glm::vec3(0, 0, 0));
 
 		//re-position the camera
