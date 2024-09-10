@@ -86,8 +86,7 @@ namespace tira {
 		/// <param name="start		">Next index after the last added</param>
 		/// <param name="currentProduct  ">Current product in the branch</param>
 		/// <param name="selected	">Depth of the current branch</param>
-		template<typename T>
-		void combinationProduct(const std::vector<T>& nums, int k, int index, T& sum, int start = 0, T currentProduct = 1, int selected = 0) {
+		void combinationProduct(const std::vector<double>& nums, int k, int index, double& sum, int start = 0, double currentProduct = 1, int selected = 0) {
 			if (selected == k) {			// leave if the length of product = k
 				sum += currentProduct;
 				return;
@@ -106,11 +105,10 @@ namespace tira {
 		/// <param name="nums	">Pointer to an N array  of offsets</param>
 		/// <param name="k	">Amount of elements in one product</param>
 		/// <param name="index	">Index of the excluded element</param>
-		template<typename T>
-		int sumOfProducts(const std::vector<T>& nums, int k, int index) {
+		long int sumOfProducts(const std::vector<double>& nums, int k, int index) {
 			if (k == 0)			// only 1 way to choose 0 elements
 				return 1;
-			T sum = 0;
+			double sum = 0;
 			combinationProduct(nums, k, index, sum);
 			return sum;
 		}
@@ -121,9 +119,8 @@ namespace tira {
 		/// <typeparam name="T"></typeparam>
 		/// <param name="nums	">Pointer to an N array  of offsets</param>
 		/// <param name="index	">Index of the processed element</param>
-		template<typename T>
-		int prodOfDifferences(const std::vector<T>& nums, unsigned int index) {
-			int prod = 1;
+		long int prodOfDifferences(const std::vector<double>& nums, unsigned int index) {
+			long int prod = 1;
 			for (int i = 0; i < nums.size(); i++) {
 				if (i != index) {
 					prod *= nums[i] - nums[index];
@@ -140,14 +137,19 @@ namespace tira {
 		/// <param name="coefs		">Pointer to the solution</param>
 		/// <param name="derivative	">The calculated derivative</param>
 		template<typename T>
-		void Ax_b_vandermonde(const std::vector<T>& nums, std::vector<T>& coefs, unsigned int derivative) {
+		void finite_difference_vandermonde(const std::vector<T>& samples, std::vector<T>& coefs, unsigned int derivative) {
+
+			std::vector<double> dbl_samples(samples.begin(), samples.end());
+			std::vector<double> dbl_coef(samples.size());
 			float sign = std::pow(-1.0f, derivative);
-			int fact = tgamma(derivative + 1);
-			for (int j = 0; j < nums.size(); j++) {
-				T sum = sumOfProducts(nums, nums.size() - derivative - 1, j);
-				T prod = prodOfDifferences(nums, j);
-				coefs[j] = sign * sum / prod * fact;
+			long int fact = tgamma(derivative + 1);							// this should only be a problem if the derivative is large
+			for (int j = 0; j < samples.size(); j++) {					// for each sample
+				double sum = sumOfProducts(dbl_samples, dbl_samples.size() - derivative - 1, j);
+				double prod = prodOfDifferences(dbl_samples, j);
+				dbl_coef[j] = sign * sum / prod * fact;
 			}
+
+			coefs = std::vector<T>(dbl_coef.begin(), dbl_coef.end());
 		}
 	}
 }
