@@ -102,7 +102,8 @@ namespace tira {
 		}
 
 		T& at(size_t x, size_t y, size_t c = 0) {
-			return field<T>::_data[idx_offset(x, y, c)];
+			size_t idx = idx_offset(x, y, c);
+			return field<T>::_data[idx];
 		}
 
 		/// <summary>

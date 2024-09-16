@@ -8,6 +8,7 @@
 
 #include <ostream>
 #include <sstream>
+#include <numbers>
 
 namespace tira{
 
