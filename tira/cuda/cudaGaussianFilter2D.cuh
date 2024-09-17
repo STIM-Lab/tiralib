@@ -62,7 +62,7 @@ __global__ void kernel_Convolve1DX(T* source, T* dest,
 /// <param name="out_height">height of the output image after the convolution</param>
 /// <returns></returns>
 template<typename T>
-T* GaussianFilter2D_cpu(T* source, unsigned int width, unsigned int height,
+T* GaussianFilter2D(T* source, unsigned int width, unsigned int height,
 	float sigma1, float sigma2,
 	unsigned int& out_width, unsigned int& out_height) {
 
@@ -73,9 +73,19 @@ T* GaussianFilter2D_cpu(T* source, unsigned int width, unsigned int height,
 
 	size_t bytes = sizeof(T) * width * height;							// calculate the number of bytes in the image
 
-	T* gpu_source;
-	HANDLE_ERROR(cudaMalloc(&gpu_source, bytes));								// allocate space on the GPU for the source image
-	HANDLE_ERROR(cudaMemcpy(gpu_source, source, bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+	T* gpu_source;														// create a pointer for the GPU source image
+
+	// determine if the source image is provided on the CPU or GPU
+	cudaPointerAttributes attribs;										// create a pointer attribute structure
+	HANDLE_ERROR(cudaPointerGetAttributes(&attribs, source));			// get the attributes for the source pointer
+
+	if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
+		gpu_source == source;											// set the gpu_source pointer to source
+	}
+	else {																// otherwise copy the source image to the GPU
+		HANDLE_ERROR(cudaMalloc(&gpu_source, bytes));								// allocate space on the GPU for the source image
+		HANDLE_ERROR(cudaMemcpy(gpu_source, source, bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+	}
 
 	///////////////Calculate Convolution Kernels
 	float* kernel_h = (float*)malloc(sizeof(float) * window_size_h);	// allocate space for the y kernel
@@ -130,13 +140,22 @@ T* GaussianFilter2D_cpu(T* source, unsigned int width, unsigned int height,
 	kernel_Convolve1DX << <gridDim, blockDim >> > (gpu_firstpass, gpu_out, width, out_width, out_height, gpu_kernel_w, window_size_w);
 
 	// allocate space for the output image on the CPU and copy the final result
-	T* out = (T*)malloc(out_bytes);
-	HANDLE_ERROR(cudaMemcpy(out, gpu_out, out_bytes, cudaMemcpyDeviceToHost));
+	T* out;
+	if (attribs.type == cudaMemoryTypeDevice) {				// if the source was on the device, return an output on the device
+		out = gpu_out;
+	}
+	else {													// otherwise copy the output to the host
+		out = (T*)malloc(out_bytes);
+		HANDLE_ERROR(cudaMemcpy(out, gpu_out, out_bytes, cudaMemcpyDeviceToHost));
+	}
 
 	// free everything
-	HANDLE_ERROR(cudaFree(gpu_source));
-	HANDLE_ERROR(cudaFree(gpu_firstpass));
-	HANDLE_ERROR(cudaFree(gpu_out));
+	if (attribs.type == cudaMemoryTypeHost) {				// if the source pointer was on the host, free the interim GPU versions
+		HANDLE_ERROR(cudaFree(gpu_source));
+		HANDLE_ERROR(cudaFree(gpu_out));
+	}
+	
+	HANDLE_ERROR(cudaFree(gpu_firstpass));	
 	HANDLE_ERROR(cudaFree(gpu_kernel_w));
 	HANDLE_ERROR(cudaFree(gpu_kernel_h));
 
