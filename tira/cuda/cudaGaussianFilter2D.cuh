@@ -1,34 +1,145 @@
+/*
+	This file contains code for applying a separable 2D Gaussian filter using CUDA. Both passes of the convolution
+	are performed on the GPU.
+	Limitations: This algorithm doesn't currently use shared memory, so it could theoretically be made faster
+	     for large images.
+*/
+
 #pragma once
+#include <tira/cuda/error.h>
+#include <tira/cuda/callable.h>
 
+CUDA_CALLABLE float normal(float x, float mean, float sigma) {
+	float c = 1.0f / std::sqrt(2.0f * 3.14159 * sigma * sigma);
+	float e = std::exp(-((x - mean) * (x - mean)) / (2.0f * sigma * sigma));
+	return c * e;
+}
+
+/// 1D convolution along the Y (slow) axis
 template<typename T>
-T* GaussianFilter2D_cpu(T* source, size_t width, size_t height,
-	float sigma1, float sigma2,
-	size_t& out_width, size_t& out_height) {
+__global__ void kernel_Convolve1DY(T* source, T* dest, 
+	unsigned int width, unsigned int out_height, 
+	float* kernel, unsigned int kernel_len) {
 
-	unsigned int window_size_w = (unsigned int)(sigma1 * 6 + 1);
+	unsigned int xi = blockIdx.x * blockDim.x + threadIdx.x;		// calculate the coordinates of the output
+	unsigned int yi = blockIdx.y * blockDim.y + threadIdx.y;
+	if (yi >= out_height || xi >= width) return;					// return if we are out of bounds of the output image
+
+	T sum = 0;														// initialize the running sum
+	for (unsigned int ki = 0; ki < kernel_len; ki++) {				// for each sample in the convolution kernel
+		sum = sum + kernel[ki] * source[(yi + ki) * width + xi];	// calculate the sample contribution
+	}
+	dest[yi * width + xi] = sum;									// assign the result to the output image
+}
+
+/// 1D convolution along the X (fast) axis
+template<typename T>
+__global__ void kernel_Convolve1DX(T* source, T* dest,
+	unsigned int width, unsigned int out_width, unsigned int out_height,
+	float* kernel, unsigned int kernel_len) {
+
+	unsigned int xi = blockIdx.x * blockDim.x + threadIdx.x;		// calculate the coordinates into the output image
+	unsigned int yi = blockIdx.y * blockDim.y + threadIdx.y;
+	if (yi >= out_height || xi >= out_width) return;				// return if out of bounds of the output image
+
+	T sum = 0;														// initialize the summation
+	for (unsigned int ki = 0; ki < kernel_len; ki++) {				// for each sample in the convolution kernel
+		sum = sum + kernel[ki] * source[yi * width + xi + ki];		// calculate the sample contribution
+	}
+	dest[yi * out_width + xi] = sum;								// assign the result to the output image
+}
+
+/// <summary>
+/// Convolve a 2D image by a separable Gaussian kernel
+/// </summary>
+/// <typeparam name="T">data type for the input</typeparam>
+/// <param name="source">GPU pointer to the source image array</param>
+/// <param name="width">width of the source image array</param>
+/// <param name="height">height of the source image array</param>
+/// <param name="sigma1">standard deviation of the kernel along the x dimension</param>
+/// <param name="sigma2">standard deviation of the kernel along the y dimension</param>
+/// <param name="out_width">width of the output image after the convolution</param>
+/// <param name="out_height">height of the output image after the convolution</param>
+/// <returns></returns>
+template<typename T>
+T* GaussianFilter2D_cpu(T* source, unsigned int width, unsigned int height,
+	float sigma1, float sigma2,
+	unsigned int& out_width, unsigned int& out_height) {
+
+	unsigned int window_size_w = (unsigned int)(sigma1 * 6 + 1);		// calculate the window sizes for each kernel
 	unsigned int window_size_h = (unsigned int)(sigma2 * 6 + 1);
-	out_width = width - window_size_w;
+	out_width = width - window_size_w;									// calculate the size of the output image
 	out_height = height - window_size_h;
 
-	size_t bytes = sizeof(T) * width * height;		// calculate the number of bytes in the image
+	size_t bytes = sizeof(T) * width * height;							// calculate the number of bytes in the image
 
 	T* gpu_source;
-	cudaMalloc(&gpu_source, bytes);					// allocate space on the GPU for the source image
-	cudaMemcpy(&gpu_source, source, bytes, cudaMemcpyHostToDevice);
+	HANDLE_ERROR(cudaMalloc(&gpu_source, bytes));								// allocate space on the GPU for the source image
+	HANDLE_ERROR(cudaMemcpy(gpu_source, source, bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
 
-	size_t bytes_firstpass = sizeof(T) * width * out_height;
-	T* gpu_firstpass;
-	cudaMalloc(&gpu_firstpass, bytes_firstpass);
-	cudaMemcpy(gpu_firstpass, &gpu_source, bytes_firstpass, cudaMemcpyDeviceToDevice);
+	///////////////Calculate Convolution Kernels
+	float* kernel_h = (float*)malloc(sizeof(float) * window_size_h);	// allocate space for the y kernel
+	int xh = -(int)(window_size_h / 2);									// calculate the starting coordinate for the kernel
+	for (int j = 0; j < window_size_h; j++) {							// for each pixel in the kernel
+		kernel_h[j] = normal(xh + j, 0, sigma2);						// calculate the Gaussian value
+	}
+	
+	// allocate space on the GPU for the y-axis kernel and copy it
+	float* gpu_kernel_h;
+	HANDLE_ERROR(cudaMalloc(&gpu_kernel_h, sizeof(float) * window_size_h));
+	HANDLE_ERROR(cudaMemcpy(gpu_kernel_h, kernel_h, sizeof(float) * window_size_h, cudaMemcpyHostToDevice));
 
+
+	float* kernel_w = (float*)malloc(sizeof(float) * window_size_w);	// allocate space for the x kernel
+	int xw = -(int)(window_size_w / 2);									// calculate the starting coordinate for the kernel
+	for (int i = 0; i < window_size_w; i++) {							// for each pixel in the kernel
+		kernel_w[i] = normal(xw + i, 0, sigma1);						// calculate the Gaussian value
+	}
+
+	// allocate space on the GPU for the x-axis kernel and copy it
+	float* gpu_kernel_w;
+	HANDLE_ERROR(cudaMalloc(&gpu_kernel_w, sizeof(float) * window_size_w));
+	HANDLE_ERROR(cudaMemcpy(gpu_kernel_w, kernel_w, sizeof(float) * window_size_w, cudaMemcpyHostToDevice));
+	///////////////End Calculate Convolution Kernels
+
+	// This is a separable convolution and will be done in two passes
+	size_t bytes_firstpass = sizeof(T) * width * out_height;			// calculate the number of bytes in the first pass output
+	T* gpu_firstpass;													// allocate space on the GPU for the first pass
+	HANDLE_ERROR(cudaMalloc(&gpu_firstpass, bytes_firstpass));
+
+	// get the active device properties to calculate the optimal the block size
+	int device;															
+	HANDLE_ERROR(cudaGetDevice(&device));
+	cudaDeviceProp props;
+	HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
+	unsigned int max_threads = props.maxThreadsPerBlock;
+	dim3 blockDim = { (unsigned int)std::sqrt(max_threads), (unsigned int)std::sqrt(max_threads) };
+
+
+	dim3 gridDim = { width / blockDim.x + 1, out_height / blockDim.y + 1 };	// calculate the grid size for the first pass
+	// Run the kernel to calculate the first pass of the separable filter. The kernel takes the original source
+	// image and outputs an image that is smaller along the y axis.
+	kernel_Convolve1DY << <gridDim, blockDim >> > (gpu_source, gpu_firstpass, width, out_height, gpu_kernel_h, window_size_h);
+	
+	T* gpu_out;												// calculate the size of the final output image
 	size_t out_bytes = sizeof(T) * out_width * out_height;
-	T* gpu_out;
-	cudaMalloc(&gpu_out, out_bytes);
-	cudaMemcpy(gpu_out, gpu_firstpass, out_bytes, cudaMemcpyDeviceToDevice);
+	HANDLE_ERROR(cudaMalloc(&gpu_out, out_bytes));			// allocate space on the GPU for the final output
+	gridDim.x = out_width / blockDim.x + 1;					// re-calculate the grid dimension to match the final pass output
+	// Run the kernel to calculate the second pass of the separable Gaussian filter. The kernel takes the first pass
+	// as input and produces the final output image on the GPU
+	kernel_Convolve1DX << <gridDim, blockDim >> > (gpu_firstpass, gpu_out, width, out_width, out_height, gpu_kernel_w, window_size_w);
 
+	// allocate space for the output image on the CPU and copy the final result
 	T* out = (T*)malloc(out_bytes);
-	cudaMemcpy(out, gpu_out, out_bytes, cudaMemcpyDeviceToHost);
+	HANDLE_ERROR(cudaMemcpy(out, gpu_out, out_bytes, cudaMemcpyDeviceToHost));
 
-	return source;
+	// free everything
+	HANDLE_ERROR(cudaFree(gpu_source));
+	HANDLE_ERROR(cudaFree(gpu_firstpass));
+	HANDLE_ERROR(cudaFree(gpu_out));
+	HANDLE_ERROR(cudaFree(gpu_kernel_w));
+	HANDLE_ERROR(cudaFree(gpu_kernel_h));
+
+	return out;
 
 }
