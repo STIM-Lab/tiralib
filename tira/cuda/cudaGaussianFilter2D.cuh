@@ -80,7 +80,7 @@ T* GaussianFilter2D(T* source, unsigned int width, unsigned int height,
 	HANDLE_ERROR(cudaPointerGetAttributes(&attribs, source));			// get the attributes for the source pointer
 
 	if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
-		gpu_source == source;											// set the gpu_source pointer to source
+		gpu_source = source;											// set the gpu_source pointer to source
 	}
 	else {																// otherwise copy the source image to the GPU
 		HANDLE_ERROR(cudaMalloc(&gpu_source, bytes));								// allocate space on the GPU for the source image
