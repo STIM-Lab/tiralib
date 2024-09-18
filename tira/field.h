@@ -19,7 +19,7 @@ namespace tira {
 		/// <summary>
 		/// Allocate data in the _data vector based on the values in _shape
 		/// </summary>
-		void allocate() {
+		void _allocate() {
 			if (_shape.size() == 0) _data.resize(0);
 			size_t s = _shape[0];
 			for (size_t di = 1; di < _shape.size(); di++)
@@ -27,12 +27,21 @@ namespace tira {
 			_data.resize(s);
 		}
 
-		void setShape(std::vector<size_t> S) {
+		void _setShape(std::vector<size_t> S) {
 			_shape = S;
-			allocate();
+			_allocate();
 		}
 
-		size_t idx_offset(size_t d, size_t i) const {				// base function calculates the index offset for the last dimension (called by recursive version)
+		// test to see if two shape vectors are compatible (same values and same dimensions)
+		bool _sameshape(std::vector<size_t> S) {
+			if (_shape.size() != S.size()) return false;
+			for (size_t i = 0; i < _shape.size(); i++) {
+				if (_shape[i] != S[i]) return false;
+			}
+			return true;
+		}
+
+		size_t _idx_offset(size_t d, size_t i) const {				// base function calculates the index offset for the last dimension (called by recursive version)
 			size_t off = i;
 			for (size_t di = d + 1; di < _shape.size(); di++) {
 				off *= _shape[di];
@@ -46,7 +55,7 @@ namespace tira {
 		/// <param name="derivative"></param>
 		/// <param name="order"></param>
 		/// <returns></returns>
-		std::vector< std::vector<double> > finite_difference_coefficients(unsigned int derivative, unsigned int order) {
+		std::vector< std::vector<double> > _finite_difference_coefficients(unsigned int derivative, unsigned int order) {
 
 			unsigned int N = order + derivative;		// calculate the number of samples required to achieve the desired order
 
@@ -77,7 +86,7 @@ namespace tira {
 			return Coefficients;
 		}
 
-		std::vector<double> central_finite_difference_coefficients(unsigned int derivative, unsigned int order) {
+		std::vector<double> _central_finite_difference_coefficients(unsigned int derivative, unsigned int order) {
 			if( (derivative + order) % 2 == 0) order += 1;
 
 			unsigned int N = order + derivative;		// calculate the number of samples required to achieve the desired order
@@ -107,7 +116,7 @@ namespace tira {
 			return Coefficients;
 		}
 
-		void printCoefficients(std::vector<double> Coefficients) {
+		void _printCoefficients(std::vector<double> Coefficients) {
 
 			for (unsigned int i = 0; i < Coefficients.size(); i++) {
 				std::cout << Coefficients[i] << " ";
@@ -115,9 +124,9 @@ namespace tira {
 			std::cout << std::endl;
 		}
 
-		void printCoefficients(std::vector< std::vector<double> > C) {
+		void _printCoefficients(std::vector< std::vector<double> > C) {
 			for (unsigned int i = 0; i < C.size(); i++) {
-				printCoefficients(C[i]);
+				_printCoefficients(C[i]);
 			}
 		}
 
@@ -128,11 +137,11 @@ namespace tira {
 		/// <param name="d">Derivative (ex. 2 for second derivative)</param>
 		/// <param name="order">Order of accuracy (requires order+d sample points)</param>
 		/// <returns>Pointer to the derivative data in an array that is the same format as the current field</returns>
-		T* derivative_ptr(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
+		T* _derivative_ptr(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
 
 			if (axis >= _shape.size()) throw "ERROR: axis out of range of field";
-			std::vector< std::vector<double> > C = finite_difference_coefficients(d, order);		// calculate the list of finite difference coefficients
-			if(print_coefs) printCoefficients(C);
+			std::vector< std::vector<double> > C = _finite_difference_coefficients(d, order);		// calculate the list of finite difference coefficients
+			if(print_coefs) _printCoefficients(C);
 
 			T* derivative = new T[_data.size()];												// allocate a dynamic array for the derivative data
 
@@ -264,12 +273,12 @@ namespace tira {
 
 		field(std::vector<size_t> shape) {
 			_shape = shape;
-			allocate();
+			_allocate();
 		}
 
 		field(std::vector<size_t> shape, T* ptr) {
-			setShape(shape);													// set the new shape of the field		
-			allocate();																// allocate space for the field
+			_setShape(shape);													// set the new shape of the field
+			_allocate();																// allocate space for the field
 			memcpy(&_data[0], ptr, bytes());										// copy the data from the							
 		}
 
@@ -364,12 +373,12 @@ namespace tira {
 
 			if (fortran_order) {													// if the numpy array uses fortran ordering, than the indices are flipped
 				std::reverse(new_shape.begin(), new_shape.end());
-				setShape(new_shape);
+				_setShape(new_shape);
 			}
 			else {
-				setShape(new_shape);													// set the new shape of the field
+				_setShape(new_shape);													// set the new shape of the field
 			}
-			allocate();																	// allocate space for the field
+			_allocate();																	// allocate space for the field
 
 			memcpy(&_data[0], &data[0], bytes());									// copy the data from the
 
@@ -436,12 +445,24 @@ namespace tira {
 			return result;
 		}
 
+		// Binary subtraction (subtract one field from another)
 		field<T> operator-(field<T> rhs) {
+			if(!_sameshape(rhs._shape))
+				throw std::runtime_error("Cannot subtract fields of different shapes");
+
 			field<T> result(_shape);
 			size_t N = field<T>::size();
 			for(size_t ni = 0; ni < N; ni++) {
 				result._data[ni] = _data[ni] - rhs._data[ni];
 			}
+			return result;
+		}
+
+		// Unary negation operator (multiply the field by -1)
+		field<T> operator-() {
+			field<T> result(_shape);
+			for(size_t i = 0; i < _data.size(); i++)
+				result._data[i] = -_data[i];
 			return result;
 		}
 
@@ -635,7 +656,7 @@ namespace tira {
 
 
 		void resize(std::vector<size_t> new_size) {
-			setShape(new_size);
+			_setShape(new_size);
 		}
 
 
@@ -653,7 +674,7 @@ namespace tira {
 
 		field<T> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
 
-			T* ptr = derivative_ptr(axis, d, order, print_coefs);
+			T* ptr = _derivative_ptr(axis, d, order, print_coefs);
 
 			field<T> result(_shape, ptr);
 
@@ -664,8 +685,8 @@ namespace tira {
 		field<T> central_derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
 
 
-			std::vector<double> C = central_finite_difference_coefficients(d, order);
-			if(print_coefs) printCoefficients(C);
+			std::vector<double> C = _central_finite_difference_coefficients(d, order);
+			if(print_coefs) _printCoefficients(C);
 
 			std::vector<size_t> kernel_shape(_shape.size(), 1);
 			kernel_shape[axis] = C.size();
