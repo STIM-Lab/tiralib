@@ -21,8 +21,9 @@ namespace tira {
             float disc = sqrt((4 * e * f) + pow(d - g, 2));
             float a = (dpg + disc) / 2.0f;
             float b = (dpg - disc) / 2.0f;
-            eval0 = a < b ? a : b;
-            eval1 = a > b ? a : b;
+
+            eval0 = std::abs(a) < std::abs(b) ? a : b;
+            eval1 = std::abs(a) > std::abs(b) ? a : b;
         }
 
         template<typename T>

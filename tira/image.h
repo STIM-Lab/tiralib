@@ -370,6 +370,14 @@ namespace tira {
 			return r;												//return the summed result
 		}
 
+		image<T> operator/(T rhs) {
+			size_t N = field<T>::size();							//calculate the total number of values in the image
+			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] / rhs;				//add the individual pixels
+			return r;												//return the summed result
+		}
+
 		image<T> operator*(image<T> rhs) {							// point-wise multiplication
 			if(X()!=rhs.X() || Y()!=rhs.Y())
 				throw std::runtime_error("Images dimensions are incompatible");
@@ -443,6 +451,11 @@ namespace tira {
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] + rhs._data[n];		//add the individual pixels
 			return r;												//return the inverted image
+		}
+
+		image<T> abs() {
+			image<T> result = field<T>::abs();
+			return result;
 		}
 
 		T& operator()(size_t x, size_t y, size_t c = 0) {
