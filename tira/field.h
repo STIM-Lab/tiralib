@@ -643,6 +643,62 @@ namespace tira {
 
 		}
 
+		/// <summary>
+		/// Pads the field with a constant value
+		/// </summary>
+		/// <param name="dist	">Vector of paddings in each direction</param>
+		/// <param name="val	">The value for the padded values</param>
+		field<T> border(vector<size_t> &dist, T val=0) {
+			std::vector<size_t> new_shape = _shape;
+			D = _shape.size();
+
+			for (size_t si = 0; si < D; si++) {
+				new_shape[si] += 2 * dist[si];				// calculate new shape 
+			}
+
+			field<T> result(new_shape, val);				// initialize result field with val as outer values
+
+			std::vector<size_t> new_coord(D);
+			for (size_t ui = 0; ui < D; ui++) {
+				coord(ui, new_coord);						// find new coordinates
+				for (int si = 0; si < D; si++) {
+					new_coord[si] += dist[si];
+				}
+				size_t new_index = result.idx(new_coord);	//find new index
+				result._data[new_index] = _data[ui];		// replace the values from the initial field
+			}
+			return result
+		}
+
+		field<T> border(size_t dist, T val = 0) {
+			vector<size_t> dist_vect = { dist, dist };
+			return border(disc_vect, val);
+		}
+
+		field<T> border_replicate(std::vector<size_t> dist) {
+			field<T> result = border(dist);						// initialize result field as a padded field with default valeus as 0
+			std::vector<size_t> new_shape = result.shape();
+			size_t D = new_shape.size();
+			size_t total_size = result.size();
+			for (size_t index = 0; index < total_size; index++) {	// for each element in result
+				std::vector<size_t> coord_i(D);
+				result.coord(idx, coord_i);										// find its coordinates in result
+				for (size_t di = 0; di < D; di++) {
+					coord_i[di] = std::max(dist[di], coord_i[di]);				// bound by the shape of the field
+					coord_i[di] -= dist[di];									// transfer each coordinate to initial field
+					coord_i[di] = std::min(_shape[di], coord_i[di]);			
+				}
+				result._data[idx] = _data[idx(coord_i)];						// TODO: add if stetement for the center, as its O(n^2) instead of O(n^2)
+			}
+			return result;
+		}
+
+		field<T> border_replicate(size_t dist) {
+			std::vector<size_t> dist_vect(_shape.size(), dist);
+			return border_replicate(dist_vect);
+		}
+
+
 		field<T> crop(std::vector<size_t> min_coord, std::vector<size_t> max_coord) const {
 
 			size_t D = _shape.size();												// get the number of dimensions
