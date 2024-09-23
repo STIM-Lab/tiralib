@@ -648,9 +648,9 @@ namespace tira {
 		/// </summary>
 		/// <param name="dist	">Vector of paddings in each direction</param>
 		/// <param name="val	">The value for the padded values</param>
-		field<T> border(vector<size_t> &dist, T val=0) {
+		field<T> border(std::vector<size_t> &dist, T val=0) {
 			std::vector<size_t> new_shape = _shape;
-			D = _shape.size();
+			size_t D = _shape.size();
 
 			for (size_t si = 0; si < D; si++) {
 				new_shape[si] += 2 * dist[si];				// calculate new shape 
@@ -667,12 +667,12 @@ namespace tira {
 				size_t new_index = result.idx(new_coord);	//find new index
 				result._data[new_index] = _data[ui];		// replace the values from the initial field
 			}
-			return result
+			return result;
 		}
 
 		field<T> border(size_t dist, T val = 0) {
-			vector<size_t> dist_vect = { dist, dist };
-			return border(disc_vect, val);
+			std::vector<size_t> dist_vect = { dist, dist };
+			return border(dist_vect, val);
 		}
 
 		field<T> border_replicate(std::vector<size_t> dist) {
