@@ -670,25 +670,37 @@ namespace tira {
 			return result;
 		}
 
+		/// <summary>
+		/// Pads the field with a constant value
+		/// </summary>
+		/// <param name="dist	">Padding length</param>
+		/// <param name="val	">The value for the padded values</param>
 		field<T> border(size_t dist, T val = 0) {
 			std::vector<size_t> dist_vect = { dist, dist };
 			return border(dist_vect, val);
 		}
 
 		field<T> border_replicate(std::vector<size_t> dist) {
-			field<T> result = border(dist);						// initialize result field as a padded field with default valeus as 0
-			std::vector<size_t> new_shape = result.shape();
-			size_t D = new_shape.size();
+			std::vector<size_t> new_shape = _shape;
+			size_t D = _shape.size();
+			std::vector<size_t> coord_i(D);					// initialize memory for the coordinates in the cycle
+
+			for (size_t si = 0; si < D; si++) {
+				new_shape[si] += 2 * dist[si];				// calculate new shape 
+			}
+
+			field<T> result(new_shape);						// initialize result field 
+
 			size_t total_size = result.size();
-			for (size_t index = 0; index < total_size; index++) {	// for each element in result
-				std::vector<size_t> coord_i(D);
-				result.coord(idx, coord_i);										// find its coordinates in result
+			for (size_t index = 0; index < total_size; index++) {				// for each element in resulting field
+				
+				result.coord(index, coord_i);									// convert index to coordinates
 				for (size_t di = 0; di < D; di++) {
-					coord_i[di] = std::max(dist[di], coord_i[di]);				// bound by the shape of the field
-					coord_i[di] -= dist[di];									// transfer each coordinate to initial field
-					coord_i[di] = std::min(_shape[di], coord_i[di]);			
+					coord_i[di] = std::max(dist[di], coord_i[di]);				// bound in range [dist[di]; +]
+					coord_i[di] -= dist[di];									// move the range to [0; +]
+					coord_i[di] = std::min(_shape[di], coord_i[di]);			// bound in range [0; n] 
 				}
-				result._data[idx] = _data[idx(coord_i)];						// TODO: add if stetement for the center, as its O(n^2) instead of O(n^2)
+				result._data[index] = _data[idx(coord_i)];						
 			}
 			return result;
 		}
@@ -756,8 +768,7 @@ namespace tira {
 			return result;
 		}
 
-		field<T> central_derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
-
+		field<T> central_derivative(unsigned int axis, unsigned int d, unsigned int order, bool pad = true, bool print_coefs = false) {
 
 			std::vector<double> C = _central_finite_difference_coefficients(d, order);
 			if(print_coefs) _printCoefficients(C);
@@ -770,15 +781,18 @@ namespace tira {
 				kernel(ci) = C[ci];
 			}
 
-			tira::field<T> D = convolve(kernel);
-
-			std::vector<size_t> min_coord(_shape.size(), 0);
-			min_coord[axis] = kernel_shape[axis] / 2;
-
-			std::vector<size_t> max_coord = _shape;
-			max_coord[axis] = _shape[axis] - kernel_shape[axis] / 2;
-			tira::field<T> cropped = D.crop(min_coord, max_coord);
-			return cropped;
+			tira::field<T> D;
+			if (pad) {
+				std::vector<size_t> dist = kernel_shape;
+				for (int si = 0; si < dist.size(); si++) {
+					dist[si] /= 2;							// divide the shape of kernel by 2 to get the needed padding
+				}
+				D = border_replicate(dist).convolve(kernel);
+			}
+			else {
+				D = convolve(kernel);
+			}
+			return D;
 		}
 
 		
