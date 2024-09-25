@@ -696,9 +696,9 @@ namespace tira {
 				
 				result.coord(index, coord_i);									// convert index to coordinates
 				for (size_t di = 0; di < D; di++) {
-					coord_i[di] = std::max(dist[di], coord_i[di]);				// bound in range [dist[di]; +]
-					coord_i[di] -= dist[di];									// move the range to [0; +]
-					coord_i[di] = std::min(_shape[di], coord_i[di]);			// bound in range [0; n] 
+					coord_i[di] = std::max(dist[di], coord_i[di]);				// bound in range [dist; n + 2 * dist)
+					coord_i[di] -= dist[di];									// move the range to [0; n + dist)
+					coord_i[di] = std::min(_shape[di] - 1, coord_i[di]);		// bound in range [0; n)
 				}
 				result._data[index] = _data[idx(coord_i)];						
 			}
