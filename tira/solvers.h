@@ -90,7 +90,8 @@ namespace tira {
 		/// <param name="start		">Next index after the last added</param>
 		/// <param name="currentProduct  ">Current product in the branch</param>
 		/// <param name="selected	">Depth of the current branch</param>
-		void combinationProduct(const std::vector<double>& nums, int k, int index, double& sum, int start = 0, double currentProduct = 1, int selected = 0) {
+		template<typename T>
+		void combinationProduct(const std::vector<T>& nums, int k, int index, double& sum, int start = 0, double currentProduct = 1, int selected = 0) {
 			if (selected == k) {			// leave if the length of product = k
 				sum += currentProduct;
 				return;
@@ -109,7 +110,8 @@ namespace tira {
 		/// <param name="nums	">Pointer to an N array  of offsets</param>
 		/// <param name="k	">Amount of elements in one product</param>
 		/// <param name="index	">Index of the excluded element</param>
-		long int sumOfProducts(const std::vector<double>& nums, int k, int index) {
+		template<typename T>
+		long int sumOfProducts(const std::vector<T>& nums, int k, int index) {
 			if (k == 0)			// only 1 way to choose 0 elements
 				return 1;
 			double sum = 0;
@@ -123,7 +125,8 @@ namespace tira {
 		/// <typeparam name="T"></typeparam>
 		/// <param name="nums	">Pointer to an N array  of offsets</param>
 		/// <param name="index	">Index of the processed element</param>
-		long int prodOfDifferences(const std::vector<double>& nums, unsigned int index) {
+		template<typename T>
+		long int prodOfDifferences(const std::vector<T>& nums, unsigned int index) {
 			long int prod = 1;
 			for (int i = 0; i < nums.size(); i++) {
 				if (i != index) {
