@@ -643,6 +643,84 @@ namespace tira {
 
 		}
 
+		/// <summary>
+		/// Pads the field with a constant value
+		/// </summary>
+		/// <param name="dist	">Vector of paddings in each direction</param>
+		/// <param name="val	">The value for the padded values</param>
+		field<T> border(std::vector<size_t> &dist, T val=0) {
+			std::vector<size_t> new_shape = _shape;
+			size_t D = _shape.size();
+
+			for (size_t si = 0; si < D; si++) {
+				new_shape[si] += 2 * dist[si];				// calculate new shape 
+			}
+
+			field<T> result(new_shape, val);				// initialize result field with val as outer values
+
+			std::vector<size_t> new_coord(D);
+			for (size_t ui = 0; ui < D; ui++) {
+				coord(ui, new_coord);						// find new coordinates
+				for (int si = 0; si < D; si++) {
+					new_coord[si] += dist[si];
+				}
+				size_t new_index = result.idx(new_coord);	//find new index
+				result._data[new_index] = _data[ui];		// replace the values from the initial field
+			}
+			return result;
+		}
+
+		/// <summary>
+		/// Pads the field with a constant value
+		/// </summary>
+		/// <param name="dist	">Padding length</param>
+		/// <param name="val	">The value for the padded values</param>
+		field<T> border(size_t dist, T val = 0) {
+			std::vector<size_t> dist_vect = { dist, dist };
+			return border(dist_vect, val);
+		}
+
+		/// <summary>
+		/// Generates a border around the field by replicating edge values
+		/// </summary>
+		/// <param name="dist">A vector of padding distances in each axis direction</param>
+		/// <returns></returns>
+		field<T> border_replicate(std::vector<size_t> dist) {
+			std::vector<size_t> new_shape = _shape;
+			size_t D = _shape.size();
+			std::vector<size_t> coord_i(D);					// initialize memory for the coordinates in the cycle
+
+			for (size_t si = 0; si < D; si++) {
+				new_shape[si] += 2 * dist[si];				// calculate new shape 
+			}
+
+			field<T> result(new_shape);						// initialize result field 
+
+			size_t total_size = result.size();
+			for (size_t index = 0; index < total_size; index++) {				// for each element in resulting field
+				
+				result.coord(index, coord_i);									// convert index to coordinates
+				for (size_t di = 0; di < D; di++) {
+					coord_i[di] = std::max(dist[di], coord_i[di]);				// bound in range [dist; n + 2 * dist)
+					coord_i[di] -= dist[di];									// move the range to [0; n + dist)
+					coord_i[di] = std::min(_shape[di] - 1, coord_i[di]);		// bound in range [0; n)
+				}	
+				result._data[index] = _data[idx(coord_i)];						
+			}
+			return result;
+		}
+
+		/// <summary>
+		/// Generates a border around the field with constant padding distance by replicating edge values
+		/// </summary>
+		/// <param name="dist">Length of padding</param>
+		/// <returns></returns>
+		field<T> border_replicate(size_t dist) {
+			std::vector<size_t> dist_vect(_shape.size(), dist);
+			return border_replicate(dist_vect);
+		}
+
+
 		field<T> crop(std::vector<size_t> min_coord, std::vector<size_t> max_coord) const {
 
 			size_t D = _shape.size();												// get the number of dimensions
@@ -700,8 +778,7 @@ namespace tira {
 			return result;
 		}
 
-		field<T> central_derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
-
+		field<T> central_derivative(unsigned int axis, unsigned int d, unsigned int order, bool pad = true, bool print_coefs = false) {
 
 			std::vector<double> C = _central_finite_difference_coefficients(d, order);
 			if(print_coefs) _printCoefficients(C);
@@ -714,15 +791,18 @@ namespace tira {
 				kernel(ci) = C[ci];
 			}
 
-			tira::field<T> D = convolve(kernel);
-
-			std::vector<size_t> min_coord(_shape.size(), 0);
-			min_coord[axis] = kernel_shape[axis] / 2;
-
-			std::vector<size_t> max_coord = _shape;
-			max_coord[axis] = _shape[axis] - kernel_shape[axis] / 2;
-			tira::field<T> cropped = D.crop(min_coord, max_coord);
-			return cropped;
+			tira::field<T> D;
+			if (pad) {
+				std::vector<size_t> dist = kernel_shape;
+				for (int si = 0; si < dist.size(); si++) {
+					dist[si] /= 2;							// divide the shape of kernel by 2 to get the needed padding
+				}
+				D = border_replicate(dist).convolve(kernel);
+			}
+			else {
+				D = convolve(kernel);
+			}
+			return D;
 		}
 
 		
