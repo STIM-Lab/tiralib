@@ -111,10 +111,10 @@ namespace tira {
 		/// <param name="k	">Amount of elements in one product</param>
 		/// <param name="index	">Index of the excluded element</param>
 		template<typename T>
-		long int sumOfProducts(const std::vector<T>& nums, int k, int index) {
+		T sumOfProducts(const std::vector<T>& nums, int k, int index) {
 			if (k == 0)			// only 1 way to choose 0 elements
 				return 1;
-			double sum = 0;
+			T sum = 0;
 			combinationProduct(nums, k, index, sum);
 			return sum;
 		}
@@ -126,8 +126,8 @@ namespace tira {
 		/// <param name="nums	">Pointer to an N array  of offsets</param>
 		/// <param name="index	">Index of the processed element</param>
 		template<typename T>
-		long int prodOfDifferences(const std::vector<T>& nums, unsigned int index) {
-			long int prod = 1;
+		T prodOfDifferences(const std::vector<T>& nums, unsigned int index) {
+			T prod = 1;
 			for (int i = 0; i < nums.size(); i++) {
 				if (i != index) {
 					prod *= nums[i] - nums[index];
@@ -146,14 +146,26 @@ namespace tira {
 		template<typename T>
 		void finite_difference_vandermonde(const std::vector<T>& samples, std::vector<T>& coefs, unsigned int derivative) {
 
+			// convert both the samples and coefficients to double vectors
 			std::vector<double> dbl_samples(samples.begin(), samples.end());
 			std::vector<double> dbl_coef(samples.size());
-			float sign = std::pow(-1.0f, derivative);
-			long int fact = tgamma(derivative + 1);							// this should only be a problem if the derivative is large
+
+
+			double sign = std::pow(-1.0, derivative);
+			long int fact = tgamma(derivative + 1);						// this should only be a problem if the derivative is large
 			for (int j = 0; j < samples.size(); j++) {					// for each sample
 				double sum = sumOfProducts(dbl_samples, dbl_samples.size() - derivative - 1, j);
-				double prod = prodOfDifferences(dbl_samples, j);
+				double prod = prodOfDifferences<double>(dbl_samples, j);
+
+
 				dbl_coef[j] = sign * sum / prod * fact;
+
+				//std::cout<<"sample: "<<dbl_samples[j]<<std::endl;
+				//std::cout<<"sum of products: "<<sum<<std::endl;
+				//std::cout<<"product of differences:"<<prod<<std::endl;
+				//std::cout<<"factorial: "<<fact<<std::endl;
+				//std::cout<<"coefficient: "<<dbl_coef[j]<<std::endl;
+				//std::cout<<std::endl<<std::endl;
 			}
 
 			coefs = std::vector<T>(dbl_coef.begin(), dbl_coef.end());
