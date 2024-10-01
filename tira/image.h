@@ -414,7 +414,44 @@ namespace tira {
 			else {
 				throw std::runtime_error("Number of color channels are incompatible");
 			}
+		}
 
+		image<T> operator/(image<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			if (C() == rhs.C()) {					// if both images have the same number of color channels
+				tira::image<T> result(X(), Y(), C());
+				for (size_t i = 0; i < field<T>::size(); i++) {
+					result._data[i] = field<T>::_data[i] / rhs._data[i];
+				}
+				return result;
+			}
+			else if (C() == 1) {
+				tira::image<T> result(X(), Y(), rhs.C());
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < rhs.C(); ci++) {
+							result(xi, yi, ci) = at(xi, yi) / rhs(xi, yi, ci);
+						}
+					}
+				}
+				return result;
+			}
+			else if (rhs.C() == 1) {
+				tira::image<T> result(X(), Y(), C());
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, ci) = at(xi, yi, ci) / rhs(xi, yi);
+						}
+					}
+				}
+				return result;
+			}
+			else {
+				throw std::runtime_error("Number of color channels are incompatible");
+			}
 		}
 
 		image<T> operator-(T rhs) {

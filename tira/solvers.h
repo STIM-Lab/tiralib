@@ -1,4 +1,8 @@
+#pragma once
+
 // Eigen is used to solve the linear system required to calculate derivatives at any specified order
+
+
 #include <iostream>
 
 namespace tira {

@@ -83,7 +83,7 @@ namespace tira {
 
         // small then large
         template<typename T>
-        CUDA_CALLABLE void evec2D(T* matrix, T* lambdas, T& theta0, T& theta1) {
+        CUDA_CALLABLE void evec2Dpolar(T* matrix, T* lambdas, T& theta0, T& theta1) {
             //[a  b]
             //[c  d]
 
@@ -91,9 +91,6 @@ namespace tira {
             float c = matrix[1];
             float b = matrix[2];
             float d = matrix[3];
-
-            float v[2];
-            float len;
 
             if (c != 0) {
                 theta0 = std::atan2(c, lambdas[0] - d);
@@ -104,20 +101,20 @@ namespace tira {
                 theta1 = std::atan2(lambdas[1] - a, b);
             }
             else {
-                theta0 = std::atan2(0, 1);
-                theta1 = std::atan2(1, 0);
+                theta0 = std::atan2(0.0f, 1.0f);
+                theta1 = std::atan2(1.0f, 0.0f);
             }
         }
 
         template<typename T>
-        __global__ void kernel_evec2D(T* mats, T* evals, size_t n, T* evecs) {
+        __global__ void kernel_evec2Dpolar(T* mats, T* evals, size_t n, T* evecs) {
             unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
             if (i >= n) return;
-            evec2D(&mats[i * 4], &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
+            evec2Dpolar(&mats[i * 4], &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
         }
 
         template<typename T>
-        T* Eigenvectors2D(T* mats, T* evals, size_t n) {
+        T* Eigenvectors2DPolar(T* mats, T* evals, size_t n) {
 
             T* gpu_mats;
             T* gpu_evals;
@@ -150,7 +147,7 @@ namespace tira {
 
             T* gpu_evecs;
             HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
-            kernel_evec2D << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
+            kernel_evec2Dpolar << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
 
             T* evecs;
             if (attribs.type == cudaMemoryTypeDevice) {
