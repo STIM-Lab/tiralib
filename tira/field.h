@@ -680,6 +680,11 @@ namespace tira {
 			return border(dist_vect, val);
 		}
 
+		/// <summary>
+		/// Generates a border around the field by replicating edge values
+		/// </summary>
+		/// <param name="dist">A vector of padding distances in each axis direction</param>
+		/// <returns></returns>
 		field<T> border_replicate(std::vector<size_t> dist) {
 			std::vector<size_t> new_shape = _shape;
 			size_t D = _shape.size();
@@ -699,12 +704,17 @@ namespace tira {
 					coord_i[di] = std::max(dist[di], coord_i[di]);				// bound in range [dist; n + 2 * dist)
 					coord_i[di] -= dist[di];									// move the range to [0; n + dist)
 					coord_i[di] = std::min(_shape[di] - 1, coord_i[di]);		// bound in range [0; n)
-				}
+				}	
 				result._data[index] = _data[idx(coord_i)];						
 			}
 			return result;
 		}
 
+		/// <summary>
+		/// Generates a border around the field with constant padding distance by replicating edge values
+		/// </summary>
+		/// <param name="dist">Length of padding</param>
+		/// <returns></returns>
 		field<T> border_replicate(size_t dist) {
 			std::vector<size_t> dist_vect(_shape.size(), dist);
 			return border_replicate(dist_vect);
