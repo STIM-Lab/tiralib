@@ -1,5 +1,6 @@
 #pragma once
 
+#define cimg_use_png
 #include "extern/CImg.h"
 #undef min
 
