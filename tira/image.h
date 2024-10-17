@@ -832,6 +832,35 @@ namespace tira {
 			return result;
 		}
 
+		T normal(T x, T sigma) {
+			return std::exp(-(x*x)/(2*sigma*sigma)) / std::sqrt(2.0 * M_PI * sigma * sigma);
+		}
+
+		image<T> gaussian_filter(T sigma, T sigma2=-1) {
+			if(sigma2 < 0) sigma2 = sigma;
+
+			int w_sigma = ceil(6 * sigma + 1);					// calculate the window sizes for each blur kernel
+			int w_sigma2 = ceil(6 * sigma2 + 1);
+
+			image<T> blur(w_sigma, 1);							// create the images representing the blur kernels
+			image<T> blur2(1, w_sigma2);
+
+			for(int wi=0; wi < w_sigma; wi++) {				// fill each kernel with the appropriate normalize Gaussian values
+				T x = -w_sigma / 2 + wi;
+				blur(wi, 0) = normal(x, sigma);
+			}
+
+			for(int wi=0; wi < w_sigma2; wi++) {
+				T x = -w_sigma2 / 2 + wi;
+				blur2(wi, 0) = normal(x, sigma2);
+			}
+
+			image<T> result = convolve2(blur);
+			result = result.convolve2(blur2);
+
+			return result;		}
+
+
 		/// <summary>
 		/// Copies the non-interleaved image data to the specified pointer
 		/// </summary>

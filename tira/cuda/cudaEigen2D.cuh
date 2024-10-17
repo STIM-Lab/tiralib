@@ -96,13 +96,9 @@ namespace tira {
                 theta0 = std::atan2(c, lambdas[0] - d);
                 theta1 = std::atan2(c, lambdas[1] - d);
             }
-            else if (b != 0) {
+            else {
                 theta0 = std::atan2(lambdas[0] - a, b);
                 theta1 = std::atan2(lambdas[1] - a, b);
-            }
-            else {
-                theta0 = std::atan2(0.0f, 1.0f);
-                theta1 = std::atan2(1.0f, 0.0f);
             }
         }
 
