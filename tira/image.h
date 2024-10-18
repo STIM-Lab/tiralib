@@ -77,6 +77,19 @@ namespace tira {
 
 	protected:
 
+		void init(std::vector<size_t> image_shape) {
+			if (field<T>::_shape.size() != 0) {													// if this image has already been allocated
+				field<T>::_shape.clear();														// clear the shape and data vectors to start from scratch
+				field<T>::_data.clear();
+			}
+			field<T>::_shape.push_back(image_shape[1]);
+			field<T>::_shape.push_back(image_shape[0]);
+			if (image_shape.size() == 3)
+				field<T>::_shape.push_back(image_shape[2]);
+
+			field<T>::_allocate();
+		}
+
 		/// <summary>
 		/// Allocate space for an empty image
 		/// </summary>
@@ -84,16 +97,11 @@ namespace tira {
 		/// <param name="y">Height of the image (slow axis)</param>
 		/// <param name="c">Number of color channels</param>
 		void init(size_t x, size_t y, size_t c = 0) {
-			if (field<T>::_shape.size() != 0) {													// if this image has already been allocated
-				field<T>::_shape.clear();														// clear the shape and data vectors to start from scratch
-				field<T>::_data.clear();
-			}
-			field<T>::_shape.push_back(y);
-			field<T>::_shape.push_back(x);
-			if(c > 0)
-				field<T>::_shape.push_back(c);
-
-			field<T>::_allocate();
+			std::vector<size_t> image_shape;
+			image_shape.push_back(x);
+			image_shape.push_back(y);
+			if (c > 1) image_shape.push_back(c);
+			init(image_shape);
 		}
 
 		/// <summary>
@@ -264,16 +272,22 @@ namespace tira {
 		/// </summary>
 		image() : field<T>() {}			//initialize all variables, don't allocate any memory
 
+		image(std::vector<size_t> shape) {
+			field<T>::_shape = shape;
+			field<T>::_allocate();
+		}
 
 		/// <summary>
 		/// Constructor creates an image from a field
 		/// </summary>
 		/// <param name="F"></param>
-		image(field<T> F) {
-			field<T>::_shape = F.shape();
-			field<T>::_allocate();
+		image(field<T> F) : image(F.shape()) {
+			//field<T>::_shape = F.shape();
+			//field<T>::_allocate();
 			memcpy(&field<T>::_data[0], F.data(), F.bytes());
 		}
+
+		
 
 		/// <summary>
 		/// Create a new image from scratch given a number of samples and channels
@@ -349,7 +363,7 @@ namespace tira {
 		image<T>& operator=(const image<T>& I) {
 			if (&I == this)													// handle self-assignment
 				return *this;
-			init(I.X(), I.Y(), I.C());										// allocate space and set shape variables
+			init(I.X(), I.Y(), I.C());
 			memcpy(&field<T>::_data[0], &I._data[0], field<T>::bytes());		// copy the data
 			return *this;													// return a pointer to the current object
 		}
@@ -357,7 +371,7 @@ namespace tira {
 		
 		image<T> operator+(T rhs) {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			image<T> r(this->shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] + rhs;				//add the individual pixels
 			return r;												//return the summed result
@@ -365,7 +379,7 @@ namespace tira {
 
 		image<T> operator*(T rhs) {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			image<T> r(this->shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] * rhs;				//add the individual pixels
 			return r;												//return the summed result
@@ -373,7 +387,7 @@ namespace tira {
 
 		image<T> operator/(T rhs) {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			image<T> r(this->shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] / rhs;				//add the individual pixels
 			return r;												//return the summed result
@@ -384,7 +398,7 @@ namespace tira {
 				throw std::runtime_error("Images dimensions are incompatible");
 
 			if(C() == rhs.C()) {					// if both images have the same number of color channels
-				tira::image<T> result(X(), Y(), C());
+				tira::image<T> result(this->shape());
 				for(size_t i = 0; i < field<T>::size(); i++) {
 					result._data[i] = field<T>::_data[i] * rhs._data[i];
 				}
@@ -402,7 +416,7 @@ namespace tira {
 				return result;
 			}
 			else if(rhs.C() == 1) {
-				tira::image<T> result(X(), Y(), C());
+				tira::image<T> result(this->shape());
 				for(size_t yi = 0; yi < Y(); yi++) {
 					for(size_t xi = 0; xi < X(); xi++) {
 						for(size_t ci = 0; ci < C(); ci++) {
@@ -422,7 +436,7 @@ namespace tira {
 				throw std::runtime_error("Images dimensions are incompatible");
 
 			if (C() == rhs.C()) {					// if both images have the same number of color channels
-				tira::image<T> result(X(), Y(), C());
+				tira::image<T> result(this->shape());
 				for (size_t i = 0; i < field<T>::size(); i++) {
 					result._data[i] = field<T>::_data[i] / rhs._data[i];
 				}
@@ -457,7 +471,7 @@ namespace tira {
 
 		image<T> operator-(T rhs) {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			image<T> r(this->shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] - rhs;				//add the individual pixels
 			return r;												//return the summed result
@@ -485,7 +499,7 @@ namespace tira {
 		/// <returns></returns>
 		image<T> operator+(image<T> rhs) {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(X(), Y(), C());								//allocate space for the resulting image
+			image<T> r(this->shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] + rhs._data[n];		//add the individual pixels
 			return r;												//return the inverted image
@@ -502,7 +516,7 @@ namespace tira {
 
 		image<T> clamp(T min, T max) {
 			size_t N = field<T>::size();
-			image<T> r(X(), Y(), C());
+			image<T> r(this->shape());
 			for (size_t n = 0; n < N; n++) {
 				if (field<T>::_data[n] < min) r._data[n] = min;
 				else if (field<T>::_data[n] > max) r._data[n] = max;
@@ -518,7 +532,7 @@ namespace tira {
 		/// <typeparam name="V"></typeparam>
 		template<typename V>
 		operator image<V>() {
-			image<V> r(X(), Y(), C());					//create a new image
+			image<V> r(this->shape());					//create a new image
 			std::copy(&field<T>::_data[0], &field<T>::_data[0] + field<T>::size(), r.data());		//copy and cast the data
 			return r;									//return the new image
 		}
@@ -816,13 +830,21 @@ namespace tira {
 			image<T> result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), C());		// output image will be smaller than the input (only valid region returned)
 
 			T sum;
-			for (size_t yi = 0; yi < result.height(); yi++) {
-				for (size_t xi = 0; xi < result.width(); xi++) {
-					for (size_t ci = 0; ci < result.channels(); ci++) {
+			size_t width = result.width();
+			size_t height = result.height();
+			size_t channels = result.channels();
+			size_t kwidth = mask.width();
+			size_t kheight = mask.height();
+			float ival, kval;
+			for (size_t yi = 0; yi < height; yi++) {
+				for (size_t xi = 0; xi < width; xi++) {
+					for (size_t ci = 0; ci < channels; ci++) {
 						sum = (T)0;
-						for (size_t vi = 0; vi < mask.height(); vi++) {
-							for (size_t ui = 0; ui < mask.width(); ui++) {
-								sum += field<T>::_data[idx_offset(xi + ui, yi + vi, ci)] * mask(ui, vi, 0);
+						for (size_t vi = 0; vi < kheight; vi++) {
+							for (size_t ui = 0; ui < kwidth; ui++) {
+								ival = field<T>::_data[idx_offset(xi + ui, yi + vi, ci)];
+								kval = mask(ui, vi, 0);
+								sum += ival * kval;
 							}
 						}
 						result(xi, yi, ci) = sum;
@@ -832,15 +854,29 @@ namespace tira {
 			return result;
 		}
 
-		T normal(T x, T sigma) {
-			return std::exp(-(x*x)/(2*sigma*sigma)) / std::sqrt(2.0 * M_PI * sigma * sigma);
+		image<T> centraldiff(unsigned int axis, unsigned int deriv, unsigned int order) {
+			std::vector<double> C = tira::calculus::central_difference_coefficients(deriv, order);
+			std::vector<size_t> s = { (size_t)1, (size_t)1 };
+			s[axis] = C.size();
+
+			image<T> k(s);
+			for (unsigned int i = 0; i < C.size(); i++) {
+				k.data()[i] = (T)C[i];
+			}
+
+			image<T> result = convolve2(k);
+			return result;
 		}
 
-		image<T> gaussian_filter(T sigma, T sigma2=-1) {
+		T normal(T x, T sigma) {
+			return std::exp(-(x*x)/(2*sigma*sigma)) / std::sqrt(2.0 * std::numbers::pi * sigma * sigma);
+		}
+
+		image<T> gaussian_filter(T sigma, T sigma2=-1, bool border=true) {
 			if(sigma2 < 0) sigma2 = sigma;
 
-			int w_sigma = ceil(6 * sigma + 1);					// calculate the window sizes for each blur kernel
-			int w_sigma2 = ceil(6 * sigma2 + 1);
+			int w_sigma = ceil(6 * std::max<T>(sigma, 1) + 1);					// calculate the window sizes for each blur kernel
+			int w_sigma2 = ceil(6 * std::max<T>(sigma2, 1) + 1);
 
 			image<T> blur(w_sigma, 1);							// create the images representing the blur kernels
 			image<T> blur2(1, w_sigma2);
@@ -855,10 +891,15 @@ namespace tira {
 				blur2(wi, 0) = normal(x, sigma2);
 			}
 
-			image<T> result = convolve2(blur);
-			result = result.convolve2(blur2);
+			std::vector<size_t> border_size = { (size_t)(w_sigma / 2), (size_t)(w_sigma2 / 2) };
+			image<T> result1 = field<T>::border(border_size);
+			image<T> result2 = result1.convolve2(blur);
+			image<T> result3 = result2.convolve2(blur2);
+			//result = result.convolve2(blur);
+			//result = result.convolve2(blur2);
 
-			return result;		}
+			return result3;		
+		}
 
 
 		/// <summary>

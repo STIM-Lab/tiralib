@@ -3,10 +3,11 @@
 //external libraries
 
 #include <cmath>
+#include <numbers>
 #include <typeinfo>
 
 #include "extern/libnpy/npy.hpp"
-#include "tira/solvers.h"
+#include "tira/calculus.h"
 
 namespace tira {
 
@@ -49,86 +50,9 @@ namespace tira {
 			return off;
 		}
 
-		/// <summary>
-		/// Calculate the finite difference coefficients given a derivative and order of accuracy
-		/// </summary>
-		/// <param name="derivative"></param>
-		/// <param name="order"></param>
-		/// <returns></returns>
-		std::vector< std::vector<double> > _finite_difference_coefficients(unsigned int derivative, unsigned int order) {
+		
 
-			unsigned int N = order + derivative;		// calculate the number of samples required to achieve the desired order
-
-			std::vector< std::vector<double> > Coefficients;
-
-			std::vector<double> Samples(N);					// allocate a vector that will be used to store sample points
-
-			for (int ri = 0; ri < N; ri++) {			// for each shifted sample position
-				for (int ci = 0; ci < N; ci++) {		// calculate the point for each sample
-					Samples[ci] = -ri + ci;				// store that point in the Samples vector
-				}
-				/*std::vector<T> A(N * N);
-				for (unsigned int ri = 0; ri < N; ri++) {
-					for (unsigned int ci = 0; ci < N; ci++) {
-						A[ri * N + ci] = pow(Samples[ci], ri);
-					}
-				}
-				std::vector<T> b(N, 0.0);
-				b[derivative] = tgamma(derivative + 1);
-				std::vector<T> x(N);
-				tira::solvers::Ax_b(&A[0], &b[0], &x[0], N);*/
-				
-				std::vector<double> x(N);
-				tira::solvers::finite_difference_vandermonde(Samples, x, derivative);
-				
-				Coefficients.push_back(x);
-			}
-			return Coefficients;
-		}
-
-		std::vector<double> _central_finite_difference_coefficients(unsigned int derivative, unsigned int order) {
-			if( (derivative + order) % 2 == 0) order += 1;
-
-			unsigned int N = order + derivative;		// calculate the number of samples required to achieve the desired order
-
-			std::vector<double> Coefficients;
-
-			std::vector<double> Samples(N);					// allocate a vector that will be used to store sample points
-
-			int ri = N / 2;
-			for (int ci = 0; ci < N; ci++) {		// calculate the point for each sample
-				Samples[ci] = -ri + ci;				// store that point in the Samples vector
-			}
-			/*std::vector<T> A(N * N);
-			for (unsigned int ri = 0; ri < N; ri++) {
-				for (unsigned int ci = 0; ci < N; ci++) {
-					A[ri * N + ci] = pow(Samples[ci], ri);
-				}
-			}
-			std::vector<T> b(N, 0.0);
-			b[derivative] = tgamma(derivative + 1);
-			std::vector<T> x(N);
-			tira::solvers::Ax_b(&A[0], &b[0], &x[0], N);*/
-
-			std::vector<double> x(N);
-			tira::solvers::finite_difference_vandermonde(Samples, Coefficients, derivative);
-
-			return Coefficients;
-		}
-
-		void _printCoefficients(std::vector<double> Coefficients) {
-
-			for (unsigned int i = 0; i < Coefficients.size(); i++) {
-				std::cout << Coefficients[i] << " ";
-			}
-			std::cout << std::endl;
-		}
-
-		void _printCoefficients(std::vector< std::vector<double> > C) {
-			for (unsigned int i = 0; i < C.size(); i++) {
-				_printCoefficients(C[i]);
-			}
-		}
+		
 
 		/// <summary>
 		/// Calculate the partial derivative of the field along the specified axis and return a pointer to the resulting data.
@@ -140,8 +64,8 @@ namespace tira {
 		T* _derivative_ptr(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
 
 			if (axis >= _shape.size()) throw "ERROR: axis out of range of field";
-			std::vector< std::vector<double> > C = _finite_difference_coefficients(d, order);		// calculate the list of finite difference coefficients
-			if(print_coefs) _printCoefficients(C);
+			std::vector< std::vector<double> > C = tira::calculus::finite_difference_coefficients(d, order);		// calculate the list of finite difference coefficients
+			if(print_coefs) tira::calculus::printCoefficients(C);
 
 			T* derivative = new T[_data.size()];												// allocate a dynamic array for the derivative data
 
@@ -274,6 +198,11 @@ namespace tira {
 		field(std::vector<size_t> shape) {
 			_shape = shape;
 			_allocate();
+		}
+
+		field(std::vector<size_t> shape, T val) : field(shape) {
+			size_t N = field<T>::size();
+			std::fill(field<T>::_data.begin(), field<T>::_data.end(), val);
 		}
 
 		field(std::vector<size_t> shape, T* ptr) {
@@ -607,7 +536,8 @@ namespace tira {
 			std::vector<size_t> result_shape = _shape;												
 			size_t RY = _shape[0] - (K.shape()[0] - 1);
 			size_t RX = _shape[1] - (K.shape()[1] - 1);
-			field<T> result({ RY, RX });
+			std::vector<size_t> R = { RY, RX };
+			field<T> result(R);
 
 			// store the dimensions of the kernel and source image
 			size_t KY = K.shape()[0];
@@ -648,20 +578,20 @@ namespace tira {
 		/// </summary>
 		/// <param name="dist	">Vector of paddings in each direction</param>
 		/// <param name="val	">The value for the padded values</param>
-		field<T> border(std::vector<size_t> &dist, T val=0) {
+		field<T> border(std::vector<size_t> dist, T val=0) {
 			std::vector<size_t> new_shape = _shape;
 			size_t D = _shape.size();
 
-			for (size_t si = 0; si < D; si++) {
+			for (size_t si = 0; si < dist.size(); si++) {
 				new_shape[si] += 2 * dist[si];				// calculate new shape 
 			}
 
 			field<T> result(new_shape, val);				// initialize result field with val as outer values
 
 			std::vector<size_t> new_coord(D);
-			for (size_t ui = 0; ui < D; ui++) {
+			for (size_t ui = 0; ui < size(); ui++) {
 				coord(ui, new_coord);						// find new coordinates
-				for (int si = 0; si < D; si++) {
+				for (int si = 0; si < dist.size(); si++) {
 					new_coord[si] += dist[si];
 				}
 				size_t new_index = result.idx(new_coord);	//find new index
@@ -778,10 +708,14 @@ namespace tira {
 			return result;
 		}
 
+		static std::vector<double> fd_coefficients(unsigned int d, unsigned int order) {
+			return tira::calculus::central_difference_coefficients(d, order);
+		}
+
 		field<T> central_derivative(unsigned int axis, unsigned int d, unsigned int order, bool pad = true, bool print_coefs = false) {
 
-			std::vector<double> C = _central_finite_difference_coefficients(d, order);
-			if(print_coefs) _printCoefficients(C);
+			std::vector<double> C = tira::calculus::central_difference_coefficients(d, order);
+			if(print_coefs) tira::calculus::printCoefficients(C);
 
 			std::vector<size_t> kernel_shape(_shape.size(), 1);
 			kernel_shape[axis] = C.size();
