@@ -52,16 +52,6 @@ namespace tira {
 				for (int ci = 0; ci < N; ci++) {		// calculate the point for each sample
 					Samples[ci] = -ri + ci;				// store that point in the Samples vector
 				}
-				/*std::vector<T> A(N * N);
-				for (unsigned int ri = 0; ri < N; ri++) {
-					for (unsigned int ci = 0; ci < N; ci++) {
-						A[ri * N + ci] = pow(Samples[ci], ri);
-					}
-				}
-				std::vector<T> b(N, 0.0);
-				b[derivative] = tgamma(derivative + 1);
-				std::vector<T> x(N);
-				tira::solvers::Ax_b(&A[0], &b[0], &x[0], N);*/
 
 				std::vector<double> x(N);
 				tira::solvers::finite_difference_vandermonde(Samples, x, derivative);

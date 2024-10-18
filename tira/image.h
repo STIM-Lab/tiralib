@@ -746,7 +746,7 @@ namespace tira {
 		/// <param name="w">Width of the border in pixels</param>
 		/// <param name="value">Value used to generate the border</param>
 		/// <returns></returns>
-		image<T> border(size_t w, T value = 0) {
+		image<T> border(size_t w, T value) {
 			image<T> result(width() + w * 2, height() + w * 2, channels());						//create an output image
 			result = value;														//assign the border value to all pixels in the new image
 			for (size_t y = 0; y < height(); y++) {								//for each pixel in the original image
@@ -854,19 +854,6 @@ namespace tira {
 			return result;
 		}
 
-		image<T> centraldiff(unsigned int axis, unsigned int deriv, unsigned int order) {
-			std::vector<double> C = tira::calculus::central_difference_coefficients(deriv, order);
-			std::vector<size_t> s = { (size_t)1, (size_t)1 };
-			s[axis] = C.size();
-
-			image<T> k(s);
-			for (unsigned int i = 0; i < C.size(); i++) {
-				k.data()[i] = (T)C[i];
-			}
-
-			image<T> result = convolve2(k);
-			return result;
-		}
 
 		T normal(T x, T sigma) {
 			return std::exp(-(x*x)/(2*sigma*sigma)) / std::sqrt(2.0 * std::numbers::pi * sigma * sigma);
