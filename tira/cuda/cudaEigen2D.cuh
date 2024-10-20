@@ -34,9 +34,35 @@ namespace tira {
         }
 
         
+        /// <summary>
+        /// CPU code for calculating eigenvalues of a 2D matrix array
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="mats"></param>
+        /// <param name="n"></param>
+        /// <param name="device"></param>
+        /// <returns></returns>
+        template<typename T>
+        T* cpuEigenvalues2D(T* mats, size_t n) {
+
+            size_t mats_bytes = sizeof(T) * 4 * n;
+            size_t evals_bytes = sizeof(T) * 2 * n;
+
+            T* evals = (T*)malloc(evals_bytes);
+            T eval0, eval1;
+            for (size_t i = 0; i < n; i++) {
+                eval2D(&mats[i * 4], eval0, eval1);
+                evals[i * 2 + 0] = eval0;
+                evals[i * 2 + 1] = eval1;
+            }
+            return evals;
+        }
 
         template<typename T>
-        T* Eigenvalues2D(T* mats, size_t n) {
+        T* Eigenvalues2D(T* mats, size_t n, int device) {
+
+            if (device < 0)                                                     // if the device is < zero, run the CPU version
+                return cpuEigenvalues2D(mats, n);
 
             T* gpu_mats;
             size_t mats_bytes = sizeof(T) * 4 * n;
@@ -55,7 +81,6 @@ namespace tira {
             }
 
             // get the active device properties to calculate the optimal the block size
-            int device;
             HANDLE_ERROR(cudaGetDevice(&device));
             cudaDeviceProp props;
             HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
@@ -110,7 +135,25 @@ namespace tira {
         }
 
         template<typename T>
-        T* Eigenvectors2DPolar(T* mats, T* evals, size_t n) {
+        T* cpuEigenvectors2DPolar(T* mats, T* evals, size_t n) {
+            size_t mats_bytes = sizeof(T) * 4 * n;
+            size_t ev_bytes = sizeof(T) * 2 * n;
+
+            T* vecs = (T*)malloc(ev_bytes);
+            T vec0, vec1;
+            for (size_t i = 0; i < n; i++) {
+                evec2Dpolar(&mats[i * 4], &evals[i * 2], vec0, vec1);
+                vecs[i * 2 + 0] = vec0;
+                vecs[i * 2 + 1] = vec1;
+            }
+            return vecs;
+        }
+
+        template<typename T>
+        T* Eigenvectors2DPolar(T* mats, T* evals, size_t n, int device) {
+
+            if (device < 0)                                                     // if the device is < zero, run the CPU version
+                return cpuEigenvectors2DPolar(mats, evals, n);
 
             T* gpu_mats;
             T* gpu_evals;
@@ -133,7 +176,6 @@ namespace tira {
             }
 
             // get the active device properties to calculate the optimal the block size
-            int device;
             HANDLE_ERROR(cudaGetDevice(&device));
             cudaDeviceProp props;
             HANDLE_ERROR(cudaGetDeviceProperties(&props, device));

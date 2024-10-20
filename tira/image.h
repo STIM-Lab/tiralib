@@ -835,7 +835,7 @@ namespace tira {
 			size_t channels = result.channels();
 			size_t kwidth = mask.width();
 			size_t kheight = mask.height();
-			float ival, kval;
+			T ival, kval;
 			for (size_t yi = 0; yi < height; yi++) {
 				for (size_t xi = 0; xi < width; xi++) {
 					for (size_t ci = 0; ci < channels; ci++) {

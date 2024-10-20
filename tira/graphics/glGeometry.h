@@ -22,8 +22,8 @@ namespace tira {
 		glVertexArray va;
 		glIndexBuffer ib;
 
+
 	public:
-		glGeometry() {}
 
 		void Unbind() {
 			va.Unbind();
@@ -60,6 +60,20 @@ namespace tira {
 			va.Destroy();
 			vb.Destroy();
 			ib.Destroy();
+		}
+
+
+		glGeometry() {}
+
+		template<typename T>
+		glGeometry(geometry<T> mesh) {
+			std::vector<T> v = mesh.getInterleavedVertices();									// generate a vector of interleaved vertices
+			std::vector<unsigned int> i = mesh.getIndices();									// generate a vector of indices
+			glVertexBufferLayout layout;
+			layout.Push<T>(mesh.getVertexDim());													// add the number of vertex components to the layout
+			layout.Push<T>(mesh.getNormalDim());													// add the number of normal components to the layout
+			layout.Push<T>(mesh.getTextureDim());													// add the number of texture components to the layout
+			AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
 		}
 
 		/// Static functions for generating common shapes

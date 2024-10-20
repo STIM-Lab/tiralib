@@ -28,7 +28,7 @@ namespace tira{
 			v[points * 3 + 1] = 0.0;
 			v[points * 3 + 2] = 0.0;
 
-			geometry<T>::m_vertices.insert(geometry<T>::m_vertices.begin(), std::begin(v), std::end(v));
+			geometry<T>::_vertices.insert(geometry<T>::_vertices.begin(), std::begin(v), std::end(v));
 
 			std::vector<T> n(points * 3 + 3);
 			for(size_t p = 0; p < points; p++){
@@ -39,16 +39,18 @@ namespace tira{
 			n[points * 3 + 0] = 0.0;						// add the center normal
 			n[points * 3 + 1] = 0.0;
 			n[points * 3 + 2] = 1.0;
-			geometry<T>::m_normals.insert(geometry<T>::m_normals.begin(), std::begin(n), std::end(n));
+
+			// texture coordinates will be polar coordinates
+			geometry<T>::_normals.insert(geometry<T>::_normals.begin(), std::begin(n), std::end(n));
 			std::vector<T> t(points * 2 + 2);
 			for(size_t p = 0; p < points; p++){
-				t[p * 2 + 0] = v[p * 3 + 0] + 0.5;
-				t[p * 2 + 1] = v[p * 3 + 1] + 0.5;
+				t[p * 2 + 0] = 0.5;
+				t[p * 2 + 1] = d_rad * p;
 			}
-			t[points * 2 + 0] = 0.5;						// add the center texture coordinate
-			t[points * 2 + 1] = 0.5;
+			t[points * 2 + 0] = 0.0;						// add the center texture coordinate
+			t[points * 2 + 1] = 0.0;
 
-			geometry<T>::m_texcoords.insert(geometry<T>::m_texcoords.begin(), std::begin(t), std::end(t));
+			geometry<T>::_texcoords.insert(geometry<T>::_texcoords.begin(), std::begin(t), std::end(t));
 
 			// calculate the indices
 			std::vector<int> i(points * 3);
@@ -60,7 +62,7 @@ namespace tira{
 			i[(points - 1) * 3 + 0] = (int)points - 1;
 			i[(points - 1) * 3 + 1] = (int)points;
 			i[(points - 1) * 3 + 2] = (int)0;
-			geometry<T>::m_indices.insert(geometry<T>::m_indices.begin(), std::begin(i), std::end(i));
+			geometry<T>::_indices.insert(geometry<T>::_indices.begin(), std::begin(i), std::end(i));
 		}
 
 		public:
