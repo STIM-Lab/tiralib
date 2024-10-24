@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <algorithm>
 #include <exception>
 
 namespace tira{
@@ -48,6 +49,15 @@ namespace tira{
 		std::vector<unsigned int> getIndices() { return _indices; }
 		size_t getNumVertices() { return _vertices.size() / _vertex_dim; }
 		size_t getNumTriangles() { return _indices.size() / 3; }
+
+		size_t bytes() {
+			size_t nbytes = 0;
+			nbytes += _vertices.size() * sizeof(T);
+			nbytes += _normals.size() * sizeof(T);
+			nbytes += _texcoords.size() * sizeof(T);
+			nbytes += _indices.size() * sizeof(unsigned int);
+			return nbytes;
+		}
 
 		// Returns a vector of vertices with the vertex positions, normals, and texture coordinates interleaved
 		std::vector<T> getInterleavedVertices() {
@@ -162,6 +172,35 @@ namespace tira{
 					}
 				}
 			}
+			return result;
+		}
+
+		geometry<T> tile(std::vector<T> d, size_t N) {
+			unsigned int nV = getNumVertices();
+			geometry<T> result;
+			result._vertices.resize(N * _vertices.size());			// reserve space in the output mesh for all sub-elements
+			result._normals.resize(N * _normals.size());
+			result._texcoords.resize(N * _texcoords.size());
+			result._indices.resize(N * _indices.size());
+
+			geometry<T> temp = (*this);
+			for(unsigned int ni = 0; ni < N; ni++) {
+				size_t v_offset = ni * _vertices.size();
+				size_t n_offset = ni * _normals.size();
+				size_t t_offset = ni * _texcoords.size();
+				size_t i_offset = ni * _indices.size();
+				std::copy(temp._vertices.begin(), temp._vertices.end(), result._vertices.begin() + v_offset);
+				std::copy(temp._normals.begin(), temp._normals.end(), result._normals.begin() + n_offset);
+				std::copy(temp._texcoords.begin(), temp._texcoords.end(), result._texcoords.begin() + t_offset);
+				std::transform(temp._indices.begin(), temp._indices.end(), result._indices.begin() + i_offset, std::bind2nd(std::plus<unsigned int>(), ni * nV));
+
+				temp = temp.translate(d);
+			}
+
+			result._normal_dim = _normal_dim;
+			result._texture_dim = _texture_dim;
+			result._vertex_dim = _vertex_dim;
+
 			return result;
 		}
 
