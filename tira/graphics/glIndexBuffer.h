@@ -1,7 +1,5 @@
 #pragma once
 #include "glErrorHandler.h"
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
 
 namespace tira {
 
@@ -9,38 +7,33 @@ namespace tira {
 	/// Defines the variables required to create an OpenGL index buffer.
 	/// </summary>
 	class glIndexBuffer {
-	private:
-		unsigned int m_BufferID;
-		unsigned int m_Count;			// Number of indices 
+
+		unsigned int _BufferID;
+		unsigned int _Count;			// Number of indices
 	public:
-		glIndexBuffer() : m_Count(0), m_BufferID(0) {
-			//GLCALL(glGenBuffers(1, &m_BufferID));
-		}
+		glIndexBuffer() : _BufferID(0), _Count(0) { }
 		// Number of element count
-		glIndexBuffer(const unsigned int* data, unsigned int count) : m_Count(count) {
-			//GLCALL(glGenBuffers(1, &m_BufferID));
+		glIndexBuffer(const unsigned int* data, const unsigned int count) : _Count(count) {
 			SetBuffer(data, count);
 		}
-		~glIndexBuffer() {
-			//GLCALL(glDeleteBuffers(1, &m_BufferID));
-		}
+		~glIndexBuffer() { }
 
-		void Destroy() {
-			GLERROR(glDeleteBuffers(1, &m_BufferID));
+		void Destroy() const {
+			GLERROR(glDeleteBuffers(1, &_BufferID));
 		}
-		void SetBuffer(const unsigned int* data, unsigned int count) {
-			m_Count = count;
-			GLERROR(glGenBuffers(1, &m_BufferID));
-			GLERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_BufferID));                  // What will be drawn
-			GLERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, m_Count * sizeof(unsigned int), data, GL_STATIC_DRAW));
+		void SetBuffer(const unsigned int* data, const unsigned int count) {
+			_Count = count;
+			GLERROR(glGenBuffers(1, &_BufferID));
+			GLERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _BufferID));                  // What will be drawn
+			GLERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, _Count * sizeof(unsigned int), data, GL_STATIC_DRAW));
 		}
 		void Bind() const {
-			GLERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_BufferID));
+			GLERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _BufferID));
 		}
 
-		void Unbind() const {
+		static void Unbind() {
 			GLERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 		}
-		inline unsigned int GetCount() const { return m_Count; }
+		inline unsigned int GetCount() const { return _Count; }
 	};
 }

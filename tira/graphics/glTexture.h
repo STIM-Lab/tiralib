@@ -53,7 +53,7 @@ namespace tira {
 			m_TextureID = 0;
 		}
 
-		void AssignImage(const unsigned char* bytes,
+		void AssignImage(const void* bytes,
 			int width, int height, int depth,
 			GLint internalFormat,
 			GLenum externalFormat,
@@ -64,9 +64,7 @@ namespace tira {
 			m_Depth = depth;
 
 			if (m_TextureID == 0) {
-				std::cout << "Texture ID: " << m_TextureID << std::endl;
 				GLERROR(glGenTextures(1, &m_TextureID));	// generate a new OpenGL texture name
-
 			}
 
 			if (depth == 0) m_TextureType = GL_TEXTURE_2D;	// set the texture type based on input parameters

@@ -21,8 +21,16 @@ class camera
 	float _fov;							// camera field of view
 	float _imagedist;					// distance to a unit-sized image plane
 
-	//private function that orthogonalizes the up and view vectors
+	//private function that updates the up vector to ensure that it is orthogonal to the view vector
 	void _stabalize() {
+		glm::vec3 side = glm::cross(_up, _view);
+		_up = glm::cross(_view, side);
+		_up = glm::normalize(_up);
+		_view = glm::normalize(_view);
+	}
+
+	//private function that updates the VIEW vector to ensure that it is orthogonal to the UP vector
+	void _stabalize_view() {
 		glm::vec3 side = glm::cross(_up, _view);
 		_up = glm::cross(_view, side);
 		_up = glm::normalize(_up);
@@ -43,7 +51,7 @@ public:
 	void position(const float x, const float y, const float z){ position(glm::vec3(x, y, z));}
 	void up(glm::vec3 up) {
 		_up = up;
-		_stabalize();
+		_stabalize_view();
 	}
 	void focal_length(const float distance){_focus = distance;}
 	void fov(const float field_of_view) {

@@ -124,12 +124,11 @@ namespace tira {
 		/// <summary>
 		/// Calculate a distance field from an input contour phi = 0
 		/// </summary>
-		/// <param name="levelset"></param>
 		/// <returns></returns>
 		tira::image<T> dist(tira::image<int>& binary_boundary) {
 
-			int w = width();
-			int h = height();
+			const int w = width();
+			const int h = height();
 
 
 
@@ -197,22 +196,21 @@ namespace tira {
 			}
 
 			// initializing fast sweeiping algorithm 
-			const int NSweeps = 4;
+			constexpr int NSweeps = 4;
 
 			//// sweep directions { start, end, step }
 			const int dirX[NSweeps][3] = { {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1} };
 			const int dirY[NSweeps][3] = { {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1} };
 			double aa[2];
-			double d_new, a, b;
-			int s, ix, iy, gridPos;
-			const double dx = 1.0, f = 1.0;
 
-			for (s = 0; s < NSweeps; s++) {
+			for (int s = 0; s < NSweeps; s++) {
 
-				for (iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
-					for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
+				for (int iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
+					for (int ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
+						constexpr double f = 1.0;
+						constexpr double dx = 1.0;
 
-						gridPos = iy * row + ix;
+						const int gridPos = iy * row + ix;
 
 						if (iy == 0 || iy == (h - 1)) {                    // calculation for ymin
 							if (iy == 0) {
@@ -238,8 +236,9 @@ namespace tira {
 							aa[0] = dist1d[iy * row + (ix - 1)] < dist1d[iy * row + (ix + 1)] ? dist1d[iy * row + (ix - 1)] : dist1d[iy * row + (ix + 1)];
 						}
 
-						a = aa[0]; b = aa[1];
-						d_new = (fabs(a - b) < f * dx ? (a + b + sqrt(2.0 * f * f * dx * dx - (a - b) * (a - b))) * 0.5 : std::fminf(a, b) + f * dx);
+						const double a = aa[0];
+						const double b = aa[1];
+						const double d_new = (fabs(a - b) < f * dx ? (a + b + sqrt(2.0 * f * f * dx * dx - (a - b) * (a - b))) * 0.5 : std::fminf(a, b) + f * dx);
 
 						dist1d[gridPos] = d_new;
 					}
@@ -335,7 +334,7 @@ namespace tira {
 		/// Return the image width
 		/// </summary>
 		/// <returns>Width of the image (fast dimension)</returns>
-		size_t width() {
+		size_t width() const {
 			return X();
 		}
 
@@ -343,7 +342,7 @@ namespace tira {
 		/// Return the height of the image
 		/// </summary>
 		/// <returns>Height of the image (slow dimension)</returns>
-		size_t height() {
+		size_t height() const {
 			return Y();
 		}
 
@@ -351,7 +350,7 @@ namespace tira {
 		/// Returns the number of channels in the iamge
 		/// </summary>
 		/// <returns>Number of channels</returns>
-		size_t channels() {
+		size_t channels() const {
 			return C();
 		}
 
@@ -478,7 +477,7 @@ namespace tira {
 		}
 
 		image<T> operator-() {
-			return (image<T>)field<T>::operator-();
+			return static_cast< image<T> >(field<T>::operator-());
 		}
 
 		/// <summary>
@@ -486,7 +485,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="v">Constant that all elements will be set to</param>
 		image<T>& operator=(T v) {														//set all elements of the image to a given value v
-			size_t N = field<T>::size();
+			const size_t N = field<T>::size();
 			for(size_t n = 0; n < N; n++)
 				field<T>::_data[n] = v;
 			return *this;
@@ -541,8 +540,8 @@ namespace tira {
 		/// Save the image as a file (uses the CImg library)
 		/// </summary>
 		/// <param name="fname">name of the file</param>
-		void save(std::string fname) {
-			cimg_library::CImg<T> cimg((unsigned int)X(), (unsigned int)Y(), 1, (unsigned int)C());
+		void save(const std::string fname) {
+			cimg_library::CImg<T> cimg(static_cast<unsigned int>(X()), static_cast<unsigned int>(Y()), 1, static_cast<unsigned int>(C()));
 			get_noninterleaved(cimg.data());
 			cimg.save(fname.c_str());
 		}
@@ -551,7 +550,7 @@ namespace tira {
 		/// Load an image file (uses the CImg library)
 		/// </summary>
 		/// <param name="filename">Name of the file to load</param>
-		void load(std::string filename) {
+		void load(const std::string filename) {
 			cimg_library::CImg<T> cimg(filename.c_str());									//create a CImg object for the image file
 			set_noninterleaved(cimg.data(), cimg.width(), cimg.height(), cimg.spectrum());
 		}
@@ -561,7 +560,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="c">channel to return</param>
 		/// <returns></returns>
-		image<T> channel(size_t c) const {
+		image<T> channel(const size_t c) const {
 			image<T> r(X(), Y());											//create a new single-channel image
 			for (size_t x = 0; x < X(); x++) {
 				for (size_t y = 0; y < Y(); y++) {
@@ -578,10 +577,9 @@ namespace tira {
 		/// </summary>
 		/// <param name="src">raw data used as the channel source</param>
 		/// <param name="c">channel that the raw data is assigned to</param>
-		void channel(T* src, size_t c) {
-			size_t x, y;
-			for (y = 0; y < Y(); y++) {
-				for (x = 0; x < X(); x++) {
+		void channel(T* src, const size_t c) {
+			for (size_t y = 0; y < Y(); y++) {
+				for (size_t x = 0; x < X(); x++) {
 					field<T>::_data[idx_offset(x, y, c)] = src[y * X() + x];
 				}
 			}
@@ -593,9 +591,8 @@ namespace tira {
 		/// <param name="val">Value that all pixels in the channel will be set to</param>
 		/// <param name="c">Channel to be modified</param>
 		void channel(T val, size_t c) {
-			size_t x, y;
-			for (y = 0; y < Y(); y++) {
-				for (x = 0; x < X(); x++) {
+			for (size_t y = 0; y < Y(); y++) {
+				for (size_t x = 0; x < X(); x++) {
 					field<T>::_data[idx_offset(x, y, c)] = val;
 				}
 			}
@@ -762,12 +759,12 @@ namespace tira {
 		/// <summary>
 		/// Generates a border by replicating edge pixels
 		/// </summary>
-		/// <param name="p">Width of the border (padding) to create</param>
+		/// <param name="w"> width of the border (padding) to create</param>
 		/// <returns></returns>
-		image<T> border_replicate(size_t w) {
+		image<T> border_replicate(const size_t w) {
+
 			image<T> result(width() + w * 2, height() + w * 2, channels());						//create an output image
-			result = 0;
-			//result = value;														//assign the border value to all pixels in the new image
+													//assign the border value to all pixels in the new image
 			for (size_t y = 0; y < height(); y++) {								//for each pixel in the original image
 				for (size_t x = 0; x < width(); x++) {
 					size_t n = (y + w) * (width() + w * 2) + x + w;				//calculate the index of the corresponding pixel in the result image
@@ -775,22 +772,54 @@ namespace tira {
 					result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
 				}
 			}
-			size_t l = w;
-			size_t r = w + width() - 1;
-			size_t t = w;
-			size_t b = w + height() - 1;
-			for (size_t y = 0; y < w; y++) for (size_t x = l; x <= r; x++) result(x, y) = result(x, t);						//pad the top
-			for (size_t y = b + 1; y < result.height(); y++) for (size_t x = l; x <= r; x++) result(x, y) = result(x, b);	//pad the bottom
-			for (size_t y = t; y <= b; y++) for (size_t x = 0; x < l; x++) result(x, y) = result(l, y);						//pad the left
-			for (size_t y = t; y <= b; y++) for (size_t x = r + 1; x < result.width(); x++) result(x, y) = result(r, y);		//pad the right
-			for (size_t y = 0; y < t; y++) for (size_t x = 0; x < l; x++) result(x, y) = result(l, t);						//pad the top left
-			for (size_t y = 0; y < t; y++) for (size_t x = r + 1; x < result.width(); x++) result(x, y) = result(r, t);		//pad the top right
-			for (size_t y = b + 1; y < result.height(); y++) for (size_t x = 0; x < l; x++) result(x, y) = result(l, b);		//pad the bottom left
-			for (size_t y = b + 1; y < result.height(); y++) for (size_t x = r + 1; x < result.width(); x++) result(x, y) = result(r, b);		//pad the bottom right
+			const size_t l = w;
+			const size_t r = w + width() - 1;
+			const size_t t = w;
+			const size_t b = w + height() - 1;
+			for (size_t y = 0; y < w; y++) {
+				for (size_t x = l; x <= r; x++) {
+					result(x, y) = result(x, t);						//pad the top
+				}
+			}
+			for (size_t y = b + 1; y < result.height(); ++y) {
+				for (size_t x = l; x <= r; x++) {
+					result(x, y) = result(x, b);	//pad the bottom
+				}
+			}
+			for (size_t y = t; y <= b; y++) {
+				for (size_t x = 0; x < l; x++) {
+					result(x, y) = result(l, y);						//pad the left
+				}
+			}
+			for (size_t y = t; y <= b; y++) {
+				for (size_t x = r + 1; x < result.width(); ++x) {
+					result(x, y) = result(r, y);		//pad the right
+				}
+			}
+			for (size_t y = 0; y < t; y++) {
+				for (size_t x = 0; x < l; x++) {
+					result(x, y) = result(l, t);						//pad the top left
+				}
+			}
+			for (size_t y = 0; y < t; y++) {
+				for (size_t x = r + 1; x < result.width(); ++x) {
+					result(x, y) = result(r, t);		//pad the top right
+				}
+			}
+			for (size_t y = b + 1; y < result.height(); ++y) {
+				for (size_t x = 0; x < l; x++) {
+					result(x, y) = result(l, b);		//pad the bottom left
+				}
+			}
+			for (size_t y = b + 1; y < result.height(); ++y) {
+				for (size_t x = r + 1; x < result.width(); ++x) {
+					result(x, y) = result(r, b);		//pad the bottom right
+				}
+			}
 			return result;
 		}
 
-		image<T> border_remove(size_t w) {
+		image<T> border_remove(const size_t w) {
 			return crop(w, w, X() - 2 * w, Y() - 2 * w);
 		}
 
@@ -809,12 +838,10 @@ namespace tira {
 			}
 			image<T> result(w, h, C());								//create the output cropped image
 
-			size_t srci;
-			size_t dsti;
-			size_t line_bytes = w * C() * sizeof(T);				//calculate the number of bytes in a line
+			const size_t line_bytes = w * C() * sizeof(T);				//calculate the number of bytes in a line
 			for (size_t yi = 0; yi < h; yi++) {						//for each row in the cropped image
-				srci = (y0 + yi) * X() * C() + x0 * C();			//calculate the source index
-				dsti = yi * w * C();								//calculate the destination index
+				size_t srci = (y0 + yi) * X() * C() + x0 * C();			//calculate the source index
+				size_t dsti = yi * w * C();								//calculate the destination index
 				memcpy(&result._data[dsti], &field<T>::_data[srci], line_bytes);	//copy the data
 			}
 			return result;
@@ -829,17 +856,16 @@ namespace tira {
 		image<T> convolve2(image<D> mask) {
 			image<T> result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), C());		// output image will be smaller than the input (only valid region returned)
 
-			T sum;
-			size_t width = result.width();
-			size_t height = result.height();
-			size_t channels = result.channels();
-			size_t kwidth = mask.width();
-			size_t kheight = mask.height();
+			const size_t width = result.width();
+			const size_t height = result.height();
+			const size_t channels = result.channels();
+			const size_t kwidth = mask.width();
+			const size_t kheight = mask.height();
 			T ival, kval;
 			for (size_t yi = 0; yi < height; yi++) {
 				for (size_t xi = 0; xi < width; xi++) {
 					for (size_t ci = 0; ci < channels; ci++) {
-						sum = (T)0;
+						T sum = static_cast<T>(0);
 						for (size_t vi = 0; vi < kheight; vi++) {
 							for (size_t ui = 0; ui < kwidth; ui++) {
 								ival = field<T>::_data[idx_offset(xi + ui, yi + vi, ci)];
@@ -878,12 +904,10 @@ namespace tira {
 				blur2(wi, 0) = normal(x, sigma2);
 			}
 
-			std::vector<size_t> border_size = { (size_t)(w_sigma / 2), (size_t)(w_sigma2 / 2) };
+			std::vector<size_t> border_size = { static_cast<size_t>(w_sigma / 2), static_cast<size_t>(w_sigma2 / 2) };
 			image<T> result1 = field<T>::border(border_size);
 			image<T> result2 = result1.convolve2(blur);
 			image<T> result3 = result2.convolve2(blur2);
-			//result = result.convolve2(blur);
-			//result = result.convolve2(blur2);
 
 			return result3;		
 		}
@@ -892,7 +916,7 @@ namespace tira {
 		/// <summary>
 		/// Copies the non-interleaved image data to the specified pointer
 		/// </summary>
-		/// <param name="data">destination of the copy (assumes the memory has been allocated)</param>
+		/// <param name="dest">destination of the copy (assumes the memory has been allocated)</param>
 		void get_noninterleaved(T* dest) {
 			//for each channel
 			for (size_t y = 0; y < Y(); y++) {
@@ -904,6 +928,7 @@ namespace tira {
 			}
 		}
 
+		/* I don't know what this function is supposed to do and I didn't write it (DAVID). Currently I believe it literally does nothing.
 		image<T> bin(size_t bx, size_t by) {
 			size_t nbx = X() / bx;												// calculate the number of bins along x and y
 			size_t nby = Y() / by;
@@ -924,8 +949,9 @@ namespace tira {
 			}
 			return result;
 		}
+		*/
 
-		void set_noninterleaved(T* data, size_t width, size_t height, size_t chan) {
+		void set_noninterleaved(T* data, const size_t width, const size_t height, const size_t chan) {
 			init(width, height, chan);
 
 			//for each channel
@@ -987,8 +1013,6 @@ namespace tira {
 				SDF[i] = -1 * SDF[i];
 			}
 
-
-			double val; int gridPos;
 			const int row = width;
 			const int nx = width - 1;
 			const int ny = height - 1;
@@ -997,11 +1021,8 @@ namespace tira {
 			// initialize a std::tuple to store the values of frozen cell
 			std::stack<std::tuple<int, int>> stack = {};
 
-			std::tuple<int, int> idsPair;
-
 			// find the first unfrozen cell
-			gridPos = 0;
-
+			int gridPos = 0;
 
 			while (frozenCells[gridPos]) {
 				ix += (ix < nx ? 1 : 0);
@@ -1011,13 +1032,13 @@ namespace tira {
 			stack.push({ ix, iy });
 			// a simple pixel flood
 			while (stack.size()) {
-				idsPair = stack.top();
+				std::tuple<int, int> idsPair = stack.top();
 				stack.pop();
 				ix = std::get<0>(idsPair);
 				iy = std::get<1>(idsPair);
 				gridPos = row * iy + ix;
 				if (!frozenCells[gridPos]) {
-					val = -1.0 * SDF[gridPos];
+					const double val = -1.0 * SDF[gridPos];
 					SDF[gridPos] = val;
 					frozenCells[gridPos] = true; // freeze cell when done
 					if (ix > 0) {
@@ -1036,13 +1057,10 @@ namespace tira {
 			}
 
 
-			for (int y = 0; y < height; y++)
-			{
-				for (int x = 0; x < width; x++)
-				{
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
 					distance(x, y) = SDF[y * width + x];
 				}
-
 			}
 			return distance;
 		}
@@ -1052,8 +1070,9 @@ namespace tira {
 		/// </summary>
 		/// <param name="minval"></param>
 		/// <param name="maxval"></param>
+		/// <param name="colormap">type of colormap to apply</param>
 		/// <returns></returns>
-		image<unsigned char> cmap(T minval, T maxval, ColorMap colormap) {
+		image<unsigned char> cmap(T minval, T maxval, const ColorMap colormap) {
 
 			if (C() > 1) {																	// throw an exception if the image is more than one channel
 				throw "Cannot create a color map from images with more than one channel!";
@@ -1094,16 +1113,16 @@ namespace tira {
 					ctrlPts = RAINBOWCYCLE_PTS;
 					numPts = 7;
 					break;
+					default:
+						throw std::runtime_error("Invalid Colormap");
 				}
-				float c = a * (float)(numPts - 1);								// get the real value to interpolate control points
-				int c_floor = (int)c;														// calculate the control point index
-				float m = c - (float)c_floor;												// calculate the fractional part of the control point index
+				const float c = a * static_cast<float>(numPts - 1);								// get the real value to interpolate control points
+				const int c_floor = static_cast<int>(c);										// calculate the control point index
+				const float m = c - static_cast<float>(c_floor);								// calculate the fractional part of the control point index
 
-				float r, g, b;																// allocate variables to store the color
-
-				r = ctrlPts[c_floor * 4 + 0];											// use a LUT to find the "low" color value
-				g = ctrlPts[c_floor * 4 + 1];
-				b = ctrlPts[c_floor * 4 + 2];
+				float r = ctrlPts[c_floor * 4 + 0];											// use a LUT to find the "low" color value
+				float g = ctrlPts[c_floor * 4 + 1];
+				float b = ctrlPts[c_floor * 4 + 2];
 				if (c_floor != numPts - 1) {										// if there is a fractional component, interpolate
 					r = r * (1.0f - m) + ctrlPts[(c_floor + 1) * 4 + 0] * m;
 					g = g * (1.0f - m) + ctrlPts[(c_floor + 1) * 4 + 1] * m;
@@ -1121,8 +1140,6 @@ namespace tira {
 		/// <summary>
 		/// Generate a color map of the image.
 		/// </summary>
-		/// <param name="minval"></param>
-		/// <param name="maxval"></param>
 		/// <returns></returns>
 		image<unsigned char> cmap(ColorMap colormap = ColorMap::Brewer) {
 			return cmap(minv(), maxv(), colormap);

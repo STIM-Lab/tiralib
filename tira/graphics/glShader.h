@@ -378,6 +378,7 @@ namespace tira {
 
 		std::string ParseShaderFile(const std::string& filepath) {
 			std::ifstream stream(filepath);
+			if(!stream) throw std::runtime_error("Failed to open file " + filepath);
 			
 			std::string line;
 			std::stringstream source;

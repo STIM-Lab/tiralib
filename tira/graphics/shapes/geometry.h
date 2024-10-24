@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <exception>
 
 namespace tira{
 	template <typename T>
@@ -76,7 +77,7 @@ namespace tira{
 		/// <returns></returns>
 		geometry<T> merge(geometry<T> rhs) {
 			if (!_check_merge(rhs))								// if the meshes have different numbers of coordinates, throw an exception
-				throw std::exception("Incompatible Mesh Parameters");
+				throw std::invalid_argument("Incompatible Mesh Parameters");
 
 			geometry<T> merged;
 			merged._vertex_dim = _vertex_dim;
@@ -134,7 +135,7 @@ namespace tira{
 
 		geometry<T> translate(std::vector<T> coords) {
 			if (coords.size() > _vertex_dim)
-				throw std::exception("Too many translation coordinates provided");
+				throw std::invalid_argument("Too many translation coordinates provided");
 
 			geometry<T> result(*this);
 			size_t V = getNumVertices();
@@ -150,7 +151,7 @@ namespace tira{
 
 		geometry<T> scale(std::vector<T> coords) {
 			if (coords.size() > _vertex_dim)
-				throw std::exception("Too many translation coordinates provided");
+				throw std::invalid_argument("Too many translation coordinates provided");
 
 			geometry<T> result(*this);
 			size_t V = getNumVertices();

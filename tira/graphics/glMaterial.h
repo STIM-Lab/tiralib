@@ -20,7 +20,7 @@ namespace tira{
         // only be destroyed if they no longer exist as variables in the shader.
         std::unordered_map<std::string, glTextureUnit> m_TextureUnits;
 
-        bool isSampler(GLenum uniform_type){
+        static bool isSampler(const GLenum uniform_type){
             switch(uniform_type){
                 case GL_SAMPLER_1D:
                 case GL_SAMPLER_2D:
@@ -65,14 +65,15 @@ namespace tira{
         }
 
         /// Create and return a vector containing the uniform details about every texture sampler in the shader
-        std::vector<glShaderUniform> GetSamplerList(){
+        std::vector<glShaderUniform> GetSamplerList() const {
+
             std::vector<glShaderUniform> sampler_list;
 
             // for each uniform in the shader
-            for(std::unordered_map<std::string, glShaderUniform>::iterator i = m_UniformCache.begin();
-                i != m_UniformCache.end(); i++){
-                    if(isSampler((*i).second.type))             // if the uniform is a texture sampler
-                        sampler_list.push_back((*i).second);    // store it in the texture list
+            for(auto i = m_UniformCache.begin();
+                i != m_UniformCache.end(); ++i){
+                    if(isSampler(i->second.type))             // if the uniform is a texture sampler
+                        sampler_list.push_back(i->second);    // store it in the texture list
             }
             return sampler_list;                                // return a list of all texture sampler uniforms
         }
@@ -86,32 +87,33 @@ namespace tira{
             glUseProgram(m_ShaderID);                                       // bund the current shader program to add textures
             for(size_t i = 0; i < sampler_list.size(); i++){                // for each sampler in the shader
                 // look for an existing texture unit with the sampler name
-                std::unordered_map<std::string, glTextureUnit>::iterator u = m_TextureUnits.find(sampler_list[i].name);
+                auto u = m_TextureUnits.find(sampler_list[i].name);
                 if(u == m_TextureUnits.end()){                              // if the name doesn't exist
                     glTextureUnit tu;
                     tu.uniform = sampler_list[i];
                     new_texture_units[sampler_list[i].name] = tu;
                 }
                 else{                                                       // if the texture unit already exists
-                    new_texture_units[sampler_list[i].name] = (*u).second;  // copy it to the new texture unit map
+                    new_texture_units[sampler_list[i].name] = u->second;  // copy it to the new texture unit map
                     m_TextureUnits.erase(u);                                // erase the old copy of the texture unit
                 }
                 glUniform1i(sampler_list[i].location, i);                   // assign the texture unit to the uniform
             }
 
             //erase any remaining texture units that are unused in the current shader
-            for(std::unordered_map<std::string, glTextureUnit>::iterator i = m_TextureUnits.begin();
-                i != m_TextureUnits.end(); i++){
-                    (*i).second.texture.Destroy();
+            for(auto i = m_TextureUnits.begin();
+                i != m_TextureUnits.end(); ++i){
+                    i->second.texture.Destroy();
             }
             m_TextureUnits.clear();
             m_TextureUnits = new_texture_units;
         }
 
         template <typename T>
-        void SetTexture(std::string name, const T* texbytes, int width, int height, int depth, int channels, GLenum internalFormat = GL_RGB, GLenum filter_type = GL_LINEAR) {
-            std::unordered_map<std::string, glTextureUnit>::iterator i = m_TextureUnits.find(name); // create an iterator
-            if (i == m_TextureUnits.end()) return;               // if the texture name doesn't exist, return
+        void SetTexture(const std::string name, const T* texbytes, const int width, const int height, const int depth, const int channels, const GLenum internalFormat = GL_RGB, const GLenum filter_type = GL_LINEAR) {
+            const auto i = m_TextureUnits.find(name); // create an iterator
+            if (i == m_TextureUnits.end())               // if the texture name doesn't exist
+                throw std::runtime_error("ERROR: texture name " + name + " not found");
 
             GLenum externalFormat;
             if (channels == 1) externalFormat = GL_RED;
@@ -129,14 +131,14 @@ namespace tira{
             else if (typeid(T) == typeid(int)) externalType = GL_INT;
             else if (typeid(T) == typeid(unsigned int)) externalType = GL_UNSIGNED_INT;
             else externalType = GL_UNSIGNED_BYTE;                                               // unsigned byte is the default
-            (*i).second.texture.AssignImage((const unsigned char*)texbytes,
+            i->second.texture.AssignImage(texbytes,
                 width,
                 height,
                 depth,
                 internalFormat,
                 externalFormat,
                 externalType);
-            (*i).second.texture.SetFilter(filter_type);
+            i->second.texture.SetFilter(filter_type);
         }
 
         public:
@@ -147,8 +149,8 @@ namespace tira{
         /// <summary>
         /// Constructor to create a new material based on a shader source file.
         /// </summary>
-        /// <param name="filename">Source code containing the vertex and fragment shaders</param>
-        glMaterial(std::string shaderstring) : glShader(shaderstring){
+        /// <param name="shaderstring"> String containing source code containing the vertex and fragment shaders</param>
+        explicit glMaterial(const std::string shaderstring) : glShader(shaderstring){
             RefreshTextures();                              // identify all texture samplers so that textures can be loaded separately
         }
 
@@ -170,7 +172,7 @@ namespace tira{
         /// </summary>
         /// <param name="vertex_source">String containing the vertex shader source code.</param>
         /// <param name="fragment_source">String containing the fragment shader source code.</param>
-        void CreateShader(std::string vertex_source, std::string fragment_source) {
+        void CreateShader(const std::string vertex_source, const std::string fragment_source) {
             glShader::CreateShader(vertex_source, fragment_source);
             RefreshTextures();
         }
@@ -179,20 +181,23 @@ namespace tira{
         /// Begin using the material (all geometry rendered between Begin() and End() will use this material).
         /// </summary>
         void Begin(){
+            Bind();                         // bind the shader program
             int i = 0;
-            for(std::unordered_map<std::string, glTextureUnit>::iterator tu = m_TextureUnits.begin();
-                tu != m_TextureUnits.end(); tu++){
-                    glActiveTexture(GL_TEXTURE0 + i);
-                    (*tu).second.texture.Bind();
-                    i++;
+
+            // for each texture used in the shader, activate the unit and set the associated uniform value
+            for(auto tu = m_TextureUnits.begin(); tu != m_TextureUnits.end(); ++tu){
+                GLERROR(glActiveTexture(GL_TEXTURE0 + i));                      // activate texture unit i
+                tu->second.texture.Bind();                                    // bind the texture to the associated unit
+                GLERROR(glUniform1i(tu->second.uniform.location, i));      // set the shader uniform
+                i++;                                                            // increment to the next texture unit
             }
-            Bind();
+
         }
 
         /// <summary>
         /// End using the material (all geometry rendered between Begin() and End() will use this material).
         /// </summary>
-        void End(){
+        void End() const {
             Unbind();
         }
 
@@ -205,12 +210,12 @@ namespace tira{
         /// <param name="internalFormat">Format used to represent the texture internally on the GPU.</param>
         /// <param name="filter_type">Filter type used for texture sampling (GL_LINEAR, GL_NEAREST).</param>
         template <typename T>
-        void SetTexture(std::string name, tira::image<T> teximage, GLenum internalFormat = GL_RGB, GLenum filter_type = GL_LINEAR) {
+        void SetTexture(const std::string name, tira::image<T> teximage, const GLenum internalFormat = GL_RGB, const GLenum filter_type = GL_LINEAR) {
             SetTexture<T>(name, teximage.data(), teximage.width(), teximage.height(), 0, teximage.channels(), internalFormat, filter_type);
         }
 
         template <typename T>
-        void SetTexture(std::string name, tira::volume<T> texvolume, GLenum internalFormat = GL_RGB, GLenum filter_type = GL_LINEAR) {
+        void SetTexture(const std::string name, tira::volume<T> texvolume, const GLenum internalFormat = GL_RGB, const GLenum filter_type = GL_LINEAR) {
             SetTexture<T>(name, texvolume.data(), texvolume.X(), texvolume.Y(), texvolume.Z(), texvolume.C(), internalFormat, filter_type);
         }
 
@@ -219,7 +224,7 @@ namespace tira{
         /// </summary>
         /// <param name="sampler_name"></param>
         /// <returns></returns>
-        glTexture GetTexture(std::string sampler_name) {
+        glTexture GetTexture(const std::string sampler_name) {
             return m_TextureUnits[sampler_name].texture;
         }
     };
