@@ -3,6 +3,7 @@
 #include <string>
 #include <fstream>
 #include <algorithm>
+#include <functional>
 #include <exception>
 
 namespace tira{
@@ -192,7 +193,7 @@ namespace tira{
 				std::copy(temp._vertices.begin(), temp._vertices.end(), result._vertices.begin() + v_offset);
 				std::copy(temp._normals.begin(), temp._normals.end(), result._normals.begin() + n_offset);
 				std::copy(temp._texcoords.begin(), temp._texcoords.end(), result._texcoords.begin() + t_offset);
-				std::transform(temp._indices.begin(), temp._indices.end(), result._indices.begin() + i_offset, std::bind2nd(std::plus<unsigned int>(), ni * nV));
+				std::transform(temp._indices.begin(), temp._indices.end(), result._indices.begin() + i_offset, std::bind(std::plus<unsigned int>(), std::placeholders::_1, ni * nV));
 
 				temp = temp.translate(d);
 			}

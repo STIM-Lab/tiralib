@@ -31,7 +31,7 @@ namespace tira {
 			field<T>::_shape.push_back(x);
 			field<T>::_shape.push_back(c);
 
-			field<T>::allocate();
+			field<T>::_allocate();
 		}
 
 		/// <summary>

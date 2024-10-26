@@ -61,23 +61,23 @@ namespace tira {
         }
 
         // for vertex data
-        unsigned int getVertexCount() const { return (unsigned int)geometry<F>::m_vertices.size() / 3; }
-        unsigned int getNormalCount() const { return (unsigned int)geometry<F>::m_normals.size() / 3; }
-        unsigned int getTexCoordCount() const { return (unsigned int)geometry<F>::m_texCoords.size() / 2; }
-        unsigned int getIndexCount() const { return (unsigned int)geometry<F>::m_indices.size(); }
+        unsigned int getVertexCount() const { return (unsigned int)geometry<F>::_vertices.size() / 3; }
+        unsigned int getNormalCount() const { return (unsigned int)geometry<F>::_normals.size() / 3; }
+        unsigned int getTexCoordCount() const { return (unsigned int)geometry<F>::_texcoords.size() / 2; }
+        unsigned int getIndexCount() const { return (unsigned int)geometry<F>::_indices.size(); }
         unsigned int getLineIndexCount() const { return (unsigned int)lineIndices.size(); }
         unsigned int getTriangleCount() const { return getIndexCount() / 3; }
 
-        unsigned int getVertexSize() const { return (unsigned int)geometry<F>::m_vertices.size() * sizeof(float); }   // # of bytes
-        unsigned int getNormalSize() const { return (unsigned int)geometry<F>::m_normals.size() * sizeof(float); }
-        unsigned int getTexCoordSize() const { return (unsigned int)geometry<F>::m_texcoords.size() * sizeof(float); }
-        unsigned int getIndexSize() const { return (unsigned int)geometry<F>::m_indices.size() * sizeof(unsigned int); }
+        unsigned int getVertexSize() const { return (unsigned int)geometry<F>::_vertices.size() * sizeof(float); }   // # of bytes
+        unsigned int getNormalSize() const { return (unsigned int)geometry<F>::_normals.size() * sizeof(float); }
+        unsigned int getTexCoordSize() const { return (unsigned int)geometry<F>::_texcoords.size() * sizeof(float); }
+        unsigned int getIndexSize() const { return (unsigned int)geometry<F>::_indices.size() * sizeof(unsigned int); }
         unsigned int getLineIndexSize() const { return (unsigned int)lineIndices.size() * sizeof(unsigned int); }
 
-        const float* getVertices() const { return geometry<F>::m_vertices.data(); }
-        const float* getNormals() const { return geometry<F>::m_normals.data(); }
-        const float* getTexCoords() const { return geometry<F>::m_texcoords.data(); }
-        const unsigned int* getIndices() const { return geometry<F>::m_indices.data(); }
+        const float* getVertices() const { return geometry<F>::_vertices.data(); }
+        const float* getNormals() const { return geometry<F>::_normals.data(); }
+        const float* getTexCoords() const { return geometry<F>::_texcoords.data(); }
+        const unsigned int* getIndices() const { return geometry<F>::_indices.data(); }
         const unsigned int* getLineIndices() const { return lineIndices.data(); }
 
         // for interleaved vertices: V/N/T
@@ -285,10 +285,10 @@ namespace tira {
             std::vector<float> tmpVertices = computeIcosahedronVertices();
 
             // clear memory of prev arrays
-            std::vector<float>().swap(geometry<F>::m_vertices);
-            std::vector<float>().swap(geometry<F>::m_normals);
-            std::vector<float>().swap(geometry<F>::m_texcoords);
-            std::vector<unsigned int>().swap(geometry<F>::m_indices);
+            std::vector<float>().swap(geometry<F>::_vertices);
+            std::vector<float>().swap(geometry<F>::_normals);
+            std::vector<float>().swap(geometry<F>::_texcoords);
+            std::vector<unsigned int>().swap(geometry<F>::_indices);
             std::vector<unsigned int>().swap(lineIndices);
 
             const float* v0, * v1, * v2, * v3, * v4, * v11;          // vertex positions
@@ -392,10 +392,10 @@ namespace tira {
             std::vector<float> tmpVertices = computeIcosahedronVertices();
 
             // clear memory of prev arrays
-            std::vector<float>().swap(geometry<F>::m_vertices);
-            std::vector<float>().swap(geometry<F>::m_normals);
-            std::vector<float>().swap(geometry<F>::m_texcoords);
-            std::vector<unsigned int>().swap(geometry<F>::m_indices);
+            std::vector<float>().swap(geometry<F>::_vertices);
+            std::vector<float>().swap(geometry<F>::_normals);
+            std::vector<float>().swap(geometry<F>::_texcoords);
+            std::vector<unsigned int>().swap(geometry<F>::_indices);
             std::vector<unsigned int>().swap(lineIndices);
             std::map<std::pair<float, float>, unsigned int>().swap(sharedIndices);
 
@@ -482,14 +482,14 @@ namespace tira {
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 2, T_STEP);
-            sharedIndices[std::make_pair(S_STEP * 2, T_STEP)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 2, T_STEP)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             v[0] = tmpVertices[9];  v[1] = tmpVertices[10]; v[2] = tmpVertices[11]; // v15 (shared)
             icosphere::computeVertexNormal(v, n);
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 4, T_STEP);
-            sharedIndices[std::make_pair(S_STEP * 4, T_STEP)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 4, T_STEP)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             v[0] = tmpVertices[12]; v[1] = tmpVertices[13]; v[2] = tmpVertices[14]; // v16 (shared)
             scale = icosphere::computeScaleForLength(v, 1);
@@ -497,42 +497,42 @@ namespace tira {
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 6, T_STEP);
-            sharedIndices[std::make_pair(S_STEP * 6, T_STEP)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 6, T_STEP)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             v[0] = tmpVertices[15]; v[1] = tmpVertices[16]; v[2] = tmpVertices[17]; // v17 (shared)
             icosphere::computeVertexNormal(v, n);
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 8, T_STEP);
-            sharedIndices[std::make_pair(S_STEP * 8, T_STEP)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 8, T_STEP)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             v[0] = tmpVertices[21]; v[1] = tmpVertices[22]; v[2] = tmpVertices[23]; // v18 (shared)
             icosphere::computeVertexNormal(v, n);
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 3, T_STEP * 2);
-            sharedIndices[std::make_pair(S_STEP * 3, T_STEP * 2)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 3, T_STEP * 2)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             v[0] = tmpVertices[24]; v[1] = tmpVertices[25]; v[2] = tmpVertices[26]; // v19 (shared)
             icosphere::computeVertexNormal(v, n);
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 5, T_STEP * 2);
-            sharedIndices[std::make_pair(S_STEP * 5, T_STEP * 2)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 5, T_STEP * 2)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             v[0] = tmpVertices[27]; v[1] = tmpVertices[28]; v[2] = tmpVertices[29]; // v20 (shared)
             icosphere::computeVertexNormal(v, n);
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 7, T_STEP * 2);
-            sharedIndices[std::make_pair(S_STEP * 7, T_STEP * 2)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 7, T_STEP * 2)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             v[0] = tmpVertices[30]; v[1] = tmpVertices[31]; v[2] = tmpVertices[32]; // v21 (shared)
             icosphere::computeVertexNormal(v, n);
             addVertex(v[0], v[1], v[2]);
             addNormal(n[0], n[1], n[2]);
             addTexCoord(S_STEP * 9, T_STEP * 2);
-            sharedIndices[std::make_pair(S_STEP * 9, T_STEP * 2)] = geometry<F>::m_texcoords.size() / 2 - 1;
+            sharedIndices[std::make_pair(S_STEP * 9, T_STEP * 2)] = geometry<F>::_texcoords.size() / 2 - 1;
 
             // build index list for icosahedron (20 triangles)
             addIndices(0, 10, 14);      // 1st row (5 tris)
@@ -611,15 +611,15 @@ namespace tira {
             for (i = 1; i <= subdivision; ++i)
             {
                 // copy prev arrays
-                tmpVertices = geometry<F>::m_vertices;
-                tmpTexCoords = geometry<F>::m_texcoords;
-                tmpIndices = geometry<F>::m_indices;
+                tmpVertices = geometry<F>::_vertices;
+                tmpTexCoords = geometry<F>::_texcoords;
+                tmpIndices = geometry<F>::_indices;
 
                 // clear prev arrays
-                geometry<F>::m_vertices.clear();
-                geometry<F>::m_normals.clear();
-                geometry<F>::m_texcoords.clear();
-                geometry<F>::m_indices.clear();
+                geometry<F>::_vertices.clear();
+                geometry<F>::_normals.clear();
+                geometry<F>::_texcoords.clear();
+                geometry<F>::_indices.clear();
                 lineIndices.clear();
 
                 index = 0;
@@ -691,10 +691,10 @@ namespace tira {
             for (i = 1; i <= subdivision; ++i)
             {
                 // copy prev indices
-                tmpIndices = geometry<F>::m_indices;
+                tmpIndices = geometry<F>::_indices;
 
                 // clear prev arrays
-                geometry<F>::m_indices.clear();
+                geometry<F>::_indices.clear();
                 lineIndices.clear();
 
                 indexCount = (int)tmpIndices.size();
@@ -706,12 +706,12 @@ namespace tira {
                     i3 = tmpIndices[j + 2];
 
                     // get 3 vertex attribs from prev triangle
-                    v1 = &geometry<F>::m_vertices[i1 * 3];
-                    v2 = &geometry<F>::m_vertices[i2 * 3];
-                    v3 = &geometry<F>::m_vertices[i3 * 3];
-                    t1 = &geometry<F>::m_texcoords[i1 * 2];
-                    t2 = &geometry<F>::m_texcoords[i2 * 2];
-                    t3 = &geometry<F>::m_texcoords[i3 * 2];
+                    v1 = &geometry<F>::_vertices[i1 * 3];
+                    v2 = &geometry<F>::_vertices[i2 * 3];
+                    v3 = &geometry<F>::_vertices[i3 * 3];
+                    t1 = &geometry<F>::_texcoords[i1 * 2];
+                    t2 = &geometry<F>::_texcoords[i2 * 2];
+                    t3 = &geometry<F>::_texcoords[i3 * 2];
 
                     // get 3 new vertex attribs by spliting half on each edge
                     computeHalfVertex(v1, v2, radius, newV1);
@@ -745,69 +745,69 @@ namespace tira {
             std::vector<float>().swap(interleavedVertices);
 
             std::size_t i, j;
-            std::size_t count = geometry<F>::m_vertices.size();
+            std::size_t count = geometry<F>::_vertices.size();
             for (i = 0, j = 0; i < count; i += 3, j += 2)
             {
-                interleavedVertices.push_back(geometry<F>::m_vertices[i]);
-                interleavedVertices.push_back(geometry<F>::m_vertices[i + 1]);
-                interleavedVertices.push_back(geometry<F>::m_vertices[i + 2]);
+                interleavedVertices.push_back(geometry<F>::_vertices[i]);
+                interleavedVertices.push_back(geometry<F>::_vertices[i + 1]);
+                interleavedVertices.push_back(geometry<F>::_vertices[i + 2]);
 
-                interleavedVertices.push_back(geometry<F>::m_normals[i]);
-                interleavedVertices.push_back(geometry<F>::m_normals[i + 1]);
-                interleavedVertices.push_back(geometry<F>::m_normals[i + 2]);
+                interleavedVertices.push_back(geometry<F>::_normals[i]);
+                interleavedVertices.push_back(geometry<F>::_normals[i + 1]);
+                interleavedVertices.push_back(geometry<F>::_normals[i + 2]);
 
-                interleavedVertices.push_back(geometry<F>::m_texcoords[j]);
-                interleavedVertices.push_back(geometry<F>::m_texcoords[j + 1]);
+                interleavedVertices.push_back(geometry<F>::_texcoords[j]);
+                interleavedVertices.push_back(geometry<F>::_texcoords[j + 1]);
             }
         }
         void addVertex(float x, float y, float z) {
-            geometry<F>::m_vertices.push_back(x);
-            geometry<F>::m_vertices.push_back(y);
-            geometry<F>::m_vertices.push_back(z);
+            geometry<F>::_vertices.push_back(x);
+            geometry<F>::_vertices.push_back(y);
+            geometry<F>::_vertices.push_back(z);
         }
         void addVertices(const float v1[3], const float v2[3], const float v3[3]) {
-            geometry<F>::m_vertices.push_back(v1[0]);  // x
-            geometry<F>::m_vertices.push_back(v1[1]);  // y
-            geometry<F>::m_vertices.push_back(v1[2]);  // z
-            geometry<F>::m_vertices.push_back(v2[0]);
-            geometry<F>::m_vertices.push_back(v2[1]);
-            geometry<F>::m_vertices.push_back(v2[2]);
-            geometry<F>::m_vertices.push_back(v3[0]);
-            geometry<F>::m_vertices.push_back(v3[1]);
-            geometry<F>::m_vertices.push_back(v3[2]);
+            geometry<F>::_vertices.push_back(v1[0]);  // x
+            geometry<F>::_vertices.push_back(v1[1]);  // y
+            geometry<F>::_vertices.push_back(v1[2]);  // z
+            geometry<F>::_vertices.push_back(v2[0]);
+            geometry<F>::_vertices.push_back(v2[1]);
+            geometry<F>::_vertices.push_back(v2[2]);
+            geometry<F>::_vertices.push_back(v3[0]);
+            geometry<F>::_vertices.push_back(v3[1]);
+            geometry<F>::_vertices.push_back(v3[2]);
         }
         void addNormal(float nx, float ny, float nz) {
-            geometry<F>::m_normals.push_back(nx);
-            geometry<F>::m_normals.push_back(ny);
-            geometry<F>::m_normals.push_back(nz);
+            geometry<F>::_normals.push_back(nx);
+            geometry<F>::_normals.push_back(ny);
+            geometry<F>::_normals.push_back(nz);
         }
         void addNormals(const float n1[3], const float n2[3], const float n3[3]) {
-            geometry<F>::m_normals.push_back(n1[0]);  // nx
-            geometry<F>::m_normals.push_back(n1[1]);  // ny
-            geometry<F>::m_normals.push_back(n1[2]);  // nz
-            geometry<F>::m_normals.push_back(n2[0]);
-            geometry<F>::m_normals.push_back(n2[1]);
-            geometry<F>::m_normals.push_back(n2[2]);
-            geometry<F>::m_normals.push_back(n3[0]);
-            geometry<F>::m_normals.push_back(n3[1]);
-            geometry<F>::m_normals.push_back(n3[2]);
+            geometry<F>::_normals.push_back(n1[0]);  // nx
+            geometry<F>::_normals.push_back(n1[1]);  // ny
+            geometry<F>::_normals.push_back(n1[2]);  // nz
+            geometry<F>::_normals.push_back(n2[0]);
+            geometry<F>::_normals.push_back(n2[1]);
+            geometry<F>::_normals.push_back(n2[2]);
+            geometry<F>::_normals.push_back(n3[0]);
+            geometry<F>::_normals.push_back(n3[1]);
+            geometry<F>::_normals.push_back(n3[2]);
         }
         void addTexCoord(float s, float t) {
-            geometry<F>::m_texcoords.push_back(s);
-            geometry<F>::m_texcoords.push_back(t);
+            geometry<F>::_texcoords.push_back(s);
+            geometry<F>::_texcoords.push_back(t);
         }
         void addTexCoords(const float t1[2], const float t2[2], const float t3[2]) {
-            geometry<F>::m_texcoords.push_back(t1[0]); // s
-            geometry<F>::m_texcoords.push_back(t1[1]); // t
-            geometry<F>::m_texcoords.push_back(t2[0]);
-            geometry<F>::m_texcoords.push_back(t2[1]);
-            geometry<F>::m_texcoords.push_back(t3[0]);
-            geometry<F>::m_texcoords.push_back(t3[1]);
+            geometry<F>::_texcoords.push_back(t1[0]); // s
+            geometry<F>::_texcoords.push_back(t1[1]); // t
+            geometry<F>::_texcoords.push_back(t2[0]);
+            geometry<F>::_texcoords.push_back(t2[1]);
+            geometry<F>::_texcoords.push_back(t3[0]);
+            geometry<F>::_texcoords.push_back(t3[1]);
         }
         void addIndices(unsigned int i1, unsigned int i2, unsigned int i3) {
-            geometry<F>::m_indices.push_back(i1);
-            geometry<F>::m_indices.push_back(i2);
-            geometry<F>::m_indices.push_back(i3);
+            geometry<F>::_indices.push_back(i1);
+            geometry<F>::_indices.push_back(i2);
+            geometry<F>::_indices.push_back(i3);
         }
         void addSubLineIndices(unsigned int i1, unsigned int i2, unsigned int i3,
             unsigned int i4, unsigned int i5, unsigned int i6) {
@@ -842,7 +842,7 @@ namespace tira {
                     addVertex(v[0], v[1], v[2]);
                     addNormal(n[0], n[1], n[2]);
                     addTexCoord(t[0], t[1]);
-                    index = geometry<F>::m_texcoords.size() / 2 - 1;
+                    index = geometry<F>::_texcoords.size() / 2 - 1;
                     sharedIndices[key] = index;
                 }
                 else
@@ -856,7 +856,7 @@ namespace tira {
                 addVertex(v[0], v[1], v[2]);
                 addNormal(n[0], n[1], n[2]);
                 addTexCoord(t[0], t[1]);
-                index = geometry<F>::m_texcoords.size() / 2 - 1;
+                index = geometry<F>::_texcoords.size() / 2 - 1;
             }
 
             return index;
