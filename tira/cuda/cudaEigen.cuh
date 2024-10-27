@@ -7,6 +7,7 @@
 #include <tira/cuda/callable.h>
 
 namespace tira::cuda {
+    #define PI 3.14159265358979323846
 
     template<typename T>
     CUDA_CALLABLE void eval2D(const T* matrix, T& eval0, T& eval1) {
@@ -192,6 +193,86 @@ namespace tira::cuda {
         }
 
         return evecs;
+    }
 
+    template<typename T>
+    CUDA_CALLABLE void eval3D(const T* A, T& eval0, T& eval1, T& eval2) {
+        
+        T a, b, c, d, e, f, g, h, i;
+        a = A[0 * 3 + 0]; b = A[0 * 3 + 1]; c = A[0 * 3 + 2];
+        d = A[1 * 3 + 0]; e = A[1 * 3 + 1]; f = A[1 * 3 + 2];
+        g = A[2 * 3 + 0]; h = A[2 * 3 + 1]; i = A[2 * 3 + 2];
+
+
+        // Case: matrix is diagonal
+        T p1 = b * b + c * c + f * f;
+        if (p1 == 0.0) {
+            eval0 = a;
+            eval1 = e;
+            eval2 = i;
+            return;
+        }
+
+        T q = (a + e + i) / 3.0;
+        T p2 = (a - q) * (a - q) + (e - q) * (e - q) + (i - q) * (i - q) + 2.0 * p1;
+        T p = sqrt(p2 / 6.0);
+        T pinv = 1.0 / p;
+        T B[3][3];
+        B[0][0] = pinv * (a - q);
+        B[1][1] = pinv * (e - q);
+        B[2][2] = pinv * (i - q);
+        B[0][1] = pinv * b;
+        B[0][2] = pinv * c;
+        B[1][0] = pinv * d;
+        B[1][2] = pinv * f;
+        B[2][0] = pinv * g;
+        B[2][1] = pinv * h;
+        T detB = B[0][0] * (B[1][1] * B[2][2] - B[1][2] * B[2][1]) -
+            B[0][1] * (B[1][0] * B[2][2] - B[1][2] * B[2][0]) +
+            B[0][2] * (B[1][0] * B[2][1] - B[1][1] * B[2][0]);
+        T r = detB / 2.0;
+
+        // In exact arithmetic for a symmetric matrix - 1 <= r <= 1
+        // but computation error can leave it slightly outside this range.
+
+        T phi = 0.0;
+        if (r <= -1.0)
+            phi = PI / 3.0;
+        else if (r > 1.0)
+            phi = 0.0;
+        else
+            phi = acos(r) / 3.0;
+
+        // The eigenvalues satisfy l[0] <= l[1] <= l[2]
+        eval2 = q + 2.0 * p * cos(phi);
+        eval0 = q + 2.0 * p * cos(phi + (2.0 * PI / 3.0));
+        eval1 = 3.0 * q - eval2 - eval0;  // since trace(A) = eig1 + eig2 + eig3
+    }
+
+    /// <summary>
+    /// CPU code for calculating eigenvalues of a 2D matrix array
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="mats"></param>
+    /// <param name="n"></param>
+    /// <returns></returns>
+    template<typename T>
+    T* cpuEigenvalues3D(const T* mats, const size_t n) {
+
+        T* evals = new T[3 * n];
+        T eval0, eval1, eval2;
+        for (size_t i = 0; i < n; i++) {
+            eval3D(&mats[i * 9], eval0, eval1, eval2);
+            evals[i * 3 + 0] = eval0;
+            evals[i * 3 + 1] = eval1;
+            evals[i * 3 + 1] = eval2;
+        }
+        return evals;
+    }
+
+    template<typename T>
+    T* Eigenvalues3D(T* mats, size_t n, int device) {
+        if (device < 0)                                                     // if the device is < zero, run the CPU version
+            return cpuEigenvalues3D(mats, n);
     }
 }

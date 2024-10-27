@@ -427,7 +427,7 @@ namespace tira {
 			GLERROR(glCompileShader(id));
 
 			int result;
-			glGetShaderiv(id, GL_COMPILE_STATUS, &result);
+			GLERROR(glGetShaderiv(id, GL_COMPILE_STATUS, &result));
 			if (result == GL_FALSE) {
 				int length;
 				GLERROR(glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length));

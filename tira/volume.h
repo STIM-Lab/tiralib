@@ -15,7 +15,7 @@ namespace tira {
 
 	protected:
 
-		
+		std::vector<double> _spacing;
 
 	
 		/// <summary>
@@ -32,6 +32,7 @@ namespace tira {
 			field<T>::_shape.push_back(c);
 
 			field<T>::_allocate();
+
 		}
 
 		/// <summary>
@@ -288,7 +289,9 @@ namespace tira {
 		/// <summary>
 		/// Default constructor initializes an empty volume (0x0x0 with 0 channels)
 		/// </summary>
-		volume() : field<T>() {}			//initialize all variables, don't allocate any memory
+		volume() : field<T>() {
+			_spacing = { 1.0f, 1.0f, 1.0f };
+		}			//initialize all variables, don't allocate any memory
 
 		/// <summary>
 		/// Create a new volume from scratch given a number of samples and channels
@@ -297,7 +300,7 @@ namespace tira {
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="z">size of the image along the Z (slowest) axis</param>
 		/// <param name="c">number of channels</param>
-		volume(size_t x, size_t y, size_t z, size_t c = 1) {
+		volume(size_t x, size_t y, size_t z, size_t c = 1) : volume() {
 			init(x, y, z, c);
 		}
 
@@ -311,6 +314,10 @@ namespace tira {
 		/// <param name="c">number of channels (channels are interleaved)</param>
 		volume(T* data, size_t x, size_t y, size_t z, size_t c = 1) : volume(x, y, z, c) {
 			memcpy(&field<T>::_data[0], data, field<T>::bytes());									// use memcpy to copy the raw data into the field array
+		}
+
+		volume(std::vector<size_t> shape) : field<T>(shape) {
+			_spacing = { 1.0f, 1.0f, 1.0f };
 		}
 
 		/// <summary>
@@ -327,6 +334,7 @@ namespace tira {
 		/// <param name="filename">Name of the file to load (uses CImg)</param>
 		volume(std::string filename) {
 			load(filename);
+			_spacing = { 1.0f, 1.0f, 1.0f };
 		}
 
 		/// Destructor
@@ -339,6 +347,46 @@ namespace tira {
 		inline size_t Y() const { return field<T>::_shape[1]; }
 		inline size_t X() const { return field<T>::_shape[2]; }
 		inline size_t C() const { return field<T>::_shape[3]; }
+
+		inline double dx() const { return _spacing[0]; }
+		inline double dy() const { return _spacing[1]; }
+		inline double dz() const { return _spacing[2]; }
+
+		inline double sx() const { return X() * _spacing[0]; }
+		inline double sy() const { return Y() * _spacing[1]; }
+		inline double sz() const { return Z() * _spacing[2]; }
+		inline double smax() const { return std::max(sx(), std::max(sy(), sz())); }
+
+		/// <summary>
+		/// Returns a channel of the current image as an independent one-channel image
+		/// </summary>
+		/// <param name="c">channel to return</param>
+		/// <returns></returns>
+		volume<T> channel(const size_t c) const {
+			volume<T> r(X(), Y(), Z());											//create a new single-channel image
+			T* dp = r.data();
+			size_t S = X() * Y() * X();
+			//const T* sp = &field<T>::_data[0];
+			for (size_t i = 0; i < S; i++) {
+				dp[i] = field<T>::_data[i * C() + c];
+			}
+			return r;
+		}
+
+		T minv() {
+			T m = *std::min_element(field<T>::_data.begin(), field<T>::_data.end());
+			return m;
+		}
+
+		T maxv() {
+			T m = *std::max_element(field<T>::_data.begin(), field<T>::_data.end());
+			return m;
+		}
+
+		void spacing(double x, double y, double z) {
+			std::vector<double> spacing = { x, y, z };
+			_spacing = spacing;
+		}
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
 			init(X, Y, Z, 1);
@@ -1005,6 +1053,34 @@ namespace tira {
 
 			}
 			return D;
+		}
+
+		/// <summary>
+		/// Generate a color map of the image.
+		/// </summary>
+		/// <param name="minval"></param>
+		/// <param name="maxval"></param>
+		/// <param name="colormap">type of colormap to apply</param>
+		/// <returns></returns>
+		volume<unsigned char> cmap(T minval, T maxval, const ColorMap colormap) {
+
+			if (C() > 1) {																	// throw an exception if the image is more than one channel
+				throw "Cannot create a color map from images with more than one channel!";
+			}
+			volume<unsigned char> color_result(X(), Y(), Z(), 3);									// create the new color image
+			float a;																		// create a normalized value as a reference for the color map
+			for (size_t i = 0; i < field<T>::_data.size(); i++) {
+				cmap::cmap(field<T>::_data[i], minval, maxval, color_result.data()[i * 3 + 0], color_result.data()[i * 3 + 1], color_result.data()[i * 3 + 2], colormap);
+			}
+			return color_result;
+		}
+
+		/// <summary>
+		/// Generate a color map of the image.
+		/// </summary>
+		/// <returns></returns>
+		volume<unsigned char> cmap(ColorMap colormap = ColorMap::Brewer) {
+			return cmap(minv(), maxv(), colormap);
 		}
 
 	};	// end class volume

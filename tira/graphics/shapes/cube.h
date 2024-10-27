@@ -36,7 +36,7 @@ namespace tira{
 				0.5, 0.5, 0.5,
 				0.5, 0.5, -0.5
 			};
-			geometry<T>::m_vertices.insert(geometry<T>::m_vertices.begin(), std::begin(v), std::end(v));
+			geometry<T>::_vertices.insert(geometry<T>::_vertices.begin(), std::begin(v), std::end(v));
 
 			T n[] = {
 				0.0, 0.0, -1.0,
@@ -64,7 +64,7 @@ namespace tira{
 				0.0, 1.0, 0.0,
 				0.0, 1.0, 0.0
 			};
-			geometry<T>::m_normals.insert(geometry<T>::m_normals.begin(), std::begin(n), std::end(n));
+			geometry<T>::_normals.insert(geometry<T>::_normals.begin(), std::begin(n), std::end(n));
 
 			T t[] = {
 				// negative z plane
@@ -98,7 +98,7 @@ namespace tira{
 				1.0, 1.0,
 				1.0, 0.0
 			};
-			geometry<T>::m_texcoords.insert(geometry<T>::m_texcoords.begin(), std::begin(t), std::end(t));
+			geometry<T>::_texcoords.insert(geometry<T>::_texcoords.begin(), std::begin(t), std::end(t));
 
 			int i[] = {
 				0, 1, 2,
@@ -119,7 +119,7 @@ namespace tira{
 				20, 21, 22,
 				20, 22, 23
 			};
-			geometry<T>::m_indices.insert(geometry<T>::m_indices.begin(), std::begin(i), std::end(i));
+			geometry<T>::_indices.insert(geometry<T>::_indices.begin(), std::begin(i), std::end(i));
 		}
 
 		public:

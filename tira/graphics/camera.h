@@ -1,5 +1,6 @@
 #pragma once
 
+#define GLM_FORCE_LEFT_HANDED
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/glm.hpp"
 #include <glm/gtx/string_cast.hpp>
@@ -173,8 +174,25 @@ public:
 		return glm::cross(_up, _view);
 	}
 
-	glm::mat4 matrix() {
+	glm::mat4 viewmatrix() {
 		return glm::lookAt(_position, _position + _view, _up);
+	}
+
+	/// <summary>
+	/// Generates an orthographic projection matrix such that the image plane (based on the FOV and focal distance) is entirely
+	/// withing the view frustum. The depth of field is twice the focal distance
+	/// </summary>
+	/// <returns></returns>
+	glm::mat4 orthomatrix(float aspect = 1.0f) {
+		float fov_rad = glm::radians(_fov);
+		float view_width = _focus * std::tan(fov_rad / 2.0f);
+		float dof = 2 * _focus;
+		return glm::ortho(-view_width * aspect, view_width * aspect, -view_width, view_width, 0.0f, dof);
+	}
+
+	glm::mat4 perspectivematrix(float aspect = 1.0f, float depthfactor = 2.0f) {
+		float fov_rad = glm::radians(_fov);
+		return glm::perspective(fov_rad, aspect, _focus/ depthfactor, depthfactor * _focus);
 	}
 
 	//output the camera settings
