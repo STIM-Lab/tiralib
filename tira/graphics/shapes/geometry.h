@@ -41,15 +41,15 @@ namespace tira{
 		}
 
 	public:
-		std::vector<T> getVertices() { return _vertices; }
-		std::vector<T> getNormals() { return _normals; }
-		std::vector<T> getTexCoords() { return _texcoords; }
-		unsigned int getVertexDim() { return _vertex_dim; }
-		unsigned int getNormalDim() { return _normal_dim; }
-		unsigned int getTextureDim() { return _texture_dim; }
-		std::vector<unsigned int> getIndices() { return _indices; }
-		size_t getNumVertices() { return _vertices.size() / _vertex_dim; }
-		size_t getNumTriangles() { return _indices.size() / 3; }
+		std::vector<T> getVertices() const { return _vertices; }
+		std::vector<T> getNormals() const { return _normals; }
+		std::vector<T> getTexCoords() const { return _texcoords; }
+		unsigned int getVertexDim() const { return _vertex_dim; }
+		unsigned int getNormalDim() const { return _normal_dim; }
+		unsigned int getTextureDim() const { return _texture_dim; }
+		std::vector<unsigned int> getIndices() const { return _indices; }
+		size_t getNumVertices() const { return _vertices.size() / _vertex_dim; }
+		size_t getNumTriangles() const { return _indices.size() / 3; }
 
 		size_t bytes() {
 			size_t nbytes = 0;
@@ -123,13 +123,15 @@ namespace tira{
 			return merged;
 		}
 
-		/// <summary>
-		/// Combine two geometry objects and return the result
-		/// </summary>
-		/// <param name="rhs"></param>
-		/// <returns></returns>
-		geometry<T> operator+(geometry<T> rhs) {
-
+		geometry<T>& operator=(const geometry<T> rhs) {
+			_vertex_dim = rhs._vertex_dim;
+			_normal_dim = rhs._normal_dim;
+			_texture_dim = rhs._texture_dim;
+			_vertices = rhs._vertices;
+			_normals = rhs._normals;
+			_texcoords = rhs._texcoords;
+			_indices = rhs._indices;
+			return *this;
 		}
 
 		geometry(const geometry& c) {
@@ -176,8 +178,8 @@ namespace tira{
 			return result;
 		}
 
-		geometry<T> tile(std::vector<T> d, size_t N) {
-			unsigned int nV = getNumVertices();
+		geometry<T> tile(std::vector<T> d, size_t N) const {
+			const unsigned int nV = getNumVertices();
 			geometry<T> result;
 			result._vertices.resize(N * _vertices.size());			// reserve space in the output mesh for all sub-elements
 			result._normals.resize(N * _normals.size());

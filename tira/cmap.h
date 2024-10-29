@@ -69,8 +69,6 @@ namespace tira::cmap {
 		a = (std::max)(0.0f, a);																// clamp the normalized value to between zero and 1
 		a = (std::min)(1.0f, a);
 
-
-
 		float* ctrlPts;
 		unsigned int numPts;
 		switch (colormap) {
@@ -98,7 +96,7 @@ namespace tira::cmap {
 			throw std::runtime_error("Invalid Colormap");
 		}
 		const float c = a * static_cast<float>(numPts - 1);								// get the real value to interpolate control points
-		const int c_floor = static_cast<int>(c);										// calculate the control point index
+		const unsigned int c_floor = static_cast<unsigned int>(c);										// calculate the control point index
 		const float m = c - static_cast<float>(c_floor);								// calculate the fractional part of the control point index
 
 		float fr = ctrlPts[c_floor * 4 + 0];											// use a LUT to find the "low" color value

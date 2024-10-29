@@ -8,7 +8,6 @@ namespace tira {
 
 	class glTexture {
 		GLuint m_TextureID;		// texture OpenGL name
-		//const unsigned char* m_LocalBuffer;	// pointer to pixels in CPU memory
 		int m_Width, m_Height;			// width and height (2D and 3D textures)
 		int m_Depth;					// depth = 0 for a 2D texture
 		GLenum m_TextureType;			// GL_TEXTURE_1D, GL_TEXTURE_2D, GL_TEXTURE_3D, etc.
@@ -77,15 +76,16 @@ namespace tira {
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-			if (m_TextureType == GL_TEXTURE_3D)
+			if (m_TextureType == GL_TEXTURE_3D) {
 				GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE));
+			}
 
 			if (m_TextureType == GL_TEXTURE_2D) {
 				GLBREAK(glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Width, m_Height, 0,
 					externalFormat,
 					externalDataType, bytes));
 			}
-			else if (m_TextureType == GL_TEXTURE_3D) {
+			else {											//if (m_TextureType == GL_TEXTURE_3D)
 				GLBREAK(glTexImage3D(GL_TEXTURE_3D, 0, internalFormat, 
 					m_Width, m_Height, m_Depth, 0,
 					externalFormat,			// Format of the pixel data
@@ -95,16 +95,16 @@ namespace tira {
 			GLBREAK(glBindTexture(m_TextureType, 0));	// unbind the texture
 		}
 		glTexture(const unsigned char* bytes,
-			int width, int height, int depth,
-			GLenum internalFormat,
-			GLenum externalFormat,
-			GLenum externalDataType) : glTexture() {
+			const int width, const int height, const int depth,
+			const GLenum internalFormat,
+			const GLenum externalFormat,
+			const GLenum externalDataType) : glTexture() {
 			AssignImage(bytes, width, height, depth, internalFormat, externalFormat,externalDataType);
 		}										   
 			
 		
 
-		void Destroy() {
+		void Destroy() const {
 			GLBREAK(glDeleteTextures(1, &m_TextureID));
 		}
 
@@ -119,16 +119,16 @@ namespace tira {
 			GLBREAK(glBindTexture(m_TextureType, 0));
 		}
 
-		void SetFilter(GLenum filter_type) {
+		void SetFilter(const GLenum filter_type) const {
 			GLBREAK(glBindTexture(m_TextureType, m_TextureID));	// bind the texture
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MIN_FILTER, filter_type));
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MAG_FILTER, filter_type));
 		}
 
-		inline int Width() { return m_Width; }
-		inline int Height() { return m_Height; }
-		inline int Depth() { return m_Depth; }
-		inline GLuint ID() { return m_TextureID; }
+		inline int Width() const { return m_Width; }
+		inline int Height() const { return m_Height; }
+		inline int Depth() const { return m_Depth; }
+		inline GLuint ID() const { return m_TextureID; }
 	};
 
 }

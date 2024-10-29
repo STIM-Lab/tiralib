@@ -1022,7 +1022,6 @@ namespace tira {
 				throw "Cannot create a color map from images with more than one channel!";
 			}
 			image<unsigned char> color_result(X(), Y(), 3);									// create the new color image
-			float a;																		// create a normalized value as a reference for the color map
 			for (size_t i = 0; i < field<T>::_data.size(); i++) {
 				cmap::cmap(field<T>::_data[i], minval, maxval, color_result.data()[i * 3 + 0], color_result.data()[i * 3 + 1], color_result.data()[i * 3 + 2], colormap);
 			}

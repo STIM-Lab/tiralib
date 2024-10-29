@@ -261,7 +261,7 @@ namespace tira {
 		unsigned int ndims() { return _shape.size(); }
 
 		template<typename D = T>
-		void load_npy(std::string filename) {					// fill the field with data from an npy file
+		void load_npy(const std::string filename) {					// fill the field with data from an npy file
 			std::vector<unsigned long> shape;
 			std::vector<D> data;
 			bool fortran_order;
@@ -274,20 +274,21 @@ namespace tira {
 			}
 
 			// calculate the number of NPY array elements D can fit in a single field object T
-			size_t D_per_T = sizeof(T) / sizeof(D);
+			const size_t D_per_T = sizeof(T) / sizeof(D);
 			if (D_per_T * sizeof(D) != sizeof(T)) {
 				std::cout << "ERROR: Cannot divide the field type <" << typeid(T).name() << "> (" << sizeof(T) << " bytes) into NumPy elements <" << typeid(D).name() << "> (" << sizeof(D) << " bytes)" << std::endl;
 				exit(1);
 			}
 
-			size_t Dims_per_T;
-			if (D_per_T == 1) Dims_per_T = 0;									// if the size of the field type matches individual array elements, just duplicate the field dimensions
-			else {																// the field type is composed of multiple array elements, so assume these are broken up into dimensions at the end of the array
+			size_t Dims_per_T = 0;
+			if (D_per_T != 1) {																// the field type is composed of multiple array elements, so assume these are broken up into dimensions at the end of the array
 				size_t total_elements = 1;										// start with one element
-				for (size_t di = shape.size() - 1; di >= 0; di--) {				// go backwards through the NumPy array dimensions to figure out how many dimensions compose a field type
-					total_elements *= shape[di];
+				//for (size_t di = shape.size() - 1; di >= 0; di--) {				// go backwards through the NumPy array dimensions to figure out how many dimensions compose a field type
+				for(size_t di = 0; di < shape.size(); di++) {
+					const size_t din = shape.size() - di - 1;
+					total_elements *= shape[din];
 					if (total_elements == D_per_T) {							// if the total number of elements matches the number in the field type
-						Dims_per_T = shape.size() - di;							// save the number of dimensions used to represent the type
+						Dims_per_T = shape.size() - din;							// save the number of dimensions used to represent the type
 						break;
 					}
 				}
@@ -297,11 +298,11 @@ namespace tira {
 				}
 			}
 
-			size_t FieldDims = shape.size() - Dims_per_T;						// calculate the total number of dimensions in the field
+			const size_t FieldDims = shape.size() - Dims_per_T;						// calculate the total number of dimensions in the field
 			std::vector<size_t> new_shape(shape.begin(), shape.begin() + FieldDims);	// calculate the actual shape of the field (composed of elements T, each composed of sub-elements D)
 
 			if (fortran_order) {													// if the numpy array uses fortran ordering, than the indices are flipped
-				std::reverse(new_shape.begin(), new_shape.end());
+				std::ranges::reverse(new_shape.begin(), new_shape.end());
 				_setShape(new_shape);
 			}
 			else {
@@ -309,8 +310,7 @@ namespace tira {
 			}
 			_allocate();																	// allocate space for the field
 
-			memcpy(&_data[0], &data[0], bytes());									// copy the data from the
-
+			memcpy(reinterpret_cast<void*>(&_data[0]), reinterpret_cast<void*>(&data[0]), bytes());									// copy the data from the
 		}
 		
 		void save_npy(const std::string& filename) {
