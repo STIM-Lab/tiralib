@@ -195,6 +195,13 @@ namespace tira::cuda {
         return evecs;
     }
 
+    template <typename T>
+    CUDA_CALLABLE void swap(T& a, T& b) {
+        T temp = a;
+        a = b;
+        b = temp;
+    }
+
     template<typename T>
     CUDA_CALLABLE void eval3D(const T* A, T& eval0, T& eval1, T& eval2) {
         
@@ -210,6 +217,9 @@ namespace tira::cuda {
             eval0 = a;
             eval1 = e;
             eval2 = i;
+            if(eval0 > eval2) swap(eval0, eval2);
+            if(eval0 > eval1) swap(eval0, eval1);
+            if(eval1 > eval2) swap(eval1, eval2);
             return;
         }
 
@@ -265,7 +275,7 @@ namespace tira::cuda {
             eval3D(&mats[i * 9], eval0, eval1, eval2);
             evals[i * 3 + 0] = eval0;
             evals[i * 3 + 1] = eval1;
-            evals[i * 3 + 1] = eval2;
+            evals[i * 3 + 2] = eval2;
         }
         return evals;
     }

@@ -363,12 +363,11 @@ namespace tira {
 		/// <param name="c">channel to return</param>
 		/// <returns></returns>
 		volume<T> channel(const size_t c) const {
-			volume<T> r(X(), Y(), Z());											//create a new single-channel image
-			T* dp = r.data();
-			size_t S = X() * Y() * X();
-			//const T* sp = &field<T>::_data[0];
-			for (size_t i = 0; i < S; i++) {
-				dp[i] = field<T>::_data[i * C() + c];
+			volume<T> r(X(), Y(), Z());							// create a new single-channel image
+			T* dp = r.data();									// create a pointer to the raw result
+			size_t S = X() * Y() * X();							// number of voxels
+			for (size_t i = 0; i < S; i++) {					// for each voxel
+				dp[i] = field<T>::_data[i * C() + c];			// copy the value corresponding to the desired channel
 			}
 			return r;
 		}
