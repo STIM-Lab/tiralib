@@ -259,6 +259,99 @@ namespace tira::cuda {
         eval1 = 3.0 * q - eval2 - eval0;  // since trace(A) = eig1 + eig2 + eig3
     }
 
+    template<typename T>
+    CUDA_CALLABLE void evec3Dpolar(const T* matrix, T lambda, T& theta, T& phi) {
+        
+        float a, b, c, d, e, f, g, h, i;
+        a = matrix[0 * 3 + 0]; b = matrix[0 * 3 + 1]; c = matrix[0 * 3 + 2];
+        d = matrix[1 * 3 + 0]; e = matrix[1 * 3 + 1]; f = matrix[1 * 3 + 2];
+        g = matrix[2 * 3 + 0]; h = matrix[2 * 3 + 1]; i = matrix[2 * 3 + 2];
+
+        // rows of (A - lambda*I)
+        // all the rows multiplied by the eigenvector yield zero vector => eigenvector is prependicular to at least two of the rows
+        T row0[] = { a - lambda, b, c };
+        T row1[] = { d, e - lambda, f };
+        T row2[] = { g, h, i - lambda };
+
+        // calculate the cross-product of each two rows
+        // v is parallel to the cross product of two of these rows
+        T r0xr1[] = { row0[1] * row1[2] - row0[2] * row1[1],
+            row0[2] * row1[0] - row0[0] * row1[2],
+            row0[0] * row1[1] - row0[1] * row1[0] };
+
+        T r0xr2[] = { row0[1] * row2[2] - row0[2] * row2[1],
+            row0[2] * row2[0] - row0[0] * row2[2],
+            row0[0] * row2[1] - row0[1] * row2[0] };
+
+        T r1xr2[] = { row1[1] * row2[2] - row1[2] * row2[1],
+            row1[2] * row2[0] - row1[0] * row2[2],
+            row1[0] * row2[1] - row1[1] * row2[0] };
+
+        // dot product - to find out which cross-product has the largest length
+        float d0 = r0xr1[0] * r0xr1[0] + r0xr1[1] * r0xr1[1] + r0xr1[2] * r0xr1[2];
+        float d1 = r0xr2[0] * r0xr2[0] + r0xr2[1] * r0xr2[1] + r0xr2[2] * r0xr2[2];
+        float d2 = r1xr2[0] * r1xr2[0] + r1xr2[1] * r1xr2[1] + r1xr2[2] * r1xr2[2];
+        int imax = 0;
+        float dmax = d0;
+
+        if (d1 > dmax) {
+            dmax = d1;
+            imax = 1;
+        }
+        if (d2 > dmax)
+            imax = 2;
+
+        T evec[3];
+        if (imax == 0.0) {
+            evec[0] = r0xr1[0] / sqrt(d0);
+            evec[1] = r0xr1[1] / sqrt(d0);
+            evec[2] = r0xr1[2] / sqrt(d0);
+        }
+        else if (imax == 1.0) {
+            evec[0] = r0xr2[0] / sqrt(d1);
+            evec[1] = r0xr2[1] / sqrt(d1);
+            evec[2] = r0xr2[2] / sqrt(d1);
+        }
+        else {
+            evec[0] = r1xr2[0] / sqrt(d2);
+            evec[1] = r1xr2[1] / sqrt(d2);
+            evec[2] = r1xr2[2] / sqrt(d2);
+        }
+        theta = acos(evec[2]);
+        phi = atan2(evec[1], evec[0]);
+
+    };
+
+    template<typename T>
+    T* cpuEigenvectors3DPolar(const T* mats, const T* lambda, const size_t n) {
+
+        T* evec = new T[4 * n];
+        for (size_t i = 0; i < n; i++) {
+            T theta, phi;
+            evec3Dpolar(&mats[i * 9], lambda[i * 3 + 1], theta, phi);
+            if (isnan(theta) || isnan(phi)) {
+                evec[i * 4 + 0] = acos(0);
+                evec[i * 4 + 1] = atan2(1, 0);
+            }
+            else {
+                evec[i * 4 + 0] = theta;
+                evec[i * 4 + 1] = phi;
+            }
+
+            evec3Dpolar(&mats[i * 9], lambda[i * 3 + 2], theta, phi);
+
+            if (isnan(theta) || isnan(phi)) {
+                evec[i * 4 + 2] = acos(1);
+                evec[i * 4 + 3] = atan2(0, 0);
+            }
+            else {
+                evec[i * 4 + 2] = theta;
+                evec[i * 4 + 3] = phi;
+            }
+        }
+        return evec;
+    }
+
     /// <summary>
     /// CPU code for calculating eigenvalues of a 2D matrix array
     /// </summary>
@@ -284,5 +377,11 @@ namespace tira::cuda {
     T* Eigenvalues3D(T* mats, size_t n, int device) {
         if (device < 0)                                                     // if the device is < zero, run the CPU version
             return cpuEigenvalues3D(mats, n);
+    }
+
+    template<typename T>
+    T* Eigenvectors3DPolar(T* mats, T* lambda, size_t n, int device) {
+        if (device < 0)                                                     // if the device is < zero, run the CPU version
+            return cpuEigenvectors3DPolar(mats, lambda, n);
     }
 }
