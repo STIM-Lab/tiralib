@@ -16,35 +16,35 @@ namespace tira {
 			T zstart = - height / 2.0f;					// start position (bottom end cap)
 
 			// CREATE THE BOTTOM END CAP
-			geometry<T>::m_vertices.push_back(0);		// add the center vertex of the bottom end cap
-			geometry<T>::m_vertices.push_back(0);
-			geometry<T>::m_vertices.push_back(zstart);
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(-1);
-			geometry<T>::m_texcoords.push_back(0);
-			geometry<T>::m_texcoords.push_back(0);
+			geometry<T>::_vertices.push_back(0);		// add the center vertex of the bottom end cap
+			geometry<T>::_vertices.push_back(0);
+			geometry<T>::_vertices.push_back(zstart);
+			geometry<T>::_normals.push_back(0);
+			geometry<T>::_normals.push_back(0);
+			geometry<T>::_normals.push_back(-1);
+			geometry<T>::_texcoords.push_back(0);
+			geometry<T>::_texcoords.push_back(0);
 
 			for (unsigned int ti = 0; ti < sectors; ti++) {		// generate vertices for the triangle fan
 				T theta = dtheta * ti;
 				T x = radius * cos(theta);
 				T y = radius * sin(theta);
-				geometry<T>::m_vertices.push_back(x);
-				geometry<T>::m_vertices.push_back(y);
-				geometry<T>::m_vertices.push_back(zstart);
+				geometry<T>::_vertices.push_back(x);
+				geometry<T>::_vertices.push_back(y);
+				geometry<T>::_vertices.push_back(zstart);
 
-				geometry<T>::m_normals.push_back(0);
-				geometry<T>::m_normals.push_back(0);
-				geometry<T>::m_normals.push_back(-1);
+				geometry<T>::_normals.push_back(0);
+				geometry<T>::_normals.push_back(0);
+				geometry<T>::_normals.push_back(-1);
 
-				geometry<T>::m_texcoords.push_back((double)ti / (double)sectors);
-				geometry<T>::m_texcoords.push_back(0);
+				geometry<T>::_texcoords.push_back((double)ti / (double)sectors);
+				geometry<T>::_texcoords.push_back(0);
 			}
 			for (unsigned int ti = 0; ti < sectors; ti++) {
-				geometry<T>::m_indices.push_back(ti + 1);
-				geometry<T>::m_indices.push_back(0);				
-				if (ti == sectors - 1) geometry<T>::m_indices.push_back(1);
-				else geometry<T>::m_indices.push_back(ti + 2);
+				geometry<T>::_indices.push_back(ti + 1);
+				geometry<T>::_indices.push_back(0);				
+				if (ti == sectors - 1) geometry<T>::_indices.push_back(1);
+				else geometry<T>::_indices.push_back(ti + 2);
 			}
 
 			// CREATE THE TUBE BODY
@@ -58,52 +58,52 @@ namespace tira {
 					T x = radius * cos_theta;
 					T y = radius * sin_theta;
 
-					geometry<T>::m_vertices.push_back(x);
-					geometry<T>::m_vertices.push_back(y);
-					geometry<T>::m_vertices.push_back(z);
+					geometry<T>::_vertices.push_back(x);
+					geometry<T>::_vertices.push_back(y);
+					geometry<T>::_vertices.push_back(z);
 
-					geometry<T>::m_normals.push_back(cos_theta);
-					geometry<T>::m_normals.push_back(sin_theta);
-					geometry<T>::m_normals.push_back(0);
+					geometry<T>::_normals.push_back(cos_theta);
+					geometry<T>::_normals.push_back(sin_theta);
+					geometry<T>::_normals.push_back(0);
 
-					geometry<T>::m_texcoords.push_back((double)ti / (double)sectors);
-					geometry<T>::m_texcoords.push_back((si * dz) / height);
+					geometry<T>::_texcoords.push_back((double)ti / (double)sectors);
+					geometry<T>::_texcoords.push_back((si * dz) / height);
 				}
 			}
 			for (unsigned int si = 0; si < stacks; si++) {
 				unsigned int s1_start = si * sectors + 1;
 				unsigned int s2_start = s1_start + sectors;
 				for (unsigned int ti = 0; ti < sectors; ti++) {
-					geometry<T>::m_indices.push_back(s1_start + ti);
-					if (ti == sectors - 1) geometry<T>::m_indices.push_back(s1_start);
-					else geometry<T>::m_indices.push_back(s1_start + ti + 1);					
-					geometry<T>::m_indices.push_back(s2_start + ti);
+					geometry<T>::_indices.push_back(s1_start + ti);
+					if (ti == sectors - 1) geometry<T>::_indices.push_back(s1_start);
+					else geometry<T>::_indices.push_back(s1_start + ti + 1);					
+					geometry<T>::_indices.push_back(s2_start + ti);
 
-					geometry<T>::m_indices.push_back(s2_start + ti);
-					if (ti == sectors - 1) geometry<T>::m_indices.push_back(s1_start);
-					else geometry<T>::m_indices.push_back(s1_start + ti + 1);
-					if (ti == sectors - 1) geometry<T>::m_indices.push_back(s2_start);
-					else geometry<T>::m_indices.push_back(s2_start + ti + 1);
+					geometry<T>::_indices.push_back(s2_start + ti);
+					if (ti == sectors - 1) geometry<T>::_indices.push_back(s1_start);
+					else geometry<T>::_indices.push_back(s1_start + ti + 1);
+					if (ti == sectors - 1) geometry<T>::_indices.push_back(s2_start);
+					else geometry<T>::_indices.push_back(s2_start + ti + 1);
 				}
 			}
 
 			// CREATE TOP END CAP
-			geometry<T>::m_vertices.push_back(0);		// add the center vertex of the bottom end cap
-			geometry<T>::m_vertices.push_back(0);
-			geometry<T>::m_vertices.push_back(-zstart);
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(1);
-			geometry<T>::m_texcoords.push_back(1);
-			geometry<T>::m_texcoords.push_back(0);
+			geometry<T>::_vertices.push_back(0);		// add the center vertex of the bottom end cap
+			geometry<T>::_vertices.push_back(0);
+			geometry<T>::_vertices.push_back(-zstart);
+			geometry<T>::_normals.push_back(0);
+			geometry<T>::_normals.push_back(0);
+			geometry<T>::_normals.push_back(1);
+			geometry<T>::_texcoords.push_back(1);
+			geometry<T>::_texcoords.push_back(0);
 
 			unsigned int si_start = stacks * sectors + 1;
-			unsigned int endcap = geometry<T>::m_vertices.size() / 3 - 1;
+			unsigned int endcap = geometry<T>::_vertices.size() / 3 - 1;
 			for (unsigned int ti = 0; ti < sectors; ti++) {
-				geometry<T>::m_indices.push_back(endcap);
-				geometry<T>::m_indices.push_back(si_start + ti);
-				if (ti == sectors - 1) geometry<T>::m_indices.push_back(si_start);
-				else geometry<T>::m_indices.push_back(si_start + ti + 1);
+				geometry<T>::_indices.push_back(endcap);
+				geometry<T>::_indices.push_back(si_start + ti);
+				if (ti == sectors - 1) geometry<T>::_indices.push_back(si_start);
+				else geometry<T>::_indices.push_back(si_start + ti + 1);
 
 			}
 
@@ -138,9 +138,9 @@ namespace tira {
 					z = stackHeight;
 
 					// Add vertex position to the vertex list
-					geometry<T>::m_vertices.push_back(x);
-					geometry<T>::m_vertices.push_back(y);
-					geometry<T>::m_vertices.push_back(z);
+					geometry<T>::_vertices.push_back(x);
+					geometry<T>::_vertices.push_back(y);
+					geometry<T>::_vertices.push_back(z);
 
 					// Calculate normalized vertex normal (nx, ny, nz)
 					nx = x / radius;
@@ -148,17 +148,17 @@ namespace tira {
 					nz = 0.0f;
 
 					// Add vertex normal to the normal list
-					geometry<T>::m_normals.push_back(nx);
-					geometry<T>::m_normals.push_back(ny);
-					geometry<T>::m_normals.push_back(nz);
+					geometry<T>::_normals.push_back(nx);
+					geometry<T>::_normals.push_back(ny);
+					geometry<T>::_normals.push_back(nz);
 
 					// Calculate vertex tex coord (s, t) range between [0, 1]
 					s = (float)j / sectors;
 					t = (float)i / stacks;
 
 					// Add vertex texture coordinate to the texture coordinate list
-					geometry<T>::m_texcoords.push_back(s);
-					geometry<T>::m_texcoords.push_back(t);
+					geometry<T>::_texcoords.push_back(s);
+					geometry<T>::_texcoords.push_back(t);
 				}
 			}
 			// generate CCW index list of cylinder triangles
@@ -178,27 +178,27 @@ namespace tira {
 
 
 					// Add indices for two triangles that make up a side face of the cylinder
-					geometry<T>::m_indices.push_back(k1);			// first vertex of first triangle
-					geometry<T>::m_indices.push_back(k2);			// first vertex of second triangle
-					geometry<T>::m_indices.push_back(k1 + 1);		// second vertex of first triangle
+					geometry<T>::_indices.push_back(k1);			// first vertex of first triangle
+					geometry<T>::_indices.push_back(k2);			// first vertex of second triangle
+					geometry<T>::_indices.push_back(k1 + 1);		// second vertex of first triangle
 					
 					
-					geometry<T>::m_indices.push_back(k1 + 1);		// second vertex of first triangle
-					geometry<T>::m_indices.push_back(k2);			// first vertex of second triangle
-					geometry<T>::m_indices.push_back(k2 + 1);		// second vertex of second triangle
+					geometry<T>::_indices.push_back(k1 + 1);		// second vertex of first triangle
+					geometry<T>::_indices.push_back(k2);			// first vertex of second triangle
+					geometry<T>::_indices.push_back(k2 + 1);		// second vertex of second triangle
 					
 					// Add triangles for bottom faces
 					if (i == 0 && j < sectors - 1)
 					{
-						geometry<T>::m_indices.push_back(k1);
-						geometry<T>::m_indices.push_back(k1 + 1);
-						geometry<T>::m_indices.push_back(0);
+						geometry<T>::_indices.push_back(k1);
+						geometry<T>::_indices.push_back(k1 + 1);
+						geometry<T>::_indices.push_back(0);
 					}
 					else if (i == stacks - 1 && j < sectors - 1)
 					{
-						geometry<T>::m_indices.push_back(k2 + 1);
-						geometry<T>::m_indices.push_back(k2);
-						geometry<T>::m_indices.push_back((stacks + 1) * (sectors + 1) - 1);
+						geometry<T>::_indices.push_back(k2 + 1);
+						geometry<T>::_indices.push_back(k2);
+						geometry<T>::_indices.push_back((stacks + 1) * (sectors + 1) - 1);
 					}
 				}
 			}*/
