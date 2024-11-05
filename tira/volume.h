@@ -518,7 +518,7 @@ namespace tira {
 		//calculate gradient along dx (3D)
 		tira::volume<float> gradient_dx()
 		{
-			tira::volume<float>output(X(), Y(), Z());
+			tira::volume<float> output(X(), Y(), Z());
 
 			for (int j = 0; j < X(); j++)
 			{
@@ -556,7 +556,7 @@ namespace tira {
 		}
 
 		// calculate gradient along dy(3D)
-		tira::volume<float > gradient_dy()
+		tira::volume<float> gradient_dy()
 		{
 			tira::volume<float> output(X(), Y(), Z());
 
@@ -734,12 +734,10 @@ namespace tira {
 		/// <param name="value">Value used to generate the border</param>
 		/// <returns></returns>
 		
-		tira::volume<float>border_3D(size_t w) {
-
+		tira::volume<T>border(size_t w, T value) {
 			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
-
-			result = 30;
-			//result = value;														//assign the border value to all pixels in the new image
+			result = value;													// assign the border value to all pixels in the new volume
+ 														
 			for (size_t y = 0; y < Y(); y++) {								//for each pixel in the original image
 				for (size_t x = 0; x < X(); x++) {
 					for (size_t z = 0; z < Z(); z++) {
@@ -846,7 +844,7 @@ namespace tira {
 				field<T>::_shape.clear();
 				field<T>::_data.clear();
 			}
-		// generate a list of file names from the mask	
+			// generate a list of file names from the mask	
 
 			std::vector<std::string> file_names;
 
@@ -868,7 +866,6 @@ namespace tira {
 				ext != ".tif") {
 
 				std::cout << "File format not valid" << std::endl;
-
 			}
 
 			for (auto& p : std::filesystem::directory_iterator(path))							// iterate through each file and stores the ones with 
