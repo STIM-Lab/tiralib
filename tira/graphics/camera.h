@@ -183,11 +183,12 @@ public:
 	/// withing the view frustum. The depth of field is twice the focal distance
 	/// </summary>
 	/// <returns></returns>
-	glm::mat4 orthomatrix(float aspect = 1.0f) {
+	glm::mat4 orthomatrix(float aspect = 1.0f, float zoom_factor = 1.0f, float UP = 0.0f, float RIGHT = 0.0f) {
 		float fov_rad = glm::radians(_fov);
 		float view_width = _focus * std::tan(fov_rad / 2.0f);
 		float dof = 2 * _focus;
-		return glm::ortho(-view_width * aspect, view_width * aspect, -view_width, view_width, 0.0f, dof);
+		return glm::ortho(-view_width * aspect / zoom_factor + RIGHT, view_width * aspect / zoom_factor + RIGHT, 
+			-view_width / zoom_factor + UP, view_width / zoom_factor + UP, 0.0f, dof);
 	}
 
 	glm::mat4 perspectivematrix(float aspect = 1.0f, float depthfactor = 2.0f) {

@@ -595,7 +595,7 @@ namespace tira {
 			return output;
 		}
 
-		tira::volume<float>gradient_dz()
+		tira::volume<float> gradient_dz()
 		{
 			//volume<T>dxdy(X(), Y(), Z());
 
@@ -639,7 +639,6 @@ namespace tira {
 		/// </summary>
 		/// <param name="mask"></param>
 		/// <returns></returns>
-
 		tira::volume<float>convolve3D(tira::volume<float> mask) {
 
 			tira::volume<float>result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), Z() - (mask.Z() - 1));		// output image will be smaller than the input (only valid region returned)
@@ -674,7 +673,6 @@ namespace tira {
 		/// </summary>
 		/// <param name="mask"></param>
 		/// <returns></returns>
-		
 		tira::volume<float> convolve3D_separate(float* K, int k_size) {
 	
 			tira::volume<float>result_x(X(), Y() - (k_size - 1), Z());		// output image will be smaller than the input (only valid region returned)
@@ -733,7 +731,6 @@ namespace tira {
 		/// <param name="w">Width of the border in pixels</param>
 		/// <param name="value">Value used to generate the border</param>
 		/// <returns></returns>
-		
 		tira::volume<T>border(size_t w, T value) {
 			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
 			result = value;													// assign the border value to all pixels in the new volume
@@ -751,14 +748,13 @@ namespace tira {
 
 		}
 		
+
 		/// <summary>
 		/// Generates a border by replicating edge pixels
 		/// </summary>
 		/// <param name="p">Width of the border (padding) to create</param>
 		/// <returns></returns>
-
-
-		tira::volume<float>border_replicate_3D(size_t w) {
+		tira::volume<T>border_replicate_3D(size_t w) {
 
 			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
 
@@ -795,7 +791,38 @@ namespace tira {
 
 		}
 
+		tira::volume<T>border_remove(size_t w) {
+			return crop(w, w, w, X() - 2 * w, Y() - 2 * w, Z() - 2 * w);
+		}
 
+		/// <summary>
+		/// Crops a volume to a desired size
+		/// </summary>
+		/// <param name="x0">X boundary of the cropped image</param>
+		/// <param name="y0">Y boundary of the cropped image</param>
+		/// <param name="z0">Z boundary of the cropped image</param>
+		/// <param name="w">Width of the cropped image</param>
+		/// <param name="h">Height of the cropped image</param>
+		/// <param name="d">Depth of the cropped image</param>
+		/// <returns></returns>
+		tira::volume<T> crop(size_t x0, size_t y0, size_t z0, size_t w, size_t h, size_t d) {
+			if (x0 + w > X() || y0 + h > Y() || z0 + d > Z()) {
+				std::cout << "ERROR: cropped volume contains an invalid region." << std::endl;
+				exit(1);
+			}
+			tira::volume<T> result(w, h, d, C());												// create the output cropped image
+
+			const size_t line_bytes = w * C() * sizeof(T);										// calculate the number of bytes in a slice
+			for (size_t zi = 0; zi < d; zi++) {													// loop through each depth slice
+				for (size_t yi = 0; yi < h; yi++) {												// loop through each row
+					size_t srci = ((z0 + zi) * Y() * X() + (y0 + yi) * X() + x0) * C();			// calculate the source index
+					size_t dsti = (zi * h * w  + yi * w) * C();									// calculate the destination index
+					memcpy(&result._data[dsti], &field<T>::_data[srci], line_bytes);			// copy the data
+				}
+			}
+			
+			return result;
+		}
 
 
 		void save(std::string prefix, std::string format = "bmp") {
@@ -906,7 +933,13 @@ namespace tira {
 			return field<T>::operator=(v);
 		}
 
-		
+		tira::volume<T> operator*(T rhs) {
+			size_t N = field<T>::size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->shape());								// allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] * rhs;						// add the individual pixels
+			return r;														// return the summed result
+		}
 
 		void resize(size_t x, size_t y, size_t z, size_t c = 0) {
 			std::vector<size_t> shape = { z, y, x, c };
