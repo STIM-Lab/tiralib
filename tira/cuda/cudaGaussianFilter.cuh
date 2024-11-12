@@ -225,21 +225,21 @@ namespace tira {
 		/// <param name="source">GPU pointer to the source image array</param>
 		/// <param name="width">width of the source image array</param>
 		/// <param name="height">height of the source image array</param>
-		/// <param name="sigma1">standard deviation of the kernel along the x dimension</param>
-		/// <param name="sigma2">standard deviation of the kernel along the y dimension</param>
-		/// <param name="sigma3">standard deviation of the kernel along the z dimension</param>
+		/// <param name="sigma_w">standard deviation of the kernel along the x dimension</param>
+		/// <param name="sigma_h">standard deviation of the kernel along the y dimension</param>
+		/// <param name="sigma_d">standard deviation of the kernel along the z dimension</param>
 		/// <param name="out_width">width of the output image after the convolution</param>
 		/// <param name="out_height">height of the output image after the convolution</param>
 		/// <param name="out_depth">depth of the output image after the convolution</param>
 		/// <returns></returns>
 		template<typename T>
 		T* GaussianFilter3D(T* source, unsigned int width, unsigned int height, unsigned int depth,
-			float sigma1, float sigma2, float sigma3,
+			float sigma_w, float sigma_h, float sigma_d,
 			unsigned int& out_width, unsigned int& out_height, unsigned int& out_depth) {
 
-			unsigned int window_size_w = (unsigned int)(sigma1 * 6 + 1);		// calculate the window sizes for each kernel
-			unsigned int window_size_h = (unsigned int)(sigma2 * 6 + 1);
-			unsigned int window_size_d = (unsigned int)(sigma3 * 6 + 1);
+			unsigned int window_size_w = (unsigned int)(sigma_w * 6 + 1);		// calculate the window sizes for each kernel
+			unsigned int window_size_h = (unsigned int)(sigma_h * 6 + 1);
+			unsigned int window_size_d = (unsigned int)(sigma_d * 6 + 1);
 			out_width = width - window_size_w;									// calculate the size of the output image
 			out_height = height - window_size_h;
 			out_depth = depth - window_size_d;
@@ -264,29 +264,27 @@ namespace tira {
 			float* kernel_h = (float*)malloc(sizeof(float) * window_size_h);	// allocate space for the y kernel
 			int xh = -(int)(window_size_h / 2);									// calculate the starting coordinate for the kernel
 			for (int j = 0; j < window_size_h; j++) {							// for each pixel in the kernel
-				kernel_h[j] = normal(xh + j, 0, sigma2);						// calculate the Gaussian value
+				kernel_h[j] = normal(xh + j, 0, sigma_h);						// calculate the Gaussian value
 			}
 			// allocate space on the GPU for the y-axis kernel and copy it
 			float* gpu_kernel_h;
 			HANDLE_ERROR(cudaMalloc(&gpu_kernel_h, sizeof(float) * window_size_h));
 			HANDLE_ERROR(cudaMemcpy(gpu_kernel_h, kernel_h, sizeof(float) * window_size_h, cudaMemcpyHostToDevice));
 
-
 			float* kernel_w = (float*)malloc(sizeof(float) * window_size_w);	// allocate space for the x kernel
 			int xw = -(int)(window_size_w / 2);									// calculate the starting coordinate for the kernel
 			for (int i = 0; i < window_size_w; i++) {							// for each pixel in the kernel
-				kernel_w[i] = normal(xw + i, 0, sigma1);						// calculate the Gaussian value
+				kernel_w[i] = normal(xw + i, 0, sigma_w);						// calculate the Gaussian value
 			}
 			// allocate space on the GPU for the x-axis kernel and copy it
 			float* gpu_kernel_w;
 			HANDLE_ERROR(cudaMalloc(&gpu_kernel_w, sizeof(float) * window_size_w));
 			HANDLE_ERROR(cudaMemcpy(gpu_kernel_w, kernel_w, sizeof(float) * window_size_w, cudaMemcpyHostToDevice));
 
-
 			float* kernel_d = (float*)malloc(sizeof(float) * window_size_d);	// allocate space for the z kernel
 			int xd = -(int)(window_size_d / 2);									// calculate the starting coordinate for the kernel
 			for (int k = 0; k < window_size_d; k++) {							// for each pixel in the kernel
-				kernel_d[k] = normal(xd + k, 0, sigma3);						// calculate the Gaussian value
+				kernel_d[k] = normal(xd + k, 0, sigma_d);						// calculate the Gaussian value
 			}
 			// allocate space on the GPU for the z-axis kernel and copy it
 			float* gpu_kernel_d;
