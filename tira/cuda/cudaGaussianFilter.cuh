@@ -291,40 +291,45 @@ namespace tira {
 			HANDLE_ERROR(cudaMalloc(&gpu_kernel_d, sizeof(float) * window_size_d));
 			HANDLE_ERROR(cudaMemcpy(gpu_kernel_d, kernel_d, sizeof(float) * window_size_d, cudaMemcpyHostToDevice));
 			/////////////// End Calculate Convolution Kernels
+			///
+			///// get the active device properties to calculate the optimal the block size
+			int device;
+			HANDLE_ERROR(cudaGetDevice(&device));
+			cudaDeviceProp props;
+			HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
+			unsigned int max_threads = props.maxThreadsPerBlock;
+			dim3 blockDim = {(unsigned int) std::sqrt(max_threads), (unsigned int) std::sqrt(max_threads)};
 
 			// This is a separable convolution and will be done in three passes
 			T* gpu_firstpass;															// allocate space on the GPU for the first pass
 			size_t bytes_firstpass = sizeof(T) * width * height * out_depth;			// calculate the number of bytes in the first pass output
 			HANDLE_ERROR(cudaMalloc(&gpu_firstpass, bytes_firstpass));
 
+			// First pass - Z convolution
+			dim3 gridDim = { width / blockDim.x + 1, height / blockDim.y + 1, out_depth / blockDim.z + 1 };
+			kernel_Convolve3DZ << <gridDim, blockDim >> > (gpu_source, gpu_firstpass, width, height, out_depth, gpu_kernel_d, window_size_d);
+
+			if (attribs.type == cudaMemoryTypeHost)
+				HANDLE_ERROR(cudaFree(gpu_source));
+
 			T* gpu_secondpass;															// allocate space on the GPU for the second pass
 			size_t bytes_secondpass = sizeof(T) * width * out_height * out_depth;
 			HANDLE_ERROR(cudaMalloc(&gpu_secondpass, bytes_secondpass));
+
+			// Second pass - Y convolution
+			gridDim = { width / blockDim.x + 1, out_height / blockDim.y + 1, out_depth / blockDim.z + 1 };
+			kernel_Convolve3DY << <gridDim, blockDim >> > (gpu_firstpass, gpu_secondpass, width, height, out_height, out_depth, gpu_kernel_h, window_size_h);
+			HANDLE_ERROR(cudaFree(gpu_firstpass));
 
 			T* gpu_out;																	// calculate the size of the final output image
 			size_t out_bytes = sizeof(T) * out_width * out_height * out_depth;
 			HANDLE_ERROR(cudaMalloc(&gpu_out, out_bytes));								// allocate space on the GPU for the final output
 
-			// get the active device properties to calculate the optimal the block size
-			int device;
-			HANDLE_ERROR(cudaGetDevice(&device));
-			cudaDeviceProp props;
-			HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
-			unsigned int max_threads = props.maxThreadsPerBlock;
-			dim3 blockDim = { (unsigned int)std::sqrt(max_threads), (unsigned int)std::sqrt(max_threads) };
-
-			// First pass - Z convolution
-			dim3 gridDim = { width / blockDim.x + 1, height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_Convolve3DZ << <gridDim, blockDim >> > (gpu_source, gpu_firstpass, width, height, out_depth, gpu_kernel_d, window_size_d);
-
-			// Second pass - Y convolution
-			gridDim = { width / blockDim.x + 1, out_height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_Convolve3DY << <gridDim, blockDim >> > (gpu_firstpass, gpu_secondpass, width, height, out_height, out_depth, gpu_kernel_h, window_size_h);
-
 			// Third/Last pass - X convolution
 			gridDim = { out_width / blockDim.x + 1, out_height / blockDim.y + 1, out_depth / blockDim.z + 1 };
 			kernel_Convolve3DX << <gridDim, blockDim >> > (gpu_secondpass, gpu_out, width, out_width, out_height, out_depth, gpu_kernel_w, window_size_w);
 
+			HANDLE_ERROR(cudaFree(gpu_secondpass));
 
 			// allocate space for the output volume on the CPU and copy the final result
 			T* out;
@@ -334,16 +339,9 @@ namespace tira {
 			else {													// otherwise copy the output to the host
 				out = (T*)malloc(out_bytes);
 				HANDLE_ERROR(cudaMemcpy(out, gpu_out, out_bytes, cudaMemcpyDeviceToHost));
-			}
-
-			// free everything
-			if (attribs.type == cudaMemoryTypeHost) {				// if the source pointer was on the host, free the interim GPU versions
-				HANDLE_ERROR(cudaFree(gpu_source));
 				HANDLE_ERROR(cudaFree(gpu_out));
 			}
 
-			HANDLE_ERROR(cudaFree(gpu_firstpass));
-			HANDLE_ERROR(cudaFree(gpu_secondpass));
 			HANDLE_ERROR(cudaFree(gpu_kernel_w));
 			HANDLE_ERROR(cudaFree(gpu_kernel_h));
 			HANDLE_ERROR(cudaFree(gpu_kernel_d));

@@ -87,7 +87,7 @@ namespace tira {
 		static glGeometry GenerateRectangle() {
 			rectangle<T> r;
 			std::vector<T> v = r.getInterleavedVertices();									// generate a vector of interleaved vertices
-			std::vector<unsigned int> i = r.getIndices();									// generate a vector of indices
+			const std::vector<unsigned int> i = r.getIndices();									// generate a vector of indices
 			glGeometry rectangle;
 
 			glVertexBufferLayout layout;

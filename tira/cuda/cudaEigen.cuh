@@ -374,14 +374,16 @@ namespace tira::cuda {
     }
 
     template<typename T>
-    T* Eigenvalues3D(T* mats, size_t n, int device) {
+    T* Eigenvalues3D(const T* mats, const size_t n, const int device) {
         if (device < 0)                                                     // if the device is < zero, run the CPU version
             return cpuEigenvalues3D(mats, n);
+        return cpuEigenvalues3D(mats, n);                  // temporary until the GPU version is implemented
     }
 
     template<typename T>
-    T* Eigenvectors3DPolar(T* mats, T* lambda, size_t n, int device) {
+    T* Eigenvectors3DPolar(const T* mats, const T* lambda, const size_t n, const int device) {
         if (device < 0)                                                     // if the device is < zero, run the CPU version
             return cpuEigenvectors3DPolar(mats, lambda, n);
+        return cpuEigenvectors3DPolar(mats, lambda, n);    // temporary until the GPU version is implemented
     }
 }

@@ -146,8 +146,8 @@ namespace tira{
 
 		geometry() {}
 
-		geometry<T> translate(std::vector<T> coords) {
-			if (coords.size() > _vertex_dim)
+		geometry<T> translate(std::vector<T> coords, int component = 0) {
+			if ( (component == 0 && coords.size() > _vertex_dim) || (component == 1 && coords.size() > _texture_dim))
 				throw std::invalid_argument("Too many translation coordinates provided");
 
 			geometry<T> result(*this);
@@ -155,23 +155,30 @@ namespace tira{
 			for (size_t d = 0; d < coords.size(); d++) {
 				if (coords[d] != 0) {
 					for (size_t vi = 0; vi < V; vi++) {
-						result._vertices[vi * _vertex_dim + d] += coords[d];
+						if(component == 0)
+							result._vertices[vi * _vertex_dim + d] += coords[d];
+						else if(component == 1)
+							result._texcoords[vi * _texture_dim + d] += coords[d];
 					}
 				}
 			}
 			return result;
 		}
 
-		geometry<T> scale(std::vector<T> coords) {
-			if (coords.size() > _vertex_dim)
-				throw std::invalid_argument("Too many translation coordinates provided");
+
+		geometry<T> scale(std::vector<T> coords, int component = 0) {
+			if ( (component == 0 && coords.size() > _vertex_dim) || (component == 1 && coords.size() > _texture_dim))
+				throw std::invalid_argument("Too many scale coordinates provided");
 
 			geometry<T> result(*this);
 			size_t V = getNumVertices();
 			for (size_t d = 0; d < coords.size(); d++) {
 				if (coords[d] != 1) {
 					for (size_t vi = 0; vi < V; vi++) {
-						result._vertices[vi * _vertex_dim + d] *= coords[d];
+						if(component == 0)
+							result._vertices[vi * _vertex_dim + d] *= coords[d];
+						else if(component == 1)
+							result._texcoords[vi * _texture_dim + d] *= coords[d];
 					}
 				}
 			}
