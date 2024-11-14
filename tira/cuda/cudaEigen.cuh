@@ -260,6 +260,13 @@ namespace tira::cuda {
     }
 
     template<typename T>
+    __global__ void kernel_eval3D(T* mats, size_t n, T* evals) {
+        const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= n) return;
+        eval3D(&mats[i * 9], evals[i * 3 + 0], evals[i * 3 + 1], evals[i * 3 + 2]);
+    }
+
+    template<typename T>
     CUDA_CALLABLE void evec3Dpolar(const T* matrix, T lambda, T& theta, T& phi) {
         
         float a, b, c, d, e, f, g, h, i;
@@ -353,7 +360,7 @@ namespace tira::cuda {
     }
 
     /// <summary>
-    /// CPU code for calculating eigenvalues of a 2D matrix array
+    /// CPU code for calculating eigenvalues of a 3D matrix array
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="mats"></param>
@@ -374,16 +381,56 @@ namespace tira::cuda {
     }
 
     template<typename T>
-    T* Eigenvalues3D(const T* mats, const size_t n, const int device) {
+    T* Eigenvalues3D(T* mats, size_t n, int device) {
         if (device < 0)                                                     // if the device is < zero, run the CPU version
             return cpuEigenvalues3D(mats, n);
-        return cpuEigenvalues3D(mats, n);                  // temporary until the GPU version is implemented
+
+        T* gpu_mats;
+        size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
+        size_t evals_bytes = sizeof(T) * 3 * n;                             // required bytes for storing eigenvalues
+
+        // determine if the source volume is provided on the CPU or GPU
+        cudaPointerAttributes attribs;										// create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			    // get the attributes for the source pointer
+
+        if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
+            gpu_mats = mats;									            // set the gpu_source pointer to source
+        }
+        else {																// otherwise copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));   // copy the source image to the GPU
+        }
+
+        // get the active device properties to calculate the optimal the block size
+        HANDLE_ERROR(cudaGetDevice(&device));
+        cudaDeviceProp props;
+        HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
+        unsigned int max_threads = props.maxThreadsPerBlock;
+        dim3 blockDim = max_threads;
+        dim3 gridDim = n / blockDim.x + 1;	                                // calculate the grid size for the first pass
+
+        T* gpu_evals;
+        HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
+        kernel_eval3D << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
+
+        T* evals;
+        if (attribs.type == cudaMemoryTypeDevice) {
+            evals = gpu_evals;
+        }
+        else {
+            evals = new T[3 * n];
+            HANDLE_ERROR(cudaMemcpy(evals, gpu_evals, evals_bytes, cudaMemcpyDeviceToHost));
+            HANDLE_ERROR(cudaFree(gpu_evals));
+            HANDLE_ERROR(cudaFree(gpu_mats));
+        }
+
+        return evals;
     }
 
     template<typename T>
     T* Eigenvectors3DPolar(const T* mats, const T* lambda, const size_t n, const int device) {
         if (device < 0)                                                     // if the device is < zero, run the CPU version
             return cpuEigenvectors3DPolar(mats, lambda, n);
-        return cpuEigenvectors3DPolar(mats, lambda, n);    // temporary until the GPU version is implemented
+        return cpuEigenvectors3DPolar(mats, lambda, n);                     // temporary until the GPU version is implemented
     }
 }
