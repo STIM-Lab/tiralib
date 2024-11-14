@@ -4,6 +4,7 @@
 
 #include <iomanip>
 #include <filesystem>
+#include <set>
 
 
 namespace tira {
@@ -871,9 +872,7 @@ namespace tira {
 				field<T>::_shape.clear();
 				field<T>::_data.clear();
 			}
-			// generate a list of file names from the mask	
-
-			std::vector<std::string> file_names;
+			// generate a list of file names from the mask
 
 			// ------------- using filesystem ---------------------- //
 			
@@ -895,11 +894,16 @@ namespace tira {
 				std::cout << "File format not valid" << std::endl;
 			}
 
+			std::set<std::filesystem::path> sorted_files;
 			for (auto& p : std::filesystem::directory_iterator(path))							// iterate through each file and stores the ones with 
 			{																					// desired extension in file_name vector
 				if (p.path().extension() == ext) {
-					file_names.push_back(path + p.path().filename().string());
+					sorted_files.insert(path + p.path().filename().string());
 				}
+			}
+			std::vector<std::string> file_names;
+			for(auto &filename : sorted_files) {
+				file_names.push_back(filename);
 			}
 			if(file_names.size() != 0)
 				load(file_names);
