@@ -309,7 +309,7 @@ namespace tira {
 			dim3 gridDim = { width / blockDim.x + 1, height / blockDim.y + 1, out_depth / blockDim.z + 1 };
 			kernel_Convolve3DZ << <gridDim, blockDim >> > (gpu_source, gpu_firstpass, width, height, out_depth, gpu_kernel_d, window_size_d);
 
-			if (attribs.type == cudaMemoryTypeHost)
+			if (attribs.type != cudaMemoryTypeDevice)
 				HANDLE_ERROR(cudaFree(gpu_source));
 
 			T* gpu_secondpass;															// allocate space on the GPU for the second pass
@@ -345,6 +345,10 @@ namespace tira {
 			HANDLE_ERROR(cudaFree(gpu_kernel_w));
 			HANDLE_ERROR(cudaFree(gpu_kernel_h));
 			HANDLE_ERROR(cudaFree(gpu_kernel_d));
+
+			free(kernel_w);
+			free(kernel_h);
+			free(kernel_d);
 
 			return out;
 
