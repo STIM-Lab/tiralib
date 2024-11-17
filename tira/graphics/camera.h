@@ -89,6 +89,17 @@ public:
 	}
 	void dolly(const float x, const float y, const float z){ dolly(glm::vec3(x, y, z));}
 
+	/// <summary>
+	/// Move the camera a specified distance from the view position
+	/// </summary>
+	/// <param name="d"></param>
+	void distance(const float d) {
+		const glm::vec3 focal_point = _position + _focus * _view;
+
+		_position = focal_point - _view * d;
+		_focus = d;
+	}
+
 	// Push the camera along the view direction
 	void push(float delta) {
 		if(delta > _focus)

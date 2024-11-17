@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tira/image.h>
+#include <tira/progressbar.h>
 
 #include <iomanip>
 #include <filesystem>
@@ -45,7 +46,8 @@ namespace tira {
 		/// <param name="c">Color channel</param>
 		/// <returns></returns>
 		inline size_t idx_offset(size_t x, size_t y, size_t z, size_t c = 0) const {
-			return z * C() * X() * Y() + y * C() * X() + x * C() + c;		// z * C * X * Y + y * C * X + x * C + c
+			size_t i = z * C() * X() * Y() + y * C() * X() + x * C() + c;
+			return i;		// z * C * X * Y + y * C * X + x * C + c
 		}
 
 		/// <summary>
@@ -86,7 +88,8 @@ namespace tira {
 		}
 
 		T& at(size_t x, size_t y, size_t z, size_t c = 0) {
-			return field<T>::_data[idx_offset(x, y, z, c)];
+			size_t i = idx_offset(x, y, z, c);
+			return field<T>::_data[i];
 		}
 
 		tira::volume<float> _dist(tira::volume<int>& binary_boundary) {
@@ -356,6 +359,11 @@ namespace tira {
 		inline double sx() const { return X() * _spacing[0]; }
 		inline double sy() const { return Y() * _spacing[1]; }
 		inline double sz() const { return Z() * _spacing[2]; }
+
+		inline double px(size_t xi) { return xi * dx(); }
+		inline double py(size_t yi) { return yi * dy(); }
+		inline double pz(size_t zi) { return zi * dz(); }
+
 		inline double smax() const { return std::max(sx(), std::max(sy(), sz())); }
 
 		/// <summary>
@@ -864,7 +872,9 @@ namespace tira {
 						}
 					}
 				}
+				progressbar((float)zi / (float)Z());
 			}
+			std::cout << std::endl;
 		}
 
 		void load(std::string file_mask) {
@@ -903,7 +913,7 @@ namespace tira {
 			}
 			std::vector<std::string> file_names;
 			for(auto &filename : sorted_files) {
-				file_names.push_back(filename);
+				file_names.push_back(filename.string());
 			}
 			if(file_names.size() != 0)
 				load(file_names);
@@ -951,6 +961,8 @@ namespace tira {
 		}
 
 		void resize(std::vector<size_t> shape) {
+			for (size_t d = shape.size(); d < 4; d++)
+				shape.push_back(1);
 			field<T>::resize(shape);
 		}
 
