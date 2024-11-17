@@ -381,6 +381,17 @@ namespace tira {
 			return r;
 		}
 
+		/// <summary>
+		/// Cast data types
+		/// </summary>
+		/// <typeparam name="V"></typeparam>
+		template<typename V>
+		operator volume<V>() {
+			volume<V> r(this->shape());					//create a new image
+			std::copy(&field<T>::_data[0], &field<T>::_data[0] + field<T>::size(), r.data());		//copy and cast the data
+			return r;									//return the new image
+		}
+
 		T minv() {
 			T m = *std::min_element(field<T>::_data.begin(), field<T>::_data.end());
 			return m;
@@ -953,6 +964,48 @@ namespace tira {
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] * rhs;						// add the individual pixels
 			return r;														// return the summed result
+		}
+
+		volume<T> operator*(volume<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			if (C() == rhs.C()) {					// if both images have the same number of color channels
+				tira::volume<T> result(this->shape());
+				for (size_t i = 0; i < field<T>::size(); i++) {
+					result._data[i] = field<T>::_data[i] * rhs._data[i];
+				}
+				return result;
+			}
+			else if (C() == 1) {
+				tira::volume<T> result(X(), Y(), rhs.C());
+				for (size_t zi = 0; zi < Z(); zi++) {
+					for (size_t yi = 0; yi < Y(); yi++) {
+						for (size_t xi = 0; xi < X(); xi++) {
+							for (size_t ci = 0; ci < rhs.C(); ci++) {
+								result(xi, yi, zi, ci) = at(xi, yi, zi) * rhs(xi, yi, zi, ci);
+							}
+						}
+					}
+				}
+				return result;
+			}
+			else if (rhs.C() == 1) {
+				tira::volume<T> result(this->shape());
+				for (size_t zi = 0; zi < Z(); zi++) {
+					for (size_t yi = 0; yi < Y(); yi++) {
+						for (size_t xi = 0; xi < X(); xi++) {
+							for (size_t ci = 0; ci < C(); ci++) {
+								result(xi, yi, zi, ci) = at(xi, yi, zi, ci) * rhs(xi, yi, zi);
+							}
+						}
+					}
+				}
+				return result;
+			}
+			else {
+				throw std::runtime_error("Number of color channels are incompatible");
+			}
 		}
 
 		void resize(size_t x, size_t y, size_t z, size_t c = 0) {
