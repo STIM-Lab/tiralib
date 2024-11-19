@@ -576,14 +576,14 @@ namespace tira {
 		/// <summary>
 		/// Pads the field with a constant value
 		/// </summary>
-		/// <param name="dist	">Vector of paddings in each direction</param>
+		/// <param name="width	">Vector of paddings in each direction</param>
 		/// <param name="val	">The value for the padded values</param>
-		field<T> border(std::vector<size_t> dist, T val=0) {
+		field<T> border(std::vector<size_t> width, T val=0) {
 			std::vector<size_t> new_shape = _shape;
 			size_t D = _shape.size();
 
-			for (size_t si = 0; si < dist.size(); si++) {
-				new_shape[si] += 2 * dist[si];				// calculate new shape 
+			for (size_t si = 0; si < width.size(); si++) {
+				new_shape[si] += 2 * width[si];				// calculate new shape
 			}
 
 			field<T> result(new_shape, val);				// initialize result field with val as outer values
@@ -591,8 +591,8 @@ namespace tira {
 			std::vector<size_t> new_coord(D);
 			for (size_t ui = 0; ui < size(); ui++) {
 				coord(ui, new_coord);						// find new coordinates
-				for (int si = 0; si < dist.size(); si++) {
-					new_coord[si] += dist[si];
+				for (int si = 0; si < width.size(); si++) {
+					new_coord[si] += width[si];
 				}
 				size_t new_index = result.idx(new_coord);	//find new index
 				result._data[new_index] = _data[ui];		// replace the values from the initial field

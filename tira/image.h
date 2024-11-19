@@ -1,6 +1,7 @@
 #pragma once
 
 #define cimg_use_png
+#define cimg_use_jpeg
 #include "extern/CImg.h"
 #undef min
 
@@ -687,7 +688,7 @@ namespace tira {
 		/// <param name="w">Width of the border in pixels</param>
 		/// <param name="value">Value used to generate the border</param>
 		/// <returns></returns>
-		image<T> border(size_t w, T value) {
+		image<T> border(const size_t w, const T value) {
 			image<T> result(width() + w * 2, height() + w * 2, channels());						//create an output image
 			result = value;														//assign the border value to all pixels in the new image
 			for (size_t y = 0; y < height(); y++) {								//for each pixel in the original image
@@ -698,6 +699,10 @@ namespace tira {
 				}
 			}
 			return result;
+		}
+
+		image<T> border(std::vector<size_t> width, T val=0) {
+			return static_cast< image<T> >(field<T>::border(width, val));
 		}
 
 		/// <summary>
