@@ -6,33 +6,25 @@
 #include <tira/cuda/error.h>
 #include <tira/cuda/callable.h>
 
-namespace tira::cuda {
-    #define PI 3.14159265358979323846
+#define PI 3.14159265358979323846
 
-    template<typename T>
-    CUDA_CALLABLE void eval2D(const T* matrix, T& eval0, T& eval1) {
-        T d = matrix[0];
-        T e = matrix[1];
-        T f = matrix[2];
-        T g = matrix[3];
+template<typename T>
+CUDA_CALLABLE void eval2D(const T* matrix, T& eval0, T& eval1) {
+    T d = matrix[0];
+    T e = matrix[1];
+    T f = matrix[2];
+    T g = matrix[3];
 
-        const float dpg = d + g;
-        const float disc = sqrt((4 * e * f) + pow(d - g, 2));
-        float a = (dpg + disc) / 2.0f;
-        float b = (dpg - disc) / 2.0f;
+    const float dpg = d + g;
+    const float disc = sqrt((4 * e * f) + pow(d - g, 2));
+    float a = (dpg + disc) / 2.0f;
+    float b = (dpg - disc) / 2.0f;
 
-        eval0 = std::abs(a) < std::abs(b) ? a : b;
-        eval1 = std::abs(a) > std::abs(b) ? a : b;
-    }
+    eval0 = std::abs(a) < std::abs(b) ? a : b;
+    eval1 = std::abs(a) > std::abs(b) ? a : b;
+}
 
-    template<typename T>
-    __global__ void kernel_eval2D(T* mats, size_t n, T* evals) {
-        const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= n) return;
-        eval2D(&mats[i * 4], evals[i * 2 + 0], evals[i * 2 + 1]);
-    }
-
-
+namespace tira::cpu {
     /// <summary>
     /// CPU code for calculating eigenvalues of a 2D matrix array
     /// </summary>
@@ -41,7 +33,7 @@ namespace tira::cuda {
     /// <param name="n"></param>
     /// <returns></returns>
     template<typename T>
-    T* cpuEigenvalues2D(const T* mats, const size_t n) {
+    T* Eigenvalues2D(const T* mats, const size_t n) {
 
         T* evals = new T[2*n];
         T eval0, eval1;
@@ -52,6 +44,55 @@ namespace tira::cuda {
         }
         return evals;
     }
+
+    template<typename T>
+    T* Eigenvectors2DPolar(const T* mats, const T* evals, const size_t n) {
+
+        T* vecs = new T[2 * n];
+        T vec0, vec1;
+        for (size_t i = 0; i < n; i++) {
+            evec2Dpolar(&mats[i * 4], &evals[i * 2], vec0, vec1);
+            vecs[i * 2 + 0] = vec0;
+            vecs[i * 2 + 1] = vec1;
+        }
+        return vecs;
+    }
+
+
+    /// <summary>
+    /// CPU code for calculating eigenvalues of a 3D matrix array
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="mats"></param>
+    /// <param name="n"></param>
+    /// <returns></returns>
+    template<typename T>
+    T* Eigenvalues3D(const T* mats, const size_t n) {
+
+        T* evals = new T[3 * n];
+        T eval0, eval1, eval2;
+        for (size_t i = 0; i < n; i++) {
+            eval3D(&mats[i * 9], eval0, eval1, eval2);
+            evals[i * 3 + 0] = eval0;
+            evals[i * 3 + 1] = eval1;
+            evals[i * 3 + 2] = eval2;
+        }
+        return evals;
+    }
+}
+
+namespace tira::cuda {
+
+
+    template<typename T>
+    __global__ void kernel_eval2D(T* mats, size_t n, T* evals) {
+        const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= n) return;
+        eval2D(&mats[i * 4], evals[i * 2 + 0], evals[i * 2 + 1]);
+    }
+
+
+
 
     template<typename T>
     T* Eigenvalues2D(T* mats, size_t n, int device) {
@@ -129,24 +170,10 @@ namespace tira::cuda {
         evec2Dpolar(&mats[i * 4], &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
     }
 
-    template<typename T>
-    T* cpuEigenvectors2DPolar(const T* mats, const T* evals, const size_t n) {
 
-        T* vecs = new T[2 * n];
-        T vec0, vec1;
-        for (size_t i = 0; i < n; i++) {
-            evec2Dpolar(&mats[i * 4], &evals[i * 2], vec0, vec1);
-            vecs[i * 2 + 0] = vec0;
-            vecs[i * 2 + 1] = vec1;
-        }
-        return vecs;
-    }
 
     template<typename T>
     T* Eigenvectors2DPolar(T* mats, T* evals, size_t n, int device) {
-
-        if (device < 0)                                                     // if the device is < zero, run the CPU version
-            return cpuEigenvectors2DPolar(mats, evals, n);
 
         T* gpu_mats;
         T* gpu_evals;
@@ -357,27 +384,6 @@ namespace tira::cuda {
             }
         }
         return evec;
-    }
-
-    /// <summary>
-    /// CPU code for calculating eigenvalues of a 3D matrix array
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="mats"></param>
-    /// <param name="n"></param>
-    /// <returns></returns>
-    template<typename T>
-    T* cpuEigenvalues3D(const T* mats, const size_t n) {
-
-        T* evals = new T[3 * n];
-        T eval0, eval1, eval2;
-        for (size_t i = 0; i < n; i++) {
-            eval3D(&mats[i * 9], eval0, eval1, eval2);
-            evals[i * 3 + 0] = eval0;
-            evals[i * 3 + 1] = eval1;
-            evals[i * 3 + 2] = eval2;
-        }
-        return evals;
     }
 
     template<typename T>
