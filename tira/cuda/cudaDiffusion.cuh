@@ -5,7 +5,6 @@
 #pragma once
 #include <tira/cuda/error.h>
 #include <tira/cuda/callable.h>
-#include <cuda_runtime.h>
 
 namespace tira::cuda {
 
