@@ -313,13 +313,16 @@ namespace tira {
 			memcpy(reinterpret_cast<void*>(&_data[0]), reinterpret_cast<void*>(&data[0]), bytes());									// copy the data from the
 		}
 		
+		template<typename D = T>
 		void save_npy(const std::string& filename) {
 			bool fortran_order = false;
 			std::vector<unsigned long> shape(_shape.size());
 			for (int i = 0; i < shape.size(); i++)
 				shape[i] = _shape[i];
+			if (sizeof(D) < sizeof(T))
+				shape.push_back(sizeof(T) / sizeof(D));
 
-			npy::SaveArrayAsNumpy(filename, fortran_order, shape.size(), (const unsigned long *) & shape[0], &_data[0]);
+			npy::SaveArrayAsNumpy(filename, fortran_order, shape.size(), (const unsigned long*)&shape[0], (D*)(&_data[0]));
 		}
 
 

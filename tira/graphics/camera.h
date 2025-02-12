@@ -199,8 +199,8 @@ public:
 			-view_width / zoom_factor + UP, view_width / zoom_factor + UP, 0.0f, dof);
 	}
 
-	CUDA_CALLABLE glm::mat4 perspectivematrix(const float aspect = 1.0f, const float depthfactor = 2.0f) const {
-		const float fov_rad = glm::radians(_fov);
+	CUDA_CALLABLE glm::mat4 perspectivematrix(const float aspect = 1.0f, const float depthfactor = 2.0f, const float zoom_factor = 1.0f) const {
+		const float fov_rad = glm::radians(_fov / zoom_factor);
 		return glm::perspective(fov_rad, aspect, _focus/ depthfactor, depthfactor * _focus);
 	}
 
