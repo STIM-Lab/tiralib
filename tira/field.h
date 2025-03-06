@@ -5,6 +5,7 @@
 #include <cmath>
 #include <numbers>
 #include <typeinfo>
+#include <fstream>
 
 #include "extern/libnpy/npy.hpp"
 #include "tira/calculus.h"
@@ -315,14 +316,28 @@ namespace tira {
 		
 		template<typename D = T>
 		void save_npy(const std::string& filename) {
-			bool fortran_order = false;
-			std::vector<unsigned long> shape(_shape.size());
-			for (int i = 0; i < shape.size(); i++)
-				shape[i] = _shape[i];
-			if (sizeof(D) < sizeof(T))
-				shape.push_back(sizeof(T) / sizeof(D));
+			bool fortran_order = false;								// default to standard (C) order
+			std::vector<size_t> destshape = _shape;
 
-			npy::SaveArrayAsNumpy(filename, fortran_order, shape.size(), (const unsigned long*)&shape[0], (D*)(&_data[0]));
+			//npy::SaveArrayAsNumpy(filename, fortran_order, shape.size(), (const unsigned long*)&shape[0], (D*)(&_data[0]));
+			save_npy<D>(filename, destshape);
+		}
+
+		template<typename D = T>
+		void save_npy(const std::string& filename, std::vector<size_t> dest_shape) {
+			bool fortran_order = false;								// default to standard (C) order
+			//for (int i = 0; i < dest_shape.size(); i++)					// copy the grid shape
+			//	shape[i] = _shape[i];
+			if (sizeof(D) < sizeof(T))								// if the data type stored is smaller than the grid data type
+				dest_shape.push_back(sizeof(T) / sizeof(D));			// add another dimension to account for this
+
+			npy::SaveArrayAsNumpy(filename, fortran_order, dest_shape.size(), (const unsigned long*)&dest_shape[0], (D*)(&_data[0]));
+		}
+
+		void save_raw(const std::string& filename) {
+			std::ofstream outfile;
+			outfile.open(filename, std::ios::app | std::ios::binary);
+			outfile.write((char*)&_data[0], bytes());
 		}
 
 

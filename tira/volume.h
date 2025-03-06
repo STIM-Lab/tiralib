@@ -946,6 +946,17 @@ namespace tira {
 				field<T>::_shape.push_back(1);
 		}
 
+		/// Save the volume as a Numpy file. If there is only one channel, this function will squeeze the dimensions.
+		template<typename D = T>
+		void save_npy(std::string filename) {
+			std::vector<size_t> squeezed_shape = field<T>::_shape;
+			if (field<T>::_shape[3] == 1) {
+				squeezed_shape.pop_back();
+			}
+			field<T>::template save_npy<D>(filename, squeezed_shape);
+
+		}
+
 		T& operator()(size_t x, size_t y, size_t z, size_t c = 0) {
 			return at(x, y, z, c);
 		}
