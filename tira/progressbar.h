@@ -1,7 +1,7 @@
 #pragma once
 
 namespace tira {
-	void progressbar(float progress) {
+	inline void progressbar(float progress) {
 		if (progress > 1.0f) progress = 1.0f;
 		int barWidth = 70;
 

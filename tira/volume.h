@@ -973,7 +973,23 @@ namespace tira {
 			size_t N = field<T>::size();									// calculate the total number of values in the volume
 			tira::volume<T> r(this->shape());								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] * rhs;						// add the individual pixels
+				r._data[n] = field<T>::_data[n] * rhs;						// multiply the individual samples
+			return r;														// return the final result
+		}
+
+		tira::volume<T> operator+(T rhs) {
+			size_t N = field<T>::size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->shape());								// allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] + rhs;						// add the individual pixels
+			return r;														// return the summed result
+		}
+
+		tira::volume<T> operator-(T rhs) {
+			size_t N = field<T>::size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->shape());								// allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] - rhs;						// add the individual pixels
 			return r;														// return the summed result
 		}
 
@@ -1018,6 +1034,58 @@ namespace tira {
 				throw std::runtime_error("Number of color channels are incompatible");
 			}
 		}
+
+		volume<T> operator+(volume<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			tira::volume<T> result(this->shape());						// create the output
+			for (size_t zi = 0; zi < Z(); zi++) {
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) + rhs(xi, yi, zi);
+						}
+					}
+				}
+			}
+			return result;
+		}
+
+		volume<T> operator-(volume<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			tira::volume<T> result(this->shape());						// create the output
+			for (size_t zi = 0; zi < Z(); zi++) {
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) - rhs(xi, yi, zi);
+						}
+					}
+				}
+			}
+			return result;
+		}
+
+		volume<T> operator/(volume<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			tira::volume<T> result(this->shape());						// create the output
+			for (size_t zi = 0; zi < Z(); zi++) {
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) / rhs(xi, yi, zi);
+						}
+					}
+				}
+			}
+			return result;
+		}
+
 
 		void resize(size_t x, size_t y, size_t z, size_t c = 0) {
 			std::vector<size_t> shape = { z, y, x, c };
