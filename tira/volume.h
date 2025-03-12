@@ -133,7 +133,8 @@ namespace tira {
 
 
 			tira::volume<float> dist(w, h, l);										// create an image to store the distance field
-			dist = 9999.0f;																// initialize the distance field to a very large value
+			const float bignum = 9999.0f;
+			dist = bignum;																// initialize the distance field to a very large value
 
 
 
@@ -148,8 +149,22 @@ namespace tira {
 								int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
 								int nz = z + get<2>(neighbors[k]);								// calculate the z coordinate of the neighbor cell
 								if (binary_boundary(nx, ny, nz)) {												// if the neighboring cell (nx, ny) is ALSO in the boundary
-									float da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from pixel(x,y) to contour da
-									float db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from neighbor to contour db
+									float p_dist = abs(at(x, y, z));
+									float n_dist = abs(at(nx, ny, nz));
+
+									float da, db;
+									if (p_dist == n_dist) {											// handle division by zero
+										da = bignum;												// if the denominator is zero, we initialize the distance to its maximum
+										db = bignum;
+									}
+									else {
+										da = p_dist / (n_dist - p_dist);
+										db = n_dist / (n_dist - p_dist);
+									}
+									//float da = p_dist / (n_dist - p_dist);
+									//float db = n_dist / (n_dist - p_dist);
+									//float da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from pixel(x,y) to contour da
+									//float db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from neighbor to contour db
 									dist(x, y, z) = std::min(dist(x, y, z), da);									// minimum between distance and large boundary value of pixel (x,y)
 									dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);								// minimum between distance and large boundary value of neighbor (nx, ny)
 								}
