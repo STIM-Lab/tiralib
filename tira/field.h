@@ -333,7 +333,7 @@ namespace tira {
 				cast_dest_shape.push_back(sizeof(T) / sizeof(D));			// add another dimension to account for this
 
 
-			npy::SaveArrayAsNumpy(filename, fortran_order, dest_shape.size(), (const unsigned long*)&dest_shape[0], (D*)(&_data[0]));
+			npy::SaveArrayAsNumpy(filename, fortran_order, cast_dest_shape.size(), (const unsigned long*)&cast_dest_shape[0], (D*)(&_data[0]));
 		}
 
 		void save_raw(const std::string& filename) {
