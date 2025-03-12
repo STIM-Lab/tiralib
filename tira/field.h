@@ -324,7 +324,7 @@ namespace tira {
 		}
 
 		template<typename D = T>
-		void save_npy(const std::string& filename, std::vector<size_t> dest_shape) {
+		void save_npy(const std::string& filename, std::vector<unsigned long> dest_shape) {
 			bool fortran_order = false;								// default to standard (C) order
 			//for (int i = 0; i < dest_shape.size(); i++)					// copy the grid shape
 			//	shape[i] = _shape[i];
