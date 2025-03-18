@@ -550,10 +550,12 @@ namespace tira {
 		}
 
 
-		//calculate gradient along dx (3D)
+		// Calculate gradient along dx (3D) with spacing consideration
 		tira::volume<float> gradient_dx()
 		{
 			tira::volume<float> output(X(), Y(), Z());
+
+			double dx = _spacing[0]; // Spacing along X-direction
 
 			for (int j = 0; j < X(); j++)
 			{
@@ -563,26 +565,23 @@ namespace tira {
 					{
 						int j_left = j - 1;
 						int j_right = j + 1;
+
 						if (j_left < 0)
 						{
 							j_left = 0;
 							j_right = 1;
-							double dist_grad = at(j_right, i, k) - at(j_left, i, k);
-
+							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / dx;
 						}
-
 						else if (j_right >= X())
 						{
 							j_right = X() - 1;
 							j_left = j_right - 1;
-							double dist_grad = at(j_right,i, k) - at(j_left, i, k);
-
+							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / dx;
 						}
-
-
-						double dist_grad = (at(j_right, i, k) - at(j_left, i, k)) / 2.0f;
-
-						output(j, i, k) = dist_grad;
+						else
+						{
+							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / (2.0 * dx);
+						}
 					}
 				}
 			}
@@ -590,10 +589,13 @@ namespace tira {
 			return output;
 		}
 
-		// calculate gradient along dy(3D)
+
+		// Calculate gradient along dy (3D) with spacing consideration
 		tira::volume<float> gradient_dy()
 		{
 			tira::volume<float> output(X(), Y(), Z());
+
+			double dy = _spacing[1]; // Spacing along Y-direction
 
 			for (int j = 0; j < X(); j++)
 			{
@@ -603,26 +605,23 @@ namespace tira {
 					{
 						int i_left = i - 1;
 						int i_right = i + 1;
+
 						if (i_left < 0)
 						{
 							i_left = 0;
 							i_right = 1;
-							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
-
+							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / dy;
 						}
-
 						else if (i_right >= Y())
 						{
 							i_right = Y() - 1;
-							i_left = i_right -1 ;
-							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
-
+							i_left = i_right - 1;
+							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / dy;
 						}
-
-
-						double dist_grad = (at(j, i_right, k) - at(j, i_left, k)) / 2.0f;
-
-						output(j, i, k) = dist_grad;
+						else
+						{
+							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / (2.0 * dy);
+						}
 					}
 				}
 			}
@@ -630,11 +629,13 @@ namespace tira {
 			return output;
 		}
 
+
+		// Calculate gradient along dz (3D) with spacing consideration
 		tira::volume<float> gradient_dz()
 		{
-			//volume<T>dxdy(X(), Y(), Z());
+			tira::volume<float> output(X(), Y(), Z());
 
-			tira::volume<float>output(X(), Y(), Z());
+			double dz = _spacing[2]; // Spacing along Z-direction
 
 			for (int j = 0; j < X(); j++)
 			{
@@ -644,29 +645,30 @@ namespace tira {
 					{
 						int k_left = k - 1;
 						int k_right = k + 1;
+
 						if (k_left < 0)
 						{
 							k_left = 0;
 							k_right = 1;
-							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / dz;
 						}
-
 						else if (k_right >= Z())
 						{
 							k_right = Z() - 1;
 							k_left = k_right - 1;
-							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / dz;
 						}
-
-
-						double dist_grad = (at(j, i, k_right) - at(j, i, k_left)) / 2.0f;
-						output(j, i, k) = dist_grad;
+						else
+						{
+							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / (2.0 * dz);
+						}
 					}
 				}
 			}
 
 			return output;
 		}
+
 
 
 		/// <summary>
