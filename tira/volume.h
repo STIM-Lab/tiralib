@@ -394,7 +394,7 @@ namespace tira {
 		inline double smax() const { return std::max(sx(), std::max(sy(), sz())); }
 
 		/// <summary>
-		/// Returns a channel of the current image as an independent one-channel image
+		/// Returns a single channel of the current volume as an independent one-channel volume
 		/// </summary>
 		/// <param name="c">channel to return</param>
 		/// <returns></returns>
@@ -510,10 +510,52 @@ namespace tira {
 		/// Retrieve a slice of the volume as a 2D image
 		/// </summary>
 		/// <param name="i">Slice to return</param>
-		/// <param name="z">Axis specifying the slice orientation</param>
+		/// <param name="axis">Axis specifying the slice orientation</param>
 		/// <returns></returns>
-		tira::image<T> slice(size_t i, unsigned int axis = 2) {
-			size_t width, height;
+		image<T> slice(size_t i, unsigned int axis = 2) {
+			size_t rx, ry;
+			size_t sx, sy, sz;
+
+			// calculate the size of the output slice image
+			if (axis == 0) {
+				rx = Y();
+				ry = Z();
+			}
+			else if (axis == 1) {
+				rx = X();
+				ry = Z();
+
+				image<T> result(rx, ry, C());					// allocate the output slice image
+
+				for (size_t zi = 0; zi < Z(); zi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, zi, ci) = at(xi, i, zi, ci);
+						}
+					}
+				}
+				return result;
+			}
+			else if (axis == 2) {
+				rx = X();
+				ry = Y();
+				image<T> result(rx, ry, C());					// allocate the output slice image
+
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, ci) = at(xi, yi, i, ci);
+						}
+					}
+				}
+				return result;
+			}
+
+
+
+
+
+			/*size_t width, height;
 			size_t min_x = 0;	size_t max_x = X() - 1;		
 			size_t min_y = 0;	size_t max_y = Y() - 1;		
 			size_t min_z = 0;	size_t max_z = Z() - 1;		
@@ -544,21 +586,22 @@ namespace tira {
 			size_t idx2 = 0;
 			T value;
 			for (size_t zi = 0; zi <= sz; zi++) {
-				idx_z = (zi + min_z) * Y() * X() * C();				// z index into the 3D volume
+				//idx_z = (zi + min_z) * Y() * X() * C();				// z index into the 3D volume
 				for (size_t yi = 0; yi <= sy; yi++) {
-					idx_y = (yi + min_y) * X() * C();				// y index into the 3D volume
+					//idx_y = (yi + min_y) * X() * C();				// y index into the 3D volume
 					for (size_t xi = 0; xi <= sx; xi++) {
-						idx_x = (xi + min_x) * C();					// x index into the 3D volume
+						//idx_x = (xi + min_x) * C();					// x index into the 3D volume
 						for (size_t ci = 0; ci < C(); ci++) {
-							idx3 = idx_x + idx_y + idx_z + ci;
-							value = field<T>::_data[idx3];
+							//idx3 = idx_x + idx_y + idx_z + ci;
+							//value = field<T>::_data[idx3];
+							value = at(xi, yi, zi, ci);
 							result.data()[idx2] = value;
 							idx2++;
 						}
 					}
 				}
 			}
-			return result;
+			return result;*/
 		}
 
 
@@ -1145,6 +1188,7 @@ namespace tira {
 			return _dist(boundary);
 		}
 
+		/// Calculates the signed distance field from a binary image
 		volume<T> sdf() {
 			volume<int> boundary;
 			volume<T> D = _dist(boundary);
