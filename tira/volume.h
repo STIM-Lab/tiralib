@@ -592,6 +592,31 @@ namespace tira {
 			return result;*/
 		}
 
+		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
+			
+			tira::field<float> F = tira::field<float>::derivative(axis, d, order, print_coefs);
+			tira::volume<float> D(tira::field<float>::shape());
+			memcpy(D.data(), F.data(), D.bytes());
+			D._spacing = _spacing;
+			return D;
+		}
+
+		tira::volume<float> gradmag(unsigned int order) {
+			tira::field<float> F = field<float>::gradmag(order);
+			tira::volume<float> R(F.data(), X(), Y(), Z());
+			return R;
+		}
+
+		/// <summary>
+		/// Calculates the sign() function at each point in the volume and returns the result.
+		/// </summary>
+		/// <returns></returns>
+		tira::volume<float> sign() {
+			tira::field<float> F = field<float>::sign();
+			tira::volume<float> R(F.data(), X(), Y(), Z());
+			return R;
+		}
+
 
 		// Calculate gradient along dx (3D) with spacing consideration
 		tira::volume<float> gradient_dx()

@@ -718,6 +718,14 @@ namespace tira {
 			//return iterator(this);
 		}
 
+		/// <summary>
+		/// Calculate the derivative of a field using the finite difference method.
+		/// </summary>
+		/// <param name="axis">Dimension of the derivative given as an axis index</param>
+		/// <param name="d">Derivative to calculate</param>
+		/// <param name="order">Order of the finite difference method used</param>
+		/// <param name="print_coefs">Display the coefficients used to weight the finite differences</param>
+		/// <returns></returns>
 		field<T> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
 
 			T* ptr = _derivative_ptr(axis, d, order, print_coefs);
@@ -726,6 +734,60 @@ namespace tira {
 
 			delete ptr;
 			return result;
+		}
+
+		/// <summary>
+		/// Calculates the gradient magnitude at each point in the field
+		/// </summary>
+		/// <param name="order">Order used to calculate the finite differences</param>
+		/// <returns></returns>
+		field<T> gradmag(unsigned int order) {
+
+			T* sum_sq = new T[size()]{};							// allocate space to store the sum of squares of each derivative (initialize to zero)
+
+			for (size_t di = 0; di < _shape.size(); di++) {			// for each dimension
+				if (_shape[di] == 1) continue;						// if the dimension is singular, ignore it
+				T* part_deriv = _derivative_ptr(di, 1, order);		// calculate the partial derivative along dimension di
+				for (size_t xi = 0; xi < size(); xi++) {			// for each point in the field
+					sum_sq[xi] += part_deriv[xi] * part_deriv[xi];	// calculate the square and sum
+				}
+			}
+			
+			// calculate the square root for each element
+			for (size_t xi = 0; xi < size(); xi++) {			// for each point in the field
+				sum_sq[xi] = std::sqrt(sum_sq[xi]);				// calculate the square root
+			}
+			field<T> result(_shape, sum_sq);
+			delete sum_sq;
+			return result;
+		}
+
+		/// <summary>
+		/// Calculates the sign() function at each point in the field and returns the result.
+		/// </summary>
+		/// <returns></returns>
+		field<T> sign() {
+			tira::field<T> R(_shape);
+			for (size_t xi = 0; xi < size(); xi++) {
+				if (_data[xi] < 0) R._data[xi] = -1;
+				else if (_data[xi] > 0) R._data[xi] = 1;
+				else R._data[xi] = 0;
+			}
+			return R;
+		}
+
+		T sum() {
+			T s = 0;
+			for (size_t xi = 0; xi < size(); xi++) {
+				s += _data[xi];
+			}
+			return s;
+		}
+
+		T mean() {
+			T s = sum();
+			T m = s / size();
+			return m;
 		}
 
 		static std::vector<double> fd_coefficients(unsigned int d, unsigned int order) {
