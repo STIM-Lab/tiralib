@@ -134,7 +134,19 @@ namespace tira {
 
 			tira::volume<float> dist(w, h, l);										// create an image to store the distance field
 			const float bignum = 9999.0f;
-			dist = bignum;																// initialize the distance field to a very large value
+			//dist = bignum;																// initialize the distance field to a very large value
+			for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					for (int z = 0; z < l; z++) {
+						if (binary_boundary(x, y, z) == 1) {
+							dist(x, y, z) = 0.0f;  // Ensure contour is strictly zero
+						}
+						else {
+							dist(x, y, z) = bignum;  // Initialize all others to large value
+						}
+					}
+				}
+			}
 
 
 
@@ -158,8 +170,8 @@ namespace tira {
 										db = bignum;
 									}
 									else {
-										da = p_dist / (n_dist - p_dist);
-										db = n_dist / (n_dist - p_dist);
+										da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));
+										db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));
 									}
 									//float da = p_dist / (n_dist - p_dist);
 									//float db = n_dist / (n_dist - p_dist);
