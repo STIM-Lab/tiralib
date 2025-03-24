@@ -615,10 +615,11 @@ namespace tira {
 
 		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
 			
-			tira::field<float> F = tira::field<float>::derivative(axis, d, order, print_coefs);
-			tira::volume<float> D(tira::field<float>::shape());
-			memcpy(D.data(), F.data(), D.bytes());
-			D._spacing = _spacing;
+			tira::field<float> F = tira::field<float>::derivative(axis, d, order, print_coefs);		// derivative of the field
+			tira::volume<float> D(tira::field<float>::shape());										// create a new volume
+			memcpy(D.data(), F.data(), D.bytes());										// copy the field to the volume
+			D._spacing = _spacing;																	// copy the spacing (a volume has spacing, but a field doesn't)
+			D = D * (1 / D._spacing[axis]);															// scale the gradient by the axis spacing
 			return D;
 		}
 
@@ -643,42 +644,90 @@ namespace tira {
 			tira::volume<T> phi = *this; // original field
 			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z()); // output SDF
 
-			int w = phi.X();
-			int h = phi.Y();
-			int l = phi.Z();
+			float BIG = 99999;
+			sdf = BIG;
+
+			int X = phi.X();
+			int Y = phi.Y();
+			int Z = phi.Z();
 
 			
-			tira::volume<int> boundary(w, h, l);
+			//tira::volume<int> boundary(X, Y, Z);
 			std::vector<std::tuple<int, int, int>> neighbors;
-			neighbors.emplace_back(0, 0, 1);
-			neighbors.emplace_back(0, 1, 0);
-			neighbors.emplace_back(1, 0, 0);
+			neighbors.emplace_back(-1, -1, -1);
+			neighbors.emplace_back(-1, -1, 0);
+			neighbors.emplace_back(-1, -1, 1);
+			neighbors.emplace_back(-1, 0, -1);
 			neighbors.emplace_back(-1, 0, 0);
+			neighbors.emplace_back(-1, 0, 1);
+			neighbors.emplace_back(-1, 1, -1);
+			neighbors.emplace_back(-1, 1, 0);
+			neighbors.emplace_back(-1, 1, 1);
+
+			neighbors.emplace_back(0, -1, -1);
 			neighbors.emplace_back(0, -1, 0);
+			neighbors.emplace_back(0, -1, 1);
 			neighbors.emplace_back(0, 0, -1);
+			neighbors.emplace_back(0, 0, 0);
+			neighbors.emplace_back(0, 0, 1);
+			neighbors.emplace_back(0, 1, -1);
+			neighbors.emplace_back(0, 1, 0);
+			neighbors.emplace_back(0, 1, 1);
 
-			const float BIG = 9999.0f;
+			neighbors.emplace_back(1, -1, -1);
+			neighbors.emplace_back(1, -1, 0);
+			neighbors.emplace_back(1, -1, 1);
+			neighbors.emplace_back(1, 0, -1);
+			neighbors.emplace_back(1, 0, 0);
+			neighbors.emplace_back(1, 0, 1);
+			neighbors.emplace_back(1, 1, -1);
+			neighbors.emplace_back(1, 1, 0);
+			neighbors.emplace_back(1, 1, 1);
 
+			unsigned int band_cells = 0;
 			// identifying boundary cells where phi changes sign
-			for (int y = 1; y < h - 1; y++) {							// for every row in the volume
-				for (int x = 1; x < w - 1; x++) {						// for every column in the volume
-					for (int z = 1; z < l - 1; z++) {					// for every depth slice in the volume
-						for (int k = 0; k < neighbors.size(); k++) {	// for every 6-connected neighbor
+			for (int yi = 0; yi < Y; yi++) {							// for every row in the volume
+				for (int xi = 0; xi < X; xi++) {						// for every column in the volume
+					for (int zi = 0; zi < Z; zi++) {					// for every depth slice in the volume
+						float d_min = sdf(xi, yi, zi);			// get the current approximated distance from the SDF
+						for (int k = 0; k < neighbors.size(); k++) {	// for every neighbor
 
-							int xn = x + get<0>(neighbors[k]);		// compute x index of neighbor
-							int yn = y + get<1>(neighbors[k]);		// compute y index of neighbor
-							int zn = z + get<2>(neighbors[k]);		// compute z index of neighbor
+							int nxi = xi + get<0>(neighbors[k]);		// compute x index of neighbor
+							int nyi = yi + get<1>(neighbors[k]);		// compute y index of neighbor
+							int nzi = zi + get<2>(neighbors[k]);		// compute z index of neighbor
 
-							if (phi(x, y, z) * phi(xn, yn, zn) < 0.0f) {	// check for sign change across phi (zero level set crosses here)
-								boundary(x, y, z) = 1;					// mark current voxel as boundary
-								boundary(xn, yn, zn) = 1;				// mark neighbor voxel as boundary too
+							if (nxi >= 0 && nyi >= 0 && nzi >= 0 &&
+								nxi < X && nyi < Y && nzi < Z) {
+								// test if the current pixel (xi, yi, zi) and its neighbor (nxi, nyi, nzi) are on opposite sides of the  boundary
+								float phi_x = phi(xi, yi, zi);
+								float phi_n = phi(nxi, nyi, nzi);
+								if (phi_x * phi_n < 0.0f) {
+									float phi_space = std::abs(phi_x - phi_n);		// calculate the spacing between the current cell and its neighbor in phi
+									float phi_frac = std::abs(phi_x) / phi_space;	// calculate the fraction of the distance between the current and neighbor points
+
+									float x = (float)xi;
+									float y = (float)yi;
+									float z = (float)zi;
+									float nx = (float)nxi;
+									float ny = (float)nyi;
+									float nz = (float)nzi;
+
+									float voxel_space = std::sqrt((x - nx) * (x - nx) + (y - ny) * (y - ny) + (z - nz) * (z - nz));
+									float d = phi_frac * voxel_space;			// calculate the distance to the surface
+									if (d < std::abs(d_min)) {					// if the current point is closer to the surface than the previous guess
+										d_min = d;
+									}
+									band_cells++;
+								}
 							}
 						}
+						sdf(xi, yi, zi) = d_min;
 					}
 				}
 			}
+			//std::cout<<"Band Cells: "<<band_cells<<std::endl;
 
-
+/*
 			tira::volume<float> dist(w, h, l);										
 			//dist = bignum;																// initialize the field to a very large value
 			for (int y = 0; y < h; y++) {
@@ -736,6 +785,12 @@ namespace tira {
 					}
 				}
 			}
+*/
+			_fast_sweep_3d(sdf);
+
+			tira::volume<float> sign_phi = phi.sign();
+			sdf = sdf * sign_phi;
+
 
 			return sdf;
 
@@ -952,6 +1007,20 @@ namespace tira {
 			}
 
 			return result_z;
+
+		}
+
+		tira::volume<float> gaussian_filter(float sigma, int window_factor = 6) {
+
+			float sigma_x = sigma / _spacing[0];
+			//specify the kernel along x
+			//convolve
+
+			float sigma_y = sigma / _spacing[1];
+			//specify the kernel along y
+			//convolve
+
+			float sigma_z = sigma / _spacing[2];
 
 		}
 
