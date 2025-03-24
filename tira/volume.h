@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <tira/image.h>
 #include <tira/progressbar.h>
@@ -188,11 +188,25 @@ namespace tira {
 
 
 			// at this point, the distance image has the correct distances in cells surround the boundary
+			
 
-			std::vector<float> dist1d;											// create a 1d representation of the distance field
-			dist1d.resize(h * w * l);
+            _fast_sweep_3d(dist);
 
+
+			return dist;
+		}
+
+	public:
+
+		void _fast_sweep_3d(tira::volume<float>& dist) {
+			
+			const int w = dist.shape()[0];
+			const int h = dist.shape()[1];
+			const int l = dist.shape()[2];
+			
 			int row = w;
+
+			std::vector<float> dist1d(w * h * l);
 
 			// copy the distance field into the 1d distance field
 			for (int y = 0; y < h; y++) {
@@ -310,12 +324,7 @@ namespace tira {
 				}
 
 			}
-
-
-			return dist;
 		}
-
-	public:
 
 		/// <summary>
 		/// Default constructor initializes an empty volume (0x0x0 with 0 channels)
@@ -628,6 +637,111 @@ namespace tira {
 			tira::volume<float> R(F.data(), X(), Y(), Z());
 			return R;
 		}
+
+		
+		tira::volume<T> Phi_to_sdf() {
+			tira::volume<T> phi = *this; // original field
+			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z()); // output SDF
+
+			int w = phi.X();
+			int h = phi.Y();
+			int l = phi.Z();
+
+			
+			tira::volume<int> boundary(w, h, l);
+			std::vector<std::tuple<int, int, int>> neighbors;
+			neighbors.emplace_back(0, 0, 1);
+			neighbors.emplace_back(0, 1, 0);
+			neighbors.emplace_back(1, 0, 0);
+			neighbors.emplace_back(-1, 0, 0);
+			neighbors.emplace_back(0, -1, 0);
+			neighbors.emplace_back(0, 0, -1);
+
+			const float BIG = 9999.0f;
+
+			// identifying boundary cells where phi changes sign
+			for (int y = 1; y < h - 1; y++) {							// for every row in the volume
+				for (int x = 1; x < w - 1; x++) {						// for every column in the volume
+					for (int z = 1; z < l - 1; z++) {					// for every depth slice in the volume
+						for (int k = 0; k < neighbors.size(); k++) {	// for every 6-connected neighbor
+
+							int xn = x + get<0>(neighbors[k]);		// compute x index of neighbor
+							int yn = y + get<1>(neighbors[k]);		// compute y index of neighbor
+							int zn = z + get<2>(neighbors[k]);		// compute z index of neighbor
+
+							if (phi(x, y, z) * phi(xn, yn, zn) < 0.0f) {	// check for sign change across phi (zero level set crosses here)
+								boundary(x, y, z) = 1;					// mark current voxel as boundary
+								boundary(xn, yn, zn) = 1;				// mark neighbor voxel as boundary too
+							}
+						}
+					}
+				}
+			}
+
+
+			tira::volume<float> dist(w, h, l);										
+			//dist = bignum;																// initialize the field to a very large value
+			for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					for (int z = 0; z < l; z++) {
+						if (boundary(x, y, z) == 1) {
+							dist(x, y, z) = 0.0f;  // Ensure contour is strictly zero
+						}
+						else {
+							dist(x, y, z) = BIG;  // Initialize all others to large value
+						}
+					}
+				}
+			}
+
+			// Estimate distance for boundary-adjacent voxels
+			for (int y = 1; y < h - 1; y++) {											// for every row in the image
+				for (int x = 1; x < w - 1; x++) {										// for every column in the image
+					for (int z = 1; z < l - 1; z++) {										// for every length in the image
+						if (!boundary(x, y, z)) continue;
+
+						float phi0 = phi(x, y, z);
+
+						for (int k = 0; k < neighbors.size(); k++) {
+							int xn = x + get<0>(neighbors[k]);
+							int yn = y + get<1>(neighbors[k]);
+							int zn = z + get<2>(neighbors[k]);
+
+							float phi1 = phi(xn, yn, zn);
+
+							if (phi0 * phi1 < 0.0f) {
+								float denom = std::abs(phi1 - phi0);
+								if (denom < 1e-6f) denom = 1e-6f;
+
+								float da = std::abs(phi0) / denom;
+								float db = std::abs(phi1) / denom;
+
+								dist(x, y, z) = std::min(dist(x, y, z), da);
+								dist(xn, yn, zn) = std::min(dist(xn, yn, zn), db);
+							}
+						}
+					}
+				}
+			}
+
+
+
+			_fast_sweep_3d(dist);
+
+			for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					for (int z = 0; z < l; z++) {
+						// If phi is negative, make the distance negative; otherwise, positive.
+						sdf(x, y, z) = (phi(x, y, z) < 0.0f) ? -dist(x, y, z) : dist(x, y, z);
+					}
+				}
+			}
+
+			return sdf;
+
+			//return dist;
+		}
+	
 
 
 		// Calculate gradient along dx (3D) with spacing consideration
