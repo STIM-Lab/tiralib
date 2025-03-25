@@ -200,9 +200,9 @@ namespace tira {
 
 		void _fast_sweep_3d(tira::volume<float>& dist) {
 			
-			const int w = dist.shape()[0];
-			const int h = dist.shape()[1];
-			const int l = dist.shape()[2];
+			int w = X();
+			int h = Y();
+			int l = Z();
 			
 			int row = w;
 
