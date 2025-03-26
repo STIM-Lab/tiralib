@@ -1010,19 +1010,122 @@ namespace tira {
 
 		}
 
-		tira::volume<float> gaussian_filter(float sigma, int window_factor = 6) {
+		//tira::volume<float> gaussian_filter(float sigma, int window_factor ) {
 
+		//	float sigma_x = sigma / _spacing[0];
+		//	//specify the kernel along x
+		//	//convolve
+
+		//	float sigma_y = sigma / _spacing[1];
+		//	//specify the kernel along y
+		//	//convolve
+
+		//	float sigma_z = sigma / _spacing[2];
+
+		//}
+
+		tira::volume<float> gaussian_filter(float sigma, int window_factor) {
+
+			// ----- X Axis -----
 			float sigma_x = sigma / _spacing[0];
-			//specify the kernel along x
-			//convolve
+			int kernel_size_x = window_factor * sigma_x;
+			if (kernel_size_x % 2 == 0) kernel_size_x++;
+			float miu_x = (float)kernel_size_x / 2.0f;
 
+			float* kernel_x = (float*)malloc(kernel_size_x * sizeof(float));
+			for (int xi = 0; xi < kernel_size_x; xi++) {
+				int u = 2 * sigma_x * sigma_x;
+				kernel_x[xi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(xi - miu_x) * (xi - miu_x) / u);
+			}
+
+			// normalize kernel_x
+			float sum_x = 0.0f;
+			for (int i = 0; i < kernel_size_x; i++) sum_x += kernel_x[i];
+			for (int i = 0; i < kernel_size_x; i++) kernel_x[i] /= sum_x;
+
+			tira::volume<float> result_x(X() - (kernel_size_x - 1), Y(), Z());
+			float sum;
+			for (size_t yi = 0; yi < result_x.Y(); yi++) {
+				for (size_t xi = 0; xi < result_x.X(); xi++) {
+					for (size_t zi = 0; zi < result_x.Z(); zi++) {
+						sum = 0;
+						for (size_t ui = 0; ui < kernel_size_x; ui++) {
+							sum += at(xi + ui, yi, zi) * kernel_x[ui];
+						}
+						result_x(xi, yi, zi) = sum;
+					}
+				}
+			}
+			free(kernel_x);
+
+			// ----- Y Axis -----
 			float sigma_y = sigma / _spacing[1];
-			//specify the kernel along y
-			//convolve
+			int kernel_size_y = window_factor * sigma_y;
+			if (kernel_size_y % 2 == 0) kernel_size_y++;
+			float miu_y = (float)kernel_size_y / 2.0f;
 
+			float* kernel_y = (float*)malloc(kernel_size_y * sizeof(float));
+			for (int yi = 0; yi < kernel_size_y; yi++) {
+				int u = 2 * sigma_y * sigma_y;
+				kernel_y[yi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(yi - miu_y) * (yi - miu_y) / u);
+			}
+
+			// normalize kernel_y
+			float sum_y = 0.0f;
+			for (int i = 0; i < kernel_size_y; i++) sum_y += kernel_y[i];
+			for (int i = 0; i < kernel_size_y; i++) kernel_y[i] /= sum_y;
+
+			tira::volume<float> result_y(result_x.X(), result_x.Y() - (kernel_size_y - 1), result_x.Z());
+			float sum1;
+			for (size_t yi = 0; yi < result_y.Y(); yi++) {
+				for (size_t xi = 0; xi < result_y.X(); xi++) {
+					for (size_t zi = 0; zi < result_y.Z(); zi++) {
+						sum1 = 0;
+						for (size_t ui = 0; ui < kernel_size_y; ui++) {
+							sum1 += result_x(xi, yi + ui, zi) * kernel_y[ui];
+						}
+						result_y(xi, yi, zi) = sum1;
+					}
+				}
+			}
+			free(kernel_y);
+
+			// ----- Z Axis -----
 			float sigma_z = sigma / _spacing[2];
+			int kernel_size_z = window_factor * sigma_z;
+			if (kernel_size_z % 2 == 0) kernel_size_z++;
+			float miu_z = (float)kernel_size_z / 2.0f;
 
+			float* kernel_z = (float*)malloc(kernel_size_z * sizeof(float));
+			for (int zi = 0; zi < kernel_size_z; zi++) {
+				int u = 2 * sigma_z * sigma_z;
+				kernel_z[zi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(zi - miu_z) * (zi - miu_z) / u);
+			}
+
+			// normalize kernel_z
+			float sum_z = 0.0f;
+			for (int i = 0; i < kernel_size_z; i++) sum_z += kernel_z[i];
+			for (int i = 0; i < kernel_size_z; i++) kernel_z[i] /= sum_z;
+
+			tira::volume<float> result_z(result_y.X(), result_y.Y(), result_y.Z() - (kernel_size_z - 1));
+			float sum2;
+			for (size_t yi = 0; yi < result_z.Y(); yi++) {
+				for (size_t xi = 0; xi < result_z.X(); xi++) {
+					for (size_t zi = 0; zi < result_z.Z(); zi++) {
+						sum2 = 0;
+						for (size_t ui = 0; ui < kernel_size_z; ui++) {
+							sum2 += result_y(xi, yi, zi + ui) * kernel_z[ui];
+						}
+						result_z(xi, yi, zi) = sum2;
+					}
+				}
+			}
+			free(kernel_z);
+
+			return result_z;
 		}
+
+
 
 
 		/// <summary>
