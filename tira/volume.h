@@ -1125,6 +1125,71 @@ namespace tira {
 			return result_z;
 		}
 
+		/// <summary>
+        /// Upsamples the current volume by the given factor using trilinear interpolation.
+        /// Each dimension is scaled by 'factor', and new voxel values are interpolated
+        /// <param name="factor">Upsampling factor (e.g., 2 for doubling resolution)</param>
+        /// <returns>A new volume with higher resolution and interpolated values</returns>
+
+
+		tira::volume<float> Trilinear_interpolation(int factor) {
+			int new_x = X() * factor;
+			int new_y = Y() * factor;
+			int new_z = Z() * factor;
+
+			tira::volume<float> upsampled(new_x, new_y, new_z);
+
+			for (int z = 0; z < new_z; z++) {
+				float zf = (float)z / factor;
+				int z0 = (int)zf;
+				int z1 = z0 + 1;
+				if (z1 >= Z()) z1 = z0;
+
+				float wz = zf - z0;
+
+				for (int y = 0; y < new_y; y++) {
+					float yf = (float)y / factor;
+					int y0 = (int)yf;
+					int y1 = y0 + 1;
+					if (y1 >= Y()) y1 = y0;
+
+					float wy = yf - y0;
+
+					for (int x = 0; x < new_x; x++) {
+						float xf = (float)x / factor;
+						int x0 = (int)xf;
+						int x1 = x0 + 1;
+						if (x1 >= X()) x1 = x0;
+
+						float wx = xf - x0;
+
+						// Trilinear interpolation
+						float c000 = at(x0, y0, z0);
+						float c100 = at(x1, y0, z0);
+						float c010 = at(x0, y1, z0);
+						float c110 = at(x1, y1, z0);
+						float c001 = at(x0, y0, z1);
+						float c101 = at(x1, y0, z1);
+						float c011 = at(x0, y1, z1);
+						float c111 = at(x1, y1, z1);
+
+						float c00 = c000 * (1 - wx) + c100 * wx;
+						float c10 = c010 * (1 - wx) + c110 * wx;
+						float c01 = c001 * (1 - wx) + c101 * wx;
+						float c11 = c011 * (1 - wx) + c111 * wx;
+
+						float c0 = c00 * (1 - wy) + c10 * wy;
+						float c1 = c01 * (1 - wy) + c11 * wy;
+
+						float value = c0 * (1 - wz) + c1 * wz;
+
+						upsampled(x, y, z) = value;
+					}
+				}
+			}
+
+			return upsampled;
+		}
 
 
 
