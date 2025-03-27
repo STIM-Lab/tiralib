@@ -1192,6 +1192,90 @@ namespace tira {
 		}
 
 
+		//Cubic interpolation using Catmull–Rom spline
+		tira::volume<float> Tricubic_interpolation(int factor) {
+			int new_x = X() * factor;                      // Scale original X dimension by factor
+			int new_y = Y() * factor;                      // Scale original Y dimension by factor
+			int new_z = Z() * factor;                      // Scale original Z dimension by factor
+
+			tira::volume<float> upsampled(new_x, new_y, new_z); // Create the upsampled volume with new dimensions
+
+			// Cubic interpolation using Catmull–Rom spline
+			auto cubicInterpolate = [&](const float p[4], float t) {
+				float a = -0.5f * p[0] + 1.5f * p[1] - 1.5f * p[2] + 0.5f * p[3]; // Compute coefficient a
+				float b = p[0] - 2.5f * p[1] + 2.0f * p[2] - 0.5f * p[3];           // Compute coefficient b
+				float c = -0.5f * p[0] + 0.5f * p[2];                                // Compute coefficient c
+				float d = p[1];                                                      // Coefficient d is the central value
+				return ((a * t + b) * t + c) * t + d;                                // Evaluate cubic polynomial at t
+				};
+
+			for (int z = 0; z < new_z; z++) {                   // Loop through each z coordinate in the upsampled volume
+				float zf = (float)z / factor;                 // Convert integer z to float 
+				int z_int = (int)zf;                          // Integer part of zf (floor)
+				float dz = zf - z_int;                        // Fractional part of z for interpolation
+
+				for (int y = 0; y < new_y; y++) {               // Loop through each y coordinate in the upsampled volume
+					float yf = (float)y / factor;             // Convert integer y to float 
+					int y_int = (int)yf;                      // Integer part of yf (floor)
+					float dy = yf - y_int;                    // Fractional part of y for interpolation
+
+					for (int x = 0; x < new_x; x++) {           // Loop through each x coordinate in the upsampled volume
+						float xf = (float)x / factor;         // Convert integer x to float
+						int x_int = (int)xf;                  // Integer part of xf (floor)
+						float dx = xf - x_int;                // Fractional part of x for interpolation
+
+						float interpz[4]; //  hold intermediate results from y-interpolation along z
+
+						// Interpolate over the 4 z-neighbors (from z_int - 1 to z_int + 2)
+						for (int iz = 0; iz < 4; iz++) {
+							int z_idx = z_int - 1 + iz;       // Compute original z index for neighbor
+							// ensure it lies within [0, Z()-1]
+							if (z_idx < 0) {
+								z_idx = 0;
+							}
+							else if (z_idx >= Z()) {
+								z_idx = Z() - 1;
+							}
+
+							float interpy[4]; // hold intermediate results from x-interpolation along y
+
+							// Interpolate over the 4 y-neighbors (from y_int - 1 to y_int + 2)
+							for (int iy = 0; iy < 4; iy++) {
+								int y_idx = y_int - 1 + iy;   // Compute original y index for neighbor
+								// ensure it lies within [0, Y()-1]
+								if (y_idx < 0) {
+									y_idx = 0;
+								}
+								else if (y_idx >= Y()) {
+									y_idx = Y() - 1;
+								}
+								float p[4]; // store values from 4 x-neighbors
+
+								// Interpolate over the 4 x-neighbors (from x_int - 1 to x_int + 2)
+								for (int ix = 0; ix < 4; ix++) {
+									int x_idx = x_int - 1 + ix; // Compute original x index for neighbor
+									// ensure it lies within [0, X()-1]
+									if (x_idx < 0) {
+										x_idx = 0;
+									}
+									else if (x_idx >= X()) {
+										x_idx = X() - 1;
+									}
+									p[ix] = at(x_idx, y_idx, z_idx); // Retrieve voxel value from original volume
+								}
+								interpy[iy] = cubicInterpolate(p, dx); // Interpolate along x-axis for fixed y and z
+							}
+							interpz[iz] = cubicInterpolate(interpy, dy); // Interpolate along y-axis for fixed z
+						}
+						float value = cubicInterpolate(interpz, dz);  // Final interpolation along z-axis
+						upsampled(x, y, z) = value;                    // Assign the computed value to the upsampled volume
+					}
+				}
+			}
+			return upsampled; // Return the upsampled volume
+		}
+
+
 
 		/// <summary>
 		/// Add a border to an image
