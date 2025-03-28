@@ -270,7 +270,7 @@ namespace tira {
 				npy::LoadArrayFromNumpy<D>(filename, shape, fortran_order, data);	// load NPY array and metadata
 			}
 			catch(const std::runtime_error &e){
-				std::cout << "ERROR loading NumPy file: " << e.what() << std::endl;
+				std::cout << "ERROR loading NumPy file "<<filename<<": " << e.what() << std::endl;
 				exit(1);
 			}
 

@@ -1272,6 +1272,9 @@ namespace tira {
 					}
 				}
 			}
+			upsampled._spacing[0] /= factor;
+			upsampled._spacing[1] /= factor;
+			upsampled._spacing[2] /= factor;
 			return upsampled; // Return the upsampled volume
 		}
 
