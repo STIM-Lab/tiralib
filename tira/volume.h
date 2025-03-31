@@ -134,8 +134,8 @@ namespace tira {
 
 			tira::volume<float> dist(w, h, l);										// create an image to store the distance field
 			const float bignum = 9999.0f;
-			//dist = bignum;																// initialize the distance field to a very large value
-			for (int y = 0; y < h; y++) {
+			dist = bignum;																// initialize the distance field to a very large value
+			/*for (int y = 0; y < h; y++) {
 				for (int x = 0; x < w; x++) {
 					for (int z = 0; z < l; z++) {
 						if (binary_boundary(x, y, z) == 1) {
@@ -146,7 +146,7 @@ namespace tira {
 						}
 					}
 				}
-			}
+			}*/
 
 
 
@@ -160,7 +160,7 @@ namespace tira {
 								int nx = x + get<0>(neighbors[k]);								// calculate the x coordinate of the neighbor cell
 								int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
 								int nz = z + get<2>(neighbors[k]);								// calculate the z coordinate of the neighbor cell
-								if (binary_boundary(nx, ny, nz)) {												// if the neighboring cell (nx, ny) is ALSO in the boundary
+								if (binary_boundary(nx, ny, nz)) {							// if the neighboring cell (nx, ny) is ALSO in the boundary
 									float p_dist = abs(at(x, y, z));
 									float n_dist = abs(at(nx, ny, nz));
 
@@ -173,12 +173,8 @@ namespace tira {
 										da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));
 										db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));
 									}
-									//float da = p_dist / (n_dist - p_dist);
-									//float db = n_dist / (n_dist - p_dist);
-									//float da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from pixel(x,y) to contour da
-									//float db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from neighbor to contour db
 									dist(x, y, z) = std::min(dist(x, y, z), da);									// minimum between distance and large boundary value of pixel (x,y)
-									dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);								// minimum between distance and large boundary value of neighbor (nx, ny)
+									dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);					// minimum between distance and large boundary value of neighbor (nx, ny)
 								}
 							}
 						}
@@ -641,8 +637,8 @@ namespace tira {
 
 		
 		tira::volume<T> Phi_to_sdf() {
-			tira::volume<T> phi = *this; // original field
-			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z()); // output SDF
+			tira::volume<T> phi = *this;								// original field
+			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z());				// output SDF
 
 			float BIG = 99999;
 			sdf = BIG;
@@ -652,7 +648,7 @@ namespace tira {
 			int Z = phi.Z();
 
 			
-			//tira::volume<int> boundary(X, Y, Z);
+			// generate the template to detect voxels that are adjacent to the boundary at phi = 0
 			std::vector<std::tuple<int, int, int>> neighbors;
 			neighbors.emplace_back(-1, -1, -1);
 			neighbors.emplace_back(-1, -1, 0);
@@ -696,21 +692,23 @@ namespace tira {
 							int nyi = yi + get<1>(neighbors[k]);		// compute y index of neighbor
 							int nzi = zi + get<2>(neighbors[k]);		// compute z index of neighbor
 
+							// test if (nxi, nyi, nzi) is inside the image
 							if (nxi >= 0 && nyi >= 0 && nzi >= 0 &&
 								nxi < X && nyi < Y && nzi < Z) {
-								// test if the current pixel (xi, yi, zi) and its neighbor (nxi, nyi, nzi) are on opposite sides of the  boundary
-								float phi_x = phi(xi, yi, zi);
+
+								float phi_x = phi(xi, yi, zi);				// get the phi values corresponding to x and n
 								float phi_n = phi(nxi, nyi, nzi);
-								if (phi_x * phi_n < 0.0f) {
+
+								if (phi_x * phi_n < 0.0f) {							// if x and n are on opposite sides of the boundary
 									float phi_space = std::abs(phi_x - phi_n);		// calculate the spacing between the current cell and its neighbor in phi
 									float phi_frac = std::abs(phi_x) / phi_space;	// calculate the fraction of the distance between the current and neighbor points
 
-									float x = (float)xi;
-									float y = (float)yi;
-									float z = (float)zi;
-									float nx = (float)nxi;
-									float ny = (float)nyi;
-									float nz = (float)nzi;
+									float x = (float)xi * _spacing[0];
+									float y = (float)yi * _spacing[1];
+									float z = (float)zi * _spacing[2];
+									float nx = (float)nxi * _spacing[0];
+									float ny = (float)nyi * _spacing[1];
+									float nz = (float)nzi * _spacing[2];
 
 									float voxel_space = std::sqrt((x - nx) * (x - nx) + (y - ny) * (y - ny) + (z - nz) * (z - nz));
 									float d = phi_frac * voxel_space;			// calculate the distance to the surface
@@ -725,67 +723,6 @@ namespace tira {
 					}
 				}
 			}
-			//std::cout<<"Band Cells: "<<band_cells<<std::endl;
-
-/*
-			tira::volume<float> dist(w, h, l);										
-			//dist = bignum;																// initialize the field to a very large value
-			for (int y = 0; y < h; y++) {
-				for (int x = 0; x < w; x++) {
-					for (int z = 0; z < l; z++) {
-						if (boundary(x, y, z) == 1) {
-							dist(x, y, z) = 0.0f;  // Ensure contour is strictly zero
-						}
-						else {
-							dist(x, y, z) = BIG;  // Initialize all others to large value
-						}
-					}
-				}
-			}
-
-			// Estimate distance for boundary-adjacent voxels
-			for (int y = 1; y < h - 1; y++) {											// for every row in the image
-				for (int x = 1; x < w - 1; x++) {										// for every column in the image
-					for (int z = 1; z < l - 1; z++) {										// for every length in the image
-						if (!boundary(x, y, z)) continue;
-
-						float phi0 = phi(x, y, z);
-
-						for (int k = 0; k < neighbors.size(); k++) {
-							int xn = x + get<0>(neighbors[k]);
-							int yn = y + get<1>(neighbors[k]);
-							int zn = z + get<2>(neighbors[k]);
-
-							float phi1 = phi(xn, yn, zn);
-
-							if (phi0 * phi1 < 0.0f) {
-								float denom = std::abs(phi1 - phi0);
-								if (denom < 1e-6f) denom = 1e-6f;
-
-								float da = std::abs(phi0) / denom;
-								float db = std::abs(phi1) / denom;
-
-								dist(x, y, z) = std::min(dist(x, y, z), da);
-								dist(xn, yn, zn) = std::min(dist(xn, yn, zn), db);
-							}
-						}
-					}
-				}
-			}
-
-
-
-			_fast_sweep_3d(dist);
-
-			for (int y = 0; y < h; y++) {
-				for (int x = 0; x < w; x++) {
-					for (int z = 0; z < l; z++) {
-						// If phi is negative, make the distance negative; otherwise, positive.
-						sdf(x, y, z) = (phi(x, y, z) < 0.0f) ? -dist(x, y, z) : dist(x, y, z);
-					}
-				}
-			}
-*/
 			_fast_sweep_3d(sdf);
 
 			tira::volume<float> sign_phi = phi.sign();
