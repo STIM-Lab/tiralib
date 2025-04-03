@@ -195,120 +195,151 @@ namespace tira {
 	public:
 
 		void _fast_sweep_3d(tira::volume<float>& dist) {
-			
 
-			int w = X();
-			int h = Y();
-			int l = Z();
+			// Get volume dimensions
+			int x = X();  // Number of voxels in x-direction
+			int y = Y();  // Number of voxels in y-direction
+			int z = Z();  // Number of voxels in z-direction
 
-			int row = w;
+			int row = x;  // Row stride in flattened array is width (x)
 
-			std::vector<float> dist1d(w * h * l);
+			// Allocate 1D array to store the 3D volume
+			std::vector<float> dist1d(x * y * z);
 
-			// copy 3D to 1D
-			for (int y = 0; y < h; y++) {
-				for (int x = 0; x < w; x++) {
-					for (int z = 0; z < l; z++) {
-						dist1d[z * (w * h) + y * w + x] = dist(x, y, z);
+			// Copy 3D data into 1D array for easier access during sweeping
+			for (int j = 0; j < y; j++) {
+				for (int i = 0; i < x; i++) {
+					for (int k = 0; k < z; k++) {
+						dist1d[k * (x * y) + j * x + i] = dist(i, j, k);
 					}
 				}
 			}
 
-			const int NSweeps = 8;
+			const int NSweeps = 8;  // Number of sweeping passes
 
-			const int dirX[NSweeps][3] = { {0, w - 1, 1}, {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1}, {0, w - 1, 1}, {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1} };
-			const int dirY[NSweeps][3] = { {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1}, {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1} };
-			const int dirZ[NSweeps][3] = { {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1} };
+			// Sweep directions along each axis for 8 directional passes
+			const int dirX[NSweeps][3] = {
+				{0, x - 1, 1}, {x - 1, 0, -1}, {x - 1, 0, -1}, {0, x - 1, 1},
+				{0, x - 1, 1}, {x - 1, 0, -1}, {x - 1, 0, -1}, {0, x - 1, 1}
+			};
+			const int dirY[NSweeps][3] = {
+				{0, y - 1, 1}, {0, y - 1, 1}, {y - 1, 0, -1}, {y - 1, 0, -1},
+				{0, y - 1, 1}, {0, y - 1, 1}, {y - 1, 0, -1}, {y - 1, 0, -1}
+			};
+			const int dirZ[NSweeps][3] = {
+				{0, z - 1, 1}, {0, z - 1, 1}, {0, z - 1, 1}, {0, z - 1, 1},
+				{z - 1, 0, -1}, {z - 1, 0, -1}, {z - 1, 0, -1}, {z - 1, 0, -1}
+			};
 
-			double aa[3], tmp, eps = 1e-6;
-			double d_new;
-			const float dx = _spacing[0];   // 
-			const float dy = _spacing[1];   // 
-			const float dz = _spacing[2];   // 
-			const double f = 1.0;
+			// Temporary variables
+			double aa[3];         // Stores nearest neighbor distances in x, y, z
+			double tmp;           // For swapping
+			double eps = 1e-6;    // Small epsilon to avoid floating point precision issues
+			double d_new;         // Newly computed distance
 
+			// Spacing in each direction
+			const float dx = _spacing[0];
+			const float dy = _spacing[1];
+			const float dz = _spacing[2];
+			const double f = 1.0; // RHS of Eikonal equation ∇d = f
+
+			// Perform 8 directional sweeps
 			for (int s = 0; s < NSweeps; s++) {
 				for (int iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
 					for (int ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
 						for (int iz = dirZ[s][0]; dirZ[s][2] * iz <= dirZ[s][1]; iz += dirZ[s][2]) {
 
-							int gridPos = ((iz * h + iy) * row + ix);
+							// Compute 1D index of current voxel
+							int gridPos = ((iz * y + iy) * row + ix);
 
-							// y-neighbor
-							if (iy == 0 || iy == (h - 1)) {
-								aa[1] = dist1d[(iz * h + (iy == 0 ? iy + 1 : iy - 1)) * row + ix];
+							// Neighbor in y-direction
+							if (iy == 0 || iy == (y - 1)) { // If on the y-boundary (top or bottom edge)
+								aa[1] = dist1d[(iz * y + (iy == 0 ? iy + 1 : iy - 1)) * row + ix]; // Use the inner neighbor along y
 							}
 							else {
-								aa[1] = std::min(dist1d[(iz * h + (iy - 1)) * row + ix], dist1d[(iz * h + (iy + 1)) * row + ix]);
+								aa[1] = std::min( // Otherwise, use the min of two neighbors in the y-direction
+									dist1d[(iz * y + (iy - 1)) * row + ix],  // Neighbor in -y
+									dist1d[(iz * y + (iy + 1)) * row + ix]   // Neighbor in +y
+								);
 							}
 
-							// x-neighbor
-							if (ix == 0 || ix == (w - 1)) {
-								aa[0] = dist1d[(iz * h + iy) * row + (ix == 0 ? ix + 1 : ix - 1)];
-							}
-							else {
-								aa[0] = std::min(dist1d[(iz * h + iy) * row + (ix - 1)], dist1d[(iz * h + iy) * row + (ix + 1)]);
-							}
-
-							// z-neighbor
-							if (iz == 0 || iz == (l - 1)) {
-								aa[2] = dist1d[((iz == 0 ? iz + 1 : iz - 1) * h + iy) * row + ix];
+							// Neighbor in x-direction
+							if (ix == 0 || ix == (x - 1)) { // If on the x-boundary (left or right edge)
+								aa[0] = dist1d[(iz * y + iy) * row + (ix == 0 ? ix + 1 : ix - 1)]; // Use the inner neighbor along x
 							}
 							else {
-								aa[2] = std::min(dist1d[((iz - 1) * h + iy) * row + ix], dist1d[((iz + 1) * h + iy) * row + ix]);
+								aa[0] = std::min( // Otherwise, use the min of two neighbors in the x-direction
+									dist1d[(iz * y + iy) * row + (ix - 1)],  // Neighbor in -x
+									dist1d[(iz * y + iy) * row + (ix + 1)]   // Neighbor in +x
+								);
 							}
 
-							// sort aa[0..2]
-							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
-							if (aa[1] > aa[2]) { tmp = aa[1]; aa[1] = aa[2]; aa[2] = tmp; }
-							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
+							// Neighbor in z-direction
+							if (iz == 0 || iz == (z - 1)) { // If on the z-boundary (front or back face)
+								aa[2] = dist1d[((iz == 0 ? iz + 1 : iz - 1) * y + iy) * row + ix]; // Use the inner neighbor along z
+							}
+							else {
+								aa[2] = std::min( // Otherwise, use the min of two neighbors in the z-direction
+									dist1d[((iz - 1) * y + iy) * row + ix],  // Neighbor in -z
+									dist1d[((iz + 1) * y + iy) * row + ix]   // Neighbor in +z
+								);
+							}
 
-							//  conservative minimum spacing
-							double min_spacing = std::min({ dx, dy, dz });
-							double d_curr = aa[0] + f * min_spacing;
+							// Sort neighbors in ascending order (so aa[0] <= aa[1] <= aa[2])
+							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; } // Swap if needed
+							if (aa[1] > aa[2]) { tmp = aa[1]; aa[1] = aa[2]; aa[2] = tmp; } // Swap if needed
+							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; } // Swap if needed
 
+							// Conservative estimate using smallest spacing and smallest neighbor
+							double min_spacing = std::min({ dx, dy, dz }); // Choose the smallest spacing
+							double d_curr = aa[0] + f * min_spacing;       // Initial guess: smallest neighbor + step
+
+							// If the guess is less than next neighbor (valid), accept it
 							if (d_curr <= (aa[1] + eps)) {
-								d_new = d_curr;
+								d_new = d_curr; // Use 1 neighbor solution
 							}
 							else {
-								//solve quadratic with first two neighbors
-								double a = 1.0 / (dx * dx) + 1.0 / (dy * dy);               // 
-								double b = -2.0 * (aa[0] / (dx * dx) + aa[1] / (dy * dy));  // 
-								double c = (aa[0] * aa[0]) / (dx * dx) + (aa[1] * aa[1]) / (dy * dy) - f * f; // 
+								// Solve quadratic using first two neighbors (x and y)
+								double a = 1.0 / (dx * dx) + 1.0 / (dy * dy); // Coefficient a
+								double b = -2.0 * (aa[0] / (dx * dx) + aa[1] / (dy * dy)); // Coefficient b
+								double c = (aa[0] * aa[0]) / (dx * dx) + (aa[1] * aa[1]) / (dy * dy) - f * f; // Coefficient c
 
-								double D = sqrt(b * b - 4.0 * a * c);
-								d_curr = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
+								double D = sqrt(b * b - 4.0 * a * c); // Discriminant
+								d_curr = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a); // Choose smaller positive root
 
+								// If still valid (less than next neighbor)
 								if (d_curr <= (aa[2] + eps)) {
-									d_new = d_curr;
+									d_new = d_curr; // Use 2 neighbor solution
 								}
 								else {
-									// solve quadratic with all 3 neighbors
-									a = 1.0 / (dx * dx) + 1.0 / (dy * dy) + 1.0 / (dz * dz); // 
-									b = -2.0 * (aa[0] / (dx * dx) + aa[1] / (dy * dy) + aa[2] / (dz * dz)); // 
-									c = (aa[0] * aa[0]) / (dx * dx) + (aa[1] * aa[1]) / (dy * dy) + (aa[2] * aa[2]) / (dz * dz) - f * f; // 
+									// Solve quadratic using all three neighbors (x, y, z)
+									a = 1.0 / (dx * dx) + 1.0 / (dy * dy) + 1.0 / (dz * dz); // Update a
+									b = -2.0 * (aa[0] / (dx * dx) + aa[1] / (dy * dy) + aa[2] / (dz * dz)); // Update b
+									c = (aa[0] * aa[0]) / (dx * dx) + (aa[1] * aa[1]) / (dy * dy) + (aa[2] * aa[2]) / (dz * dz) - f * f; // Update c
 
-									D = sqrt(b * b - 4.0 * a * c);
-									d_new = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
+									D = sqrt(b * b - 4.0 * a * c); // Recompute discriminant
+									d_new = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a); // Choose smaller positive root
 								}
 							}
 
-							// update if smaller
+
+							// Update voxel if new distance is smaller
 							dist1d[gridPos] = std::min(dist1d[gridPos], static_cast<float>(d_new));
 						}
 					}
 				}
 			}
 
-			// copy back to 3D
-			for (int y = 0; y < h; y++) {
-				for (int x = 0; x < w; x++) {
-					for (int z = 0; z < l; z++) {
-						dist(x, y, z) = dist1d[z * (w * h) + y * w + x];
+			// Copy result from 1D array back to 3D volume
+			for (int j = 0; j < y; j++) {
+				for (int i = 0; i < x; i++) {
+					for (int k = 0; k < z; k++) {
+						dist(i, j, k) = dist1d[k * (x * y) + j * x + i];
 					}
 				}
 			}
 		}
+
 
 		/// <summary>
 		/// Default constructor initializes an empty volume (0x0x0 with 0 channels)
@@ -1049,6 +1080,7 @@ namespace tira {
 
 			return result_z;
 		}
+
 
 		/// <summary>
         /// Upsamples the current volume by the given factor using trilinear interpolation.
