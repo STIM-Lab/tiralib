@@ -291,8 +291,11 @@ namespace tira {
 							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; } // Swap if needed
 
 							// Conservative estimate using smallest spacing and smallest neighbor
-							double min_spacing = std::min({ dx, dy, dz }); // Choose the smallest spacing
-							double d_curr = aa[0] + f * min_spacing;       // Initial guess: smallest neighbor + step
+							//double min_spacing = std::min({ dx, dy, dz }); // Choose the smallest spacing
+							//double d_curr = aa[0] + f * min_spacing;       // Initial guess: smallest neighbor + step
+
+							double d_curr = aa[0] + f / std::sqrt(1.0 / (dx*dx) + 1.0 / (dy*dy) + 1.0 / (dz*dz));
+
 
 							// If the guess is less than next neighbor (valid), accept it
 							if (d_curr <= (aa[1] + eps)) {
@@ -338,6 +341,20 @@ namespace tira {
 					}
 				}
 			}
+
+
+			//// Rescale output to voxel units AFTER sweep
+			//for (int j = 0; j < dist.Y(); j++) {
+			//	for (int i = 0; i < dist.X(); i++) {
+			//		for (int k = 0; k < dist.Z(); k++) {
+			//			float val = dist(i, j, k);
+			//			if (val < 1e6f) {
+			//				dist(i, j, k) /= std::sqrt(dx * dx + dy * dy + dz * dz);
+			//			}
+			//		}
+			//	}
+			//}
+
 		}
 
 
