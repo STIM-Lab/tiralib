@@ -372,8 +372,9 @@ namespace tira {
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="z">size of the image along the Z (slowest) axis</param>
 		/// <param name="c">number of channels</param>
-		volume(size_t x, size_t y, size_t z, size_t c = 1) : volume() {
+		volume(size_t x, size_t y, size_t z, size_t c = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume() {
 			init(x, y, z, c);
+			_spacing = spacing;
 		}
 
 		/// <summary>
@@ -384,12 +385,14 @@ namespace tira {
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="z">size of the image along the Z (slowest) axis</param>
 		/// <param name="c">number of channels (channels are interleaved)</param>
-		volume(T* data, size_t x, size_t y, size_t z, size_t c = 1) : volume(x, y, z, c) {
+		volume(T* data, size_t x, size_t y, size_t z, size_t c = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume(x, y, z, c) {
 			memcpy(&field<T>::_data[0], data, field<T>::bytes());									// use memcpy to copy the raw data into the field array
+			_spacing = spacing;
 		}
 
-		volume(std::vector<size_t> shape) : field<T>(shape) {
-			_spacing = { 1.0f, 1.0f, 1.0f };
+		volume(std::vector<size_t> shape, std::vector<double> spacing = {1.0, 1.0, 1.0}) : field<T>(shape) {
+			//_spacing = { 1.0f, 1.0f, 1.0f };
+			_spacing = spacing;
 		}
 
 		/// <summary>
@@ -398,6 +401,7 @@ namespace tira {
 		/// <param name="I">image object to be copied</param>
 		volume(const volume<T>& V) : volume(V.X(), V.Y(), V.Z(), V.C()) {
 			memcpy(&field<T>::_data[0], &V._data[0], field<T>::bytes());
+			_spacing = V._spacing;
 		}
 
 		/// <summary>
@@ -473,6 +477,10 @@ namespace tira {
 		void spacing(double x, double y, double z) {
 			std::vector<double> spacing = { x, y, z };
 			_spacing = spacing;
+		}
+
+		std::vector<double> spacing() {
+			return _spacing;
 		}
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
@@ -674,7 +682,7 @@ namespace tira {
 		
 		tira::volume<T> Phi_to_sdf() {
 			tira::volume<T> phi = *this;								// original field
-			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z());				// output SDF
+			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z(), phi.C(), _spacing);				// output SDF
 
 			float BIG = 99999;
 			sdf = BIG;
@@ -983,26 +991,29 @@ namespace tira {
 
 		}
 
-		//tira::volume<float> gaussian_filter(float sigma, int window_factor ) {
+		// Convolves the volume with a Gaussian kernel and returns the result. This function
+		//    adjusts the sigma value to account for the pixel size (sigma is given in terms of the pixel spacing)
+		tira::volume<float> gaussian_filter(float sigma, int window_factor, bool pad = false) {
 
-		//	float sigma_x = sigma / _spacing[0];
-		//	//specify the kernel along x
-		//	//convolve
-
-		//	float sigma_y = sigma / _spacing[1];
-		//	//specify the kernel along y
-		//	//convolve
-
-		//	float sigma_z = sigma / _spacing[2];
-
-		//}
-
-		tira::volume<float> gaussian_filter(float sigma, int window_factor) {
-
-			// ----- X Axis -----
+			// calculate the kernel sizes along each dimension
 			float sigma_x = sigma / _spacing[0];
 			int kernel_size_x = window_factor * sigma_x;
 			if (kernel_size_x % 2 == 0) kernel_size_x++;
+
+			float sigma_y = sigma / _spacing[1];
+			int kernel_size_y = window_factor * sigma_y;
+			if (kernel_size_y % 2 == 0) kernel_size_y++;
+
+			float sigma_z = sigma / _spacing[2];
+			int kernel_size_z = window_factor * sigma_z;
+			if (kernel_size_z % 2 == 0) kernel_size_z++;
+
+			//tira::volume<float> result = border()
+
+
+
+
+			// ----- X Axis -----
 			float miu_x = (float)kernel_size_x / 2.0f;
 
 			float* kernel_x = (float*)malloc(kernel_size_x * sizeof(float));
@@ -1032,9 +1043,7 @@ namespace tira {
 			free(kernel_x);
 
 			// ----- Y Axis -----
-			float sigma_y = sigma / _spacing[1];
-			int kernel_size_y = window_factor * sigma_y;
-			if (kernel_size_y % 2 == 0) kernel_size_y++;
+
 			float miu_y = (float)kernel_size_y / 2.0f;
 
 			float* kernel_y = (float*)malloc(kernel_size_y * sizeof(float));
@@ -1064,9 +1073,7 @@ namespace tira {
 			free(kernel_y);
 
 			// ----- Z Axis -----
-			float sigma_z = sigma / _spacing[2];
-			int kernel_size_z = window_factor * sigma_z;
-			if (kernel_size_z % 2 == 0) kernel_size_z++;
+
 			float miu_z = (float)kernel_size_z / 2.0f;
 
 			float* kernel_z = (float*)malloc(kernel_size_z * sizeof(float));
@@ -1274,6 +1281,10 @@ namespace tira {
 				}
 			}
 			return result;
+		}
+
+		/// Add a border around the volume, specifying the width for each dimension separately
+		tira::volume<T> border(size_t wx, size_t wy, size_t wz, T value) {
 
 		}
 		
@@ -1480,7 +1491,7 @@ namespace tira {
 
 		tira::volume<T> operator*(T rhs) {
 			size_t N = field<T>::size();									// calculate the total number of values in the volume
-			tira::volume<T> r(this->shape());								// allocate space for the resulting image
+			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] * rhs;						// multiply the individual samples
 			return r;														// return the final result
@@ -1488,7 +1499,7 @@ namespace tira {
 
 		tira::volume<T> operator+(T rhs) {
 			size_t N = field<T>::size();									// calculate the total number of values in the volume
-			tira::volume<T> r(this->shape());								// allocate space for the resulting image
+			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] + rhs;						// add the individual pixels
 			return r;														// return the summed result
@@ -1496,7 +1507,7 @@ namespace tira {
 
 		tira::volume<T> operator-(T rhs) {
 			size_t N = field<T>::size();									// calculate the total number of values in the volume
-			tira::volume<T> r(this->shape());								// allocate space for the resulting image
+			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
 				r._data[n] = field<T>::_data[n] - rhs;						// add the individual pixels
 			return r;														// return the summed result
@@ -1507,14 +1518,14 @@ namespace tira {
 				throw std::runtime_error("Images dimensions are incompatible");
 
 			if (C() == rhs.C()) {					// if both images have the same number of color channels
-				tira::volume<T> result(this->shape());
+				tira::volume<T> result(this->shape(), this->_spacing);
 				for (size_t i = 0; i < field<T>::size(); i++) {
 					result._data[i] = field<T>::_data[i] * rhs._data[i];
 				}
 				return result;
 			}
 			else if (C() == 1) {
-				tira::volume<T> result(X(), Y(), rhs.C());
+				tira::volume<T> result(X(), Y(), Z(), rhs.C(), this->_spacing);
 				for (size_t zi = 0; zi < Z(); zi++) {
 					for (size_t yi = 0; yi < Y(); yi++) {
 						for (size_t xi = 0; xi < X(); xi++) {
@@ -1527,7 +1538,7 @@ namespace tira {
 				return result;
 			}
 			else if (rhs.C() == 1) {
-				tira::volume<T> result(this->shape());
+				tira::volume<T> result(this->shape(), this->_spacing);
 				for (size_t zi = 0; zi < Z(); zi++) {
 					for (size_t yi = 0; yi < Y(); yi++) {
 						for (size_t xi = 0; xi < X(); xi++) {
@@ -1548,7 +1559,7 @@ namespace tira {
 			if (X() != rhs.X() || Y() != rhs.Y())
 				throw std::runtime_error("Images dimensions are incompatible");
 
-			tira::volume<T> result(this->shape());						// create the output
+			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
 			for (size_t zi = 0; zi < Z(); zi++) {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
@@ -1565,7 +1576,7 @@ namespace tira {
 			if (X() != rhs.X() || Y() != rhs.Y())
 				throw std::runtime_error("Images dimensions are incompatible");
 
-			tira::volume<T> result(this->shape());						// create the output
+			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
 			for (size_t zi = 0; zi < Z(); zi++) {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
@@ -1582,7 +1593,7 @@ namespace tira {
 			if (X() != rhs.X() || Y() != rhs.Y())
 				throw std::runtime_error("Images dimensions are incompatible");
 
-			tira::volume<T> result(this->shape());						// create the output
+			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
 			for (size_t zi = 0; zi < Z(); zi++) {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
