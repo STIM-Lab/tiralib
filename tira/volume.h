@@ -327,7 +327,13 @@ namespace tira {
 
 
 							// Update voxel if new distance is smaller
-							dist1d[gridPos] = std::min(dist1d[gridPos], static_cast<float>(d_new));
+							//dist1d[gridPos] = std::min(dist1d[gridPos], static_cast<float>(d_new));
+							float abs_old = std::abs(dist1d[gridPos]);
+							float sign = (dist1d[gridPos] >= 0.0f) ? 1.0f : -1.0f;
+							dist1d[gridPos] = sign * std::min(abs_old, static_cast<float>(d_new));
+
+
+
 						}
 					}
 				}
@@ -341,19 +347,6 @@ namespace tira {
 					}
 				}
 			}
-
-
-			//// Rescale output to voxel units AFTER sweep
-			//for (int j = 0; j < dist.Y(); j++) {
-			//	for (int i = 0; i < dist.X(); i++) {
-			//		for (int k = 0; k < dist.Z(); k++) {
-			//			float val = dist(i, j, k);
-			//			if (val < 1e6f) {
-			//				dist(i, j, k) /= std::sqrt(dx * dx + dy * dy + dz * dz);
-			//			}
-			//		}
-			//	}
-			//}
 
 		}
 
@@ -994,116 +987,108 @@ namespace tira {
 		// Convolves the volume with a Gaussian kernel and returns the result. This function
 		//    adjusts the sigma value to account for the pixel size (sigma is given in terms of the pixel spacing)
 		tira::volume<float> gaussian_filter(float sigma, int window_factor, bool pad = false) {
-
-			// calculate the kernel sizes along each dimension
+			// Calculate sigma in voxel space
 			float sigma_x = sigma / _spacing[0];
-			int kernel_size_x = window_factor * sigma_x;
-			if (kernel_size_x % 2 == 0) kernel_size_x++;
-
 			float sigma_y = sigma / _spacing[1];
-			int kernel_size_y = window_factor * sigma_y;
-			if (kernel_size_y % 2 == 0) kernel_size_y++;
-
 			float sigma_z = sigma / _spacing[2];
+
+			// Compute kernel sizes and radii
+			int kernel_size_x = window_factor * sigma_x;
+			int kernel_size_y = window_factor * sigma_y;
 			int kernel_size_z = window_factor * sigma_z;
+
+			if (kernel_size_x % 2 == 0) kernel_size_x++;
+			if (kernel_size_y % 2 == 0) kernel_size_y++;
 			if (kernel_size_z % 2 == 0) kernel_size_z++;
 
-			//tira::volume<float> result = border()
+			int radius_x = kernel_size_x / 2;
+			int radius_y = kernel_size_y / 2;
+			int radius_z = kernel_size_z / 2;
 
-
-
-
-			// ----- X Axis -----
-			float miu_x = (float)kernel_size_x / 2.0f;
-
-			float* kernel_x = (float*)malloc(kernel_size_x * sizeof(float));
-			for (int xi = 0; xi < kernel_size_x; xi++) {
-				int u = 2 * sigma_x * sigma_x;
-				kernel_x[xi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(xi - miu_x) * (xi - miu_x) / u);
+			// Optional padding
+			tira::volume<float> padded = *this;
+			if (pad) {
+				padded = padded.border_separable(radius_x, radius_y, radius_z, 0.0f);
 			}
 
-			// normalize kernel_x
-			float sum_x = 0.0f;
-			for (int i = 0; i < kernel_size_x; i++) sum_x += kernel_x[i];
-			for (int i = 0; i < kernel_size_x; i++) kernel_x[i] /= sum_x;
+			// Convolution along X
+			float* kernel_x = new float[kernel_size_x];
+			float mu_x = kernel_size_x / 2.0f;
+			float sum_x = 0;
+			float denom_x = 2.0f * sigma_x * sigma_x;
+			for (int i = 0; i < kernel_size_x; ++i) {
+				float x = i - mu_x;
+				kernel_x[i] = std::exp(-x * x / denom_x);
+				sum_x += kernel_x[i];
+			}
+			for (int i = 0; i < kernel_size_x; ++i) kernel_x[i] /= sum_x;
 
-			tira::volume<float> result_x(X() - (kernel_size_x - 1), Y(), Z());
-			float sum;
-			for (size_t yi = 0; yi < result_x.Y(); yi++) {
-				for (size_t xi = 0; xi < result_x.X(); xi++) {
-					for (size_t zi = 0; zi < result_x.Z(); zi++) {
-						sum = 0;
-						for (size_t ui = 0; ui < kernel_size_x; ui++) {
-							sum += at(xi + ui, yi, zi) * kernel_x[ui];
-						}
-						result_x(xi, yi, zi) = sum;
+			tira::volume<float> result_x(padded.X() - (kernel_size_x - 1), padded.Y(), padded.Z());
+			for (size_t y = 0; y < result_x.Y(); ++y) {
+				for (size_t x = 0; x < result_x.X(); ++x) {
+					for (size_t z = 0; z < result_x.Z(); ++z) {
+						float sum = 0;
+						for (int i = 0; i < kernel_size_x; ++i)
+							sum += padded(x + i, y, z) * kernel_x[i];
+						result_x(x, y, z) = sum;
 					}
 				}
 			}
-			free(kernel_x);
+			delete[] kernel_x;
 
-			// ----- Y Axis -----
-
-			float miu_y = (float)kernel_size_y / 2.0f;
-
-			float* kernel_y = (float*)malloc(kernel_size_y * sizeof(float));
-			for (int yi = 0; yi < kernel_size_y; yi++) {
-				int u = 2 * sigma_y * sigma_y;
-				kernel_y[yi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(yi - miu_y) * (yi - miu_y) / u);
+			// Convolution along Y
+			float* kernel_y = new float[kernel_size_y];
+			float mu_y = kernel_size_y / 2.0f;
+			float sum_y = 0;
+			float denom_y = 2.0f * sigma_y * sigma_y;
+			for (int i = 0; i < kernel_size_y; ++i) {
+				float y = i - mu_y;
+				kernel_y[i] = std::exp(-y * y / denom_y);
+				sum_y += kernel_y[i];
 			}
-
-			// normalize kernel_y
-			float sum_y = 0.0f;
-			for (int i = 0; i < kernel_size_y; i++) sum_y += kernel_y[i];
-			for (int i = 0; i < kernel_size_y; i++) kernel_y[i] /= sum_y;
+			for (int i = 0; i < kernel_size_y; ++i) kernel_y[i] /= sum_y;
 
 			tira::volume<float> result_y(result_x.X(), result_x.Y() - (kernel_size_y - 1), result_x.Z());
-			float sum1;
-			for (size_t yi = 0; yi < result_y.Y(); yi++) {
-				for (size_t xi = 0; xi < result_y.X(); xi++) {
-					for (size_t zi = 0; zi < result_y.Z(); zi++) {
-						sum1 = 0;
-						for (size_t ui = 0; ui < kernel_size_y; ui++) {
-							sum1 += result_x(xi, yi + ui, zi) * kernel_y[ui];
-						}
-						result_y(xi, yi, zi) = sum1;
+			for (size_t y = 0; y < result_y.Y(); ++y) {
+				for (size_t x = 0; x < result_y.X(); ++x) {
+					for (size_t z = 0; z < result_y.Z(); ++z) {
+						float sum = 0;
+						for (int i = 0; i < kernel_size_y; ++i)
+							sum += result_x(x, y + i, z) * kernel_y[i];
+						result_y(x, y, z) = sum;
 					}
 				}
 			}
-			free(kernel_y);
+			delete[] kernel_y;
 
-			// ----- Z Axis -----
-
-			float miu_z = (float)kernel_size_z / 2.0f;
-
-			float* kernel_z = (float*)malloc(kernel_size_z * sizeof(float));
-			for (int zi = 0; zi < kernel_size_z; zi++) {
-				int u = 2 * sigma_z * sigma_z;
-				kernel_z[zi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(zi - miu_z) * (zi - miu_z) / u);
+			// Convolution along Z
+			float* kernel_z = new float[kernel_size_z];
+			float mu_z = kernel_size_z / 2.0f;
+			float sum_z = 0;
+			float denom_z = 2.0f * sigma_z * sigma_z;
+			for (int i = 0; i < kernel_size_z; ++i) {
+				float z = i - mu_z;
+				kernel_z[i] = std::exp(-z * z / denom_z);
+				sum_z += kernel_z[i];
 			}
-
-			// normalize kernel_z
-			float sum_z = 0.0f;
-			for (int i = 0; i < kernel_size_z; i++) sum_z += kernel_z[i];
-			for (int i = 0; i < kernel_size_z; i++) kernel_z[i] /= sum_z;
+			for (int i = 0; i < kernel_size_z; ++i) kernel_z[i] /= sum_z;
 
 			tira::volume<float> result_z(result_y.X(), result_y.Y(), result_y.Z() - (kernel_size_z - 1));
-			float sum2;
-			for (size_t yi = 0; yi < result_z.Y(); yi++) {
-				for (size_t xi = 0; xi < result_z.X(); xi++) {
-					for (size_t zi = 0; zi < result_z.Z(); zi++) {
-						sum2 = 0;
-						for (size_t ui = 0; ui < kernel_size_z; ui++) {
-							sum2 += result_y(xi, yi, zi + ui) * kernel_z[ui];
-						}
-						result_z(xi, yi, zi) = sum2;
+			for (size_t y = 0; y < result_z.Y(); ++y) {
+				for (size_t x = 0; x < result_z.X(); ++x) {
+					for (size_t z = 0; z < result_z.Z(); ++z) {
+						float sum = 0;
+						for (int i = 0; i < kernel_size_z; ++i)
+							sum += result_y(x, y, z + i) * kernel_z[i];
+						result_z(x, y, z) = sum;
 					}
 				}
 			}
-			free(kernel_z);
+			delete[] kernel_z;
 
 			return result_z;
 		}
+
 
 
 		/// <summary>
@@ -1284,9 +1269,25 @@ namespace tira {
 		}
 
 		/// Add a border around the volume, specifying the width for each dimension separately
-		tira::volume<T> border(size_t wx, size_t wy, size_t wz, T value) {
+		//tira::volume<T> border(size_t wx, size_t wy, size_t wz, T value) {
 
+		//}
+
+		
+		tira::volume<T> border_separable(size_t wx, size_t wy, size_t wz, T value) {
+			tira::volume<T> result(X() + 2 * wx, Y() + 2 * wy, Z() + 2 * wz);
+			result = value; // Fill entire volume with padding value
+
+			for (size_t y = 0; y < Y(); ++y) {
+				for (size_t x = 0; x < X(); ++x) {
+					for (size_t z = 0; z < Z(); ++z) {
+						result(x + wx, y + wy, z + wz) = (*this)(x, y, z);
+					}
+				}
+			}
+			return result;
 		}
+
 		
 
 		/// <summary>
