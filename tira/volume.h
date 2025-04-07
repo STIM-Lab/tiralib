@@ -291,10 +291,10 @@ namespace tira {
 							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; } // Swap if needed
 
 							// Conservative estimate using smallest spacing and smallest neighbor
-							//double min_spacing = std::min({ dx, dy, dz }); // Choose the smallest spacing
-							//double d_curr = aa[0] + f * min_spacing;       // Initial guess: smallest neighbor + step
+							double min_spacing = std::min({ dx, dy, dz }); // Choose the smallest spacing
+							double d_curr = aa[0] + f * min_spacing;       // Initial guess: smallest neighbor + step
 
-							double d_curr = aa[0] + f / std::sqrt(1.0 / (dx*dx) + 1.0 / (dy*dy) + 1.0 / (dz*dz));
+							//double d_curr = aa[0] + f / std::sqrt(1.0 / (dx*dx) + 1.0 / (dy*dy) + 1.0 / (dz*dz));
 
 
 							// If the guess is less than next neighbor (valid), accept it
