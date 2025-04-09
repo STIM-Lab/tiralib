@@ -327,10 +327,10 @@ namespace tira {
 
 
 							// Update voxel if new distance is smaller
-							//dist1d[gridPos] = std::min(dist1d[gridPos], static_cast<float>(d_new));
-							float abs_old = std::abs(dist1d[gridPos]);
-							float sign = (dist1d[gridPos] >= 0.0f) ? 1.0f : -1.0f;
-							dist1d[gridPos] = sign * std::min(abs_old, static_cast<float>(d_new));
+							dist1d[gridPos] = std::min(dist1d[gridPos], static_cast<float>(d_new));
+							//float abs_old = std::abs(dist1d[gridPos]);
+							//float sign = (dist1d[gridPos] >= 0.0f) ? 1.0f : -1.0f;
+							//dist1d[gridPos] = sign * std::min(abs_old, static_cast<float>(d_new));
 
 
 
@@ -1245,6 +1245,93 @@ namespace tira {
 			upsampled._spacing[1] /= factor;
 			upsampled._spacing[2] /= factor;
 			return upsampled; // Return the upsampled volume
+		}
+
+
+
+		tira::volume<float> reinitialize_osher(float d_tau, int num_iters) {
+
+			tira::volume<float> phi = *this;
+
+			const int nx = phi.X();
+			const int ny = phi.Y();
+			const int nz = phi.Z();
+
+			const float dx = _spacing[0];
+			const float dy = _spacing[1];
+			const float dz = _spacing[2];
+
+			// Initialize psi as a copy of φ to evolve it
+			tira::volume<float> psi = phi;
+
+			// Iterate over  time t
+			for (int iter = 0; iter < num_iters; ++iter) {
+				for (int z = 1; z < nz - 1; ++z) {
+					for (int y = 1; y < ny - 1; ++y) {
+						for (int x = 1; x < nx - 1; ++x) {
+
+							// Compute sign function of φ 
+							float val = phi(x, y, z);
+							float sgn = val / std::sqrt(val * val + 1e-8f);  // sgn_ε(φ)
+
+							// Compute forward and backward differences for psi
+							float Dx_plus = (psi(x + 1, y, z) - psi(x, y, z)) / dx;
+							float Dx_minus = (psi(x, y, z) - psi(x - 1, y, z)) / dx;
+							float Dy_plus = (psi(x, y + 1, z) - psi(x, y, z)) / dy;
+							float Dy_minus = (psi(x, y, z) - psi(x, y - 1, z)) / dy;
+							float Dz_plus = (psi(x, y, z + 1) - psi(x, y, z)) / dz;
+							float Dz_minus = (psi(x, y, z) - psi(x, y, z - 1)) / dz;
+
+							// Godunov's scheme: compute |∇psi| using one-sided upwind differences
+							float Dx_pos, Dx_neg;
+							if (Dx_minus > 0.0f) Dx_pos = Dx_minus * Dx_minus;
+							else Dx_pos = 0.0f;
+							if (Dx_plus < 0.0f) Dx_pos += Dx_plus * Dx_plus;
+
+							if (Dx_minus < 0.0f) Dx_neg = Dx_minus * Dx_minus;
+							else Dx_neg = 0.0f;
+							if (Dx_plus > 0.0f) Dx_neg += Dx_plus * Dx_plus;
+
+							float Dy_pos, Dy_neg;
+							if (Dy_minus > 0.0f) Dy_pos = Dy_minus * Dy_minus;
+							else Dy_pos = 0.0f;
+							if (Dy_plus < 0.0f) Dy_pos += Dy_plus * Dy_plus;
+
+							if (Dy_minus < 0.0f) Dy_neg = Dy_minus * Dy_minus;
+							else Dy_neg = 0.0f;
+							if (Dy_plus > 0.0f) Dy_neg += Dy_plus * Dy_plus;
+
+							float Dz_pos, Dz_neg;
+							if (Dz_minus > 0.0f) Dz_pos = Dz_minus * Dz_minus;
+							else Dz_pos = 0.0f;
+							if (Dz_plus < 0.0f) Dz_pos += Dz_plus * Dz_plus;
+
+							if (Dz_minus < 0.0f) Dz_neg = Dz_minus * Dz_minus;
+							else Dz_neg = 0.0f;
+							if (Dz_plus > 0.0f) Dz_neg += Dz_plus * Dz_plus;
+
+							float grad_psi = 0.0f;
+
+							// Select correct upwind norm based on sign of φ
+							if (sgn > 0.0f) {
+								grad_psi = std::sqrt(Dx_pos + Dy_pos + Dz_pos);
+							}
+							else {
+								grad_psi = std::sqrt(Dx_neg + Dy_neg + Dz_neg);
+							}
+
+							// Compute update term: sgn(φ) * (|∇psi| - 1)
+							float H = grad_psi - 1.0f;
+
+							// Euler update step
+							psi(x, y, z) = psi(x, y, z) - d_tau * sgn * H;
+						}
+					}
+				}
+			}
+
+			// Return the evolved (signed distance approximation)
+			return psi;
 		}
 
 
