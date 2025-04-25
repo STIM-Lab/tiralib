@@ -1,19 +1,11 @@
 #pragma once
 
-#include <tira/cuda/callable.h>
+#include "glm/glm.hpp"
+#include "glm/gtc/quaternion.hpp"
 
-#ifdef __CUDACC__
-#include <cuda/std/array>
-#include <cuda/std/complex>
-using namespace cuda::std;
-#else
-#include <array>
 #include <complex>
-using namespace std;
-#endif
-
+#include <vector>
 #include <iomanip>
-#include <sstream>
 #include <chrono>
 #include <random>
 #define _USE_MATH_DEFINES
@@ -22,138 +14,23 @@ using namespace std;
 
 namespace tira {
 
-	template<typename T>
-	class vec3 {
-
-
-	public:
-		array<T, 3> _ptr;
-
-
-		CUDA_CALLABLE vec3() = default;
-		CUDA_CALLABLE vec3(vec3 const&) = default;
-
-		CUDA_CALLABLE vec3(T x, T y, T z) {
-			_ptr[0] = x;
-			_ptr[1] = y;
-			_ptr[2] = z;
-		}
-
-		
-
-		// copy assignment operator
-		CUDA_CALLABLE vec3& operator=(const vec3& b) {
-			_ptr = b._ptr;
-			return *this;
-		}
-
-		// other assignment operators
-		CUDA_CALLABLE vec3& operator+=(const vec3& b) {
-			_ptr[0] = _ptr[0] + b._ptr[0];
-			_ptr[1] = _ptr[1] + b._ptr[1];
-			_ptr[2] = _ptr[2] + b._ptr[2];
-			return *this;
-		}
-
-		// unary operators
-		CUDA_CALLABLE vec3 operator-() {
-			return vec3(-_ptr[0], -_ptr[1], -_ptr[2]);
-		}
-
-		// binary operators
-		CUDA_CALLABLE vec3 operator+(vec3 b) {
-			return vec3(_ptr[0] + b._ptr[0], _ptr[1] + b._ptr[1], _ptr[2] + b._ptr[2]);
-		}		
-		CUDA_CALLABLE vec3 operator-(vec3 b) {
-			return vec3(_ptr[0] - b._ptr[0], _ptr[1] - b._ptr[1], _ptr[2] - b._ptr[2]);
-		}
-		CUDA_CALLABLE vec3 operator*(T b) {
-			return vec3(_ptr[0] * b, _ptr[1] * b, _ptr[2] * b);
-		}
-		CUDA_CALLABLE vec3 operator/(T b) {
-			return vec3(_ptr[0] / b, _ptr[1] / b, _ptr[2] / b);
-		}
-
-
-		CUDA_CALLABLE T dot(vec3 b) {
-			return _ptr[0] * b._ptr[0] + _ptr[1] * b._ptr[1] + _ptr[2] * b._ptr[2];
-		}
-		CUDA_CALLABLE T norm() {
-			return sqrt(_ptr[0] * _ptr[0] + _ptr[1] * _ptr[1] + _ptr[2] * _ptr[2]);
-		}
-		CUDA_CALLABLE vec3 cross(vec3 b) {
-			return vec3(_ptr[1] * b._ptr[2] - _ptr[2] * b._ptr[1],
-				_ptr[2] * b._ptr[0] - _ptr[0] * b._ptr[2],
-				_ptr[0] * b._ptr[1] - _ptr[1] * b._ptr[0]);
-		}
-		CUDA_CALLABLE vec3 normalize(T& len) {
-			len = norm();
-			return vec3(_ptr[0] / len, _ptr[1] / len, _ptr[2] / len);
-		}
-		CUDA_CALLABLE vec3 normalize() {
-			T n;
-			return normalize(n);
-		}
-		CUDA_CALLABLE T& operator[](size_t i) {
-			return _ptr[i];
-		}
-		CUDA_CALLABLE T get(size_t i) {
-			T temp = _ptr[i];
-			return temp;
-		}
-
-	};
-
-	template<typename T>
-	class cvec3 : public vec3< complex<typename T> >{
-
-	public:
-		CUDA_CALLABLE cvec3() = default;
-
-		CUDA_CALLABLE cvec3(cvec3& b) {
-			vec3< complex<T> >::_ptr = b._ptr;
-		}
-
-		CUDA_CALLABLE cvec3(complex<T> x, complex<T> y, complex<T> z) {
-			vec3< complex<T> >::_ptr[0] = x;
-			vec3< complex<T> >::_ptr[1] = y;
-			vec3< complex<T> >::_ptr[2] = z;
-		}
-
-		// copy assignment operator
-		CUDA_CALLABLE cvec3& operator=(const cvec3& b) {
-			vec3< complex<T> >::_ptr = b._ptr;
-			return *this;
-		}
-
-		CUDA_CALLABLE void operator=(const vec3< complex<T> > b) {
-			vec3< complex<T> >::_ptr[0] = b._ptr[0];
-			vec3< complex<T> >::_ptr[1] = b._ptr[1];
-			vec3< complex<T> >::_ptr[2] = b._ptr[2];
-		}
-
-		CUDA_CALLABLE complex<T> dot(cvec3 b) {
-			return vec3< complex<T> >::_ptr[0] * conj(b._ptr[0]) + vec3< complex<T> >::_ptr[1] * conj(b._ptr[1]) + vec3< complex<T> >::_ptr[2] * conj(b._ptr[2]);
-		}
-		CUDA_CALLABLE complex<T> dot(vec3<T> b) {
-			return vec3< complex<T> >::_ptr[0] * b[0] + vec3< complex<T> >::_ptr[1] * b[1] + vec3< complex<T> >::_ptr[2] * b[2];
-		}
-		CUDA_CALLABLE T norm() {
-			return sqrt((vec3< complex<T> >::_ptr[0] * conj(vec3< complex<T> >::_ptr[0]) + 
-				vec3< complex<T> >::_ptr[1] * conj(vec3< complex<T> >::_ptr[1]) + 
-				vec3< complex<T> >::_ptr[2] * conj(vec3< complex<T> >::_ptr[2])).real());
-		}
-	};
-
 	template <typename T>
 	class planewave {
-		cvec3<T> _E0;			// E vector at the origin (p = 0)
-		cvec3<T> _k;				// complex k vector (direction of propagation times wavenumber) in 3D
+		std::complex<T> _E0[3];			// E vector at the origin (p = 0)
+		std::complex<T> _k[3];			// complex k vector (direction of propagation times wavenumber) in 3D
 
 
-		/*static glm::tmat3x3<T> _Rot(glm::tvec3<T> from, glm::tvec3<T> to) {
+		static glm::tmat3x3<T> _Rot(glm::tvec3<T> from, glm::tvec3<T> to) {
 			glm::tvec3<T> from_hat = glm::normalize(from);
 			glm::tvec3<T> to_hat = glm::normalize(to);
+
+			/*if (from_hat[0] == to_hat[0] && from_hat[1] == to_hat[1] && from_hat[2] == to_hat[2])
+				return glm::tmat3x3<T>(1.0);
+			if (from_hat[0] == -to_hat[0] && from_hat[1] == -to_hat[1] && from_hat[2] == -to_hat[2]) {
+				glm::tmat3x3<T> rot(-1.0);
+				rot[0][0] = 1.0;
+				return rot;
+			}*/
 
 			glm::tvec3<T> cp = glm::cross(from_hat, to_hat);
 			T cp_length_sq = cp[0] + cp[1] + cp[2];
@@ -184,12 +61,12 @@ namespace tira {
 			glm::tquat<T> q = glm::angleAxis(angle, axis);		// generate a quaternion from the rotation properties
 
 			return glm::mat3_cast(q);							// generate and return a rotation matrix
-		}*/
+		}
 		/// <summary>
 		/// Generate a rotation matrix used to transform coordinates relative to k into global coordinates
 		/// </summary>
 		/// <returns></returns>
-		/*glm::tmat3x3<T> _Rot() {
+		glm::tmat3x3<T> _Rot() {
 			glm::tvec3<T> z(0.0, 0.0, 1.0);						// z axis (local coordinates)
 			glm::tvec3<T> k(
 				_k[0].real(), 
@@ -197,13 +74,13 @@ namespace tira {
 				_k[2].real());			// convert k to a vector in global coordinates
 
 			return _Rot(z, k);
-		}*/
+		}
 
 		/// <summary>
 		/// Generate a rotation matrix that transforms global coordinates to coordinates relative to k
 		/// </summary>
 		/// <returns></returns>
-		/*glm::tmat3x3<T> _iRot() {
+		glm::tmat3x3<T> _iRot() {
 			glm::tvec3<T> z(0.0, 0.0, 1.0);						// z axis (local coordinates)
 			glm::tvec3<T> k(
 				_k[0].real(), 
@@ -237,10 +114,10 @@ namespace tira {
 			glm::tquat<T> iq = glm::inverse(q);					// calculate the inverse of q
 
 			return glm::mat3_cast(iq);							// generate and return a rotation matrix
-		}*/
+		}
 
 		/// Multiply a real matrix and a complex vector
-		/*glm::tvec3<std::complex<T>> _cMul(glm::tmat3x3<T> M,
+		glm::tvec3<std::complex<T>> _cMul(glm::tmat3x3<T> M, 
 			std::complex<T> x, 
 			std::complex<T> y, 
 			std::complex<T> z) {
@@ -257,12 +134,12 @@ namespace tira {
 				std::complex<T>(R.z, I.z)
 			);
 			return v;															// return the complex 3D vector result
-		}*/
+		}
 
-		/*std::complex<T> _cDot(glm::tvec3<std::complex<T>> a, glm::tvec3<T> b) {
+		std::complex<T> _cDot(glm::tvec3<std::complex<T>> a, glm::tvec3<T> b){
 			std::complex<T> c = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 			return c;
-		}*/
+		}
 
 	public:
 
@@ -276,7 +153,7 @@ namespace tira {
 		/// <param name="N">Number of Monte-Carlo samples</param>
 		/// <param name="beta">Optional internal obscuration (reflective optics will generally use beta = 0</param>
 		/// <returns>An std::vector of plane waves that fill the desired solid angle</returns>
-		/*static std::vector< tira::planewave<T> > SolidAngleMC(T alpha, T kx, T ky, T kz,
+		static std::vector< tira::planewave<T> > SolidAngleMC(T alpha, T kx, T ky, T kz, 
 		std::complex<T> Ex, std::complex<T> Ey, std::complex<T> Ez, size_t N,
 		T beta = 0, glm::vec<3, T> clip = glm::vec<3, T>(0.0, 0.0, 0.0), unsigned long seed = 0) {
 			if (beta > alpha) throw "ERROR: beta cannot be larger than alpha";
@@ -319,9 +196,9 @@ namespace tira {
 				}
 			}
 			return P;
-		}*/
+		}
 
-		/*static std::vector< tira::planewave<T> > SolidAnglePolar(T alpha, T kx, T ky, T kz,
+		static std::vector< tira::planewave<T> > SolidAnglePolar(T alpha, T kx, T ky, T kz, 
 			std::complex<T> Ex, std::complex<T> Ey, std::complex<T> Ez,
 			size_t thetaN = 100, size_t phiN = 50, T beta = 0, glm::vec<3, T> clip = glm::vec<3, T>(0.0, 0.0, 0.0)) {
 			size_t N = thetaN * phiN;
@@ -343,7 +220,7 @@ namespace tira {
 			for (size_t itheta = 0; itheta < thetaN; itheta++) {
 				for (size_t iphi = 0; iphi < phiN; iphi++) {
 					theta = dtheta * (T)itheta;
-					phi = beta + dphi * (T)iphi; 
+					phi = beta + dphi * (T)iphi;
 
 					x = std::cos(theta) * std::sin(phi);							// convert from spherical to cartesian coordinates
 					y = std::sin(theta) * std::sin(phi);
@@ -362,23 +239,43 @@ namespace tira {
 				}
 			}
 			return P;
+		}
+
+		// Create a plane wave with a given k vector and the corresponding perpendicular components of E.
+		/*planewave<T>(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex_perp, std::complex<T> Ey_perp) {
+			_k[0] = kx;
+			_k[1] = ky;
+			_k[2] = kz;
+			_E0[0] = Ex_perp;
+			_E0[1] = Ey_perp;
 		}*/
 
 		// Create a plane wave with a given k and E vector. This expects both k and E to be orthogonal.
-		CUDA_CALLABLE planewave<T>(complex<T> kx, complex<T> ky, complex<T> kz, complex<T> Ex, complex<T> Ey, complex<T> Ez) {
+		planewave(std::complex<T> kx, std::complex<T> ky, std::complex<T> kz, std::complex<T> Ex, std::complex<T> Ey, std::complex<T> Ez) {
 			_k[0] = kx;
 			_k[1] = ky;
 			_k[2] = kz;
 
+			// ORTHOGONALIZE
+			// calculate the length of the k vector
+			/*std::complex<T> k_mag = sqrt(kx * kx + ky * ky + kz * kz);
 			
+			// calculate the normalized direction of k
+			std::complex<T> dx = kx / k_mag;
+			std::complex<T> dy = ky / k_mag;
+			std::complex<T> dz = kz / k_mag;
+
+			// calculate the projection of E0 onto k
+			std::complex<T> E_dot_k = Ex * dx + Ey * dy + Ez * dz;
+			*/
 
 			// save E while correcting for any out-of-plane components
-			_E0[0] = Ex;
-			_E0[1] = Ey;
-			_E0[2] = Ez;
+			_E0[0] = Ex;// -dx * E_dot_k;
+			_E0[1] = Ey;// -dy * E_dot_k;
+			_E0[2] = Ez;// -dz * E_dot_k;
 		}
 
-		CUDA_CALLABLE planewave<T>(){
+		planewave(){
 			_k[0] = 0;
 			_k[1] = 0;
 			_k[2] = 1;
@@ -387,31 +284,23 @@ namespace tira {
 			_E0[2] = 0;
 		}
 
-		// copy constructor
-		CUDA_CALLABLE planewave<T>(const planewave<T>& t) {
-			_E0 = t._E0;
-			_k = t._k;
-		}
-
 		/// <summary>
 		/// Returns the 3-dimensional E vector at the origin
 		/// </summary>
 		/// <returns></returns>
-		CUDA_CALLABLE cvec3<T> E0() {
-			return cvec3(_E0[0], _E0[1], _E0[2]);
-		}
-
-		CUDA_CALLABLE T I0() {
-			return (_E0[0] * conj(_E0[0]) + _E0[1] * conj(_E0[1]) + _E0[2] * conj(_E0[2])).real();
+		glm::vec<3, std::complex<T>> getE0() {
+			//glm::tmat3x3<T> M = _Rot();							// get the matrix mapping local coordinates into global coordinates
+			//return _cMul(M, _E0[0], _E0[1], 0.0);				// multiply the local E0 coordinates by the rotation matrix
+			return glm::vec<3, std::complex<T> >(_E0[0], _E0[1], _E0[2]);
 		}
 
 		/// Returns the 3-dimensional E vector at any point in space
-		CUDA_CALLABLE cvec3<T> E(T x, T y, T z){
-			complex<T> i(0, 1);
-			complex<T> k_dot_r = _k[0] * x + _k[1] * y + _k[2] * z;
-			complex<T> phase = exp(i * k_dot_r);
-			cvec3<T> A = E0();
-			cvec3<T> E(A[0] * phase, A[1] * phase, A[2] * phase);
+		glm::vec<3, std::complex<T>> getE(T x, T y, T z){
+			std::complex<T> i(0, 1);
+			std::complex<T> k_dot_r = _k[0] * x + _k[1] * y + _k[2] * z;
+			std::complex<T> phase = std::exp(i * k_dot_r);
+			glm::vec<3, std::complex<T>> E0 = getE0();
+			glm::vec<3, std::complex<T>> E(E0[0] * phase, E0[1] * phase, E0[2] * phase);
 			return E;
 		}
 
@@ -419,34 +308,33 @@ namespace tira {
 		/// Return the k vector
 		/// </summary>
 		/// <returns></returns>
-		CUDA_CALLABLE cvec3<T> k() {
-			return cvec3(_k[0], _k[1], _k[2]);
+		glm::vec<3, std::complex<T>> getK() {
+			return glm::vec<3, std::complex<T>>(_k[0], _k[1], _k[2]);
 		}
 
 		/// <summary>
 		/// Return a real k vector (assumes user knows the k vector is real)
 		/// </summary>
 		/// <returns></returns>
-		CUDA_CALLABLE vec3<T> k_real() {
-			return vec3(_k[0].real(), _k[1].real(), _k[2].real());
+		glm::vec<3, T> getKreal() {
+			return glm::vec<3, T>(_k[0].real(), _k[1].real(), _k[2].real());
 		}
 
 		/// <summary>
 		/// Returns the wavenumber
 		/// </summary>
 		/// <returns></returns>
-		CUDA_CALLABLE T k_mag() {
-			complex<T> sum = _k[0] * conj(_k[0]) + _k[1] * conj(_k[1]) + _k[2] * conj(_k[2]);
-			return std::sqrt(sum.real());
+		T getKmag() {
+			return std::sqrt(_k[0].real() * _k[0].real() + _k[1].real() * _k[1].real() + _k[2].real() * _k[2].real());
 		}
 
 		/// <summary>
 		/// Get the real direction of the k vector
 		/// </summary>
 		/// <returns></returns>
-		CUDA_CALLABLE vec3<T> k_dir() {
-			T kmag = k_mag();
-			return k_real() / kmag;
+		glm::vec<3, T> getDirection() {
+			T kmag = getKmag();
+			return getKreal() / kmag;
 		}
 
 		/// <summary>
@@ -455,315 +343,61 @@ namespace tira {
 		/// <returns></returns>
 		std::string str(int width = 25, int precision = 4) {
 			std::stringstream ss;
-			vec3<T> s = k_dir();
-			ss << "|k|: " << k_mag()<<std::endl;
+			glm::vec<3, T> s = getDirection();
+			ss << "k: " << getKmag()<<std::endl;
 			ss << "s: "<<std::scientific<<std::setprecision(precision)<<std::setw(width)<< s[0] <<std::setw(width)<< s[1] <<std::setw(width)<< s[2]<<std::endl;
-			cvec3<T> E = E0();
+			glm::tvec3<std::complex<T>> E = getE0();
 			ss << "E: "<<std::scientific<<std::setprecision(precision)<<std::setw(width)<< E[0] <<std::setw(width)<< E[1] <<std::setw(width)<< E[2]<<std::endl;
 			return ss.str();
 		}
 
-		CUDA_CALLABLE tira::planewave<T> wind(T x, T y, T z) {
-			complex<T> k_dot_r = _k[0] * x + _k[1] * y + _k[2] * z;
-			complex<T> i(0.0, 1.0);
-			complex<T> phase = std::exp(i * k_dot_r);
+		tira::planewave<T> wind(T x, T y, T z) {
+			std::complex<T> k_dot_r = _k[0] * x + _k[1] * y + _k[2] * z;
+			std::complex<T> i(0.0, 1.0);
+			std::complex<T> phase = std::exp(i * k_dot_r);
 			return tira::planewave<T>(_k[0], _k[1], _k[2], _E0[0] * phase, _E0[1] * phase, _E0[2] * phase);
 		}
 
 		/// Calculate the reflected and transmitted plane waves at a single boundary
-		CUDA_CALLABLE planewave reflect(complex<T> nr) {
-			vec3<T> ki = k_real();					// k vector
-			T k;
-			vec3<T> si = ki.normalize(k);			// direction of the k vector
-			cvec3<T> Ei = E0();						// incident electric field vector at the origin
-
-			T cos_theta_i = si[2];										// calculate the sine and cosine of the angle of incidence
-			T sin_theta_i = std::sqrt(1 - cos_theta_i * cos_theta_i);
-			//T theta_i = asin(sin_theta_i);
-
-			// calculate the basis vectors for the plane of incidence
-			vec3<T> z(0, 0, 1);
-			vec3<T> y;
-			if (sin_theta_i == 0) {
-				complex<T> rp = (1.0f - nr) / (1.0f + nr);		// compute the Fresnel coefficients (only 2 needed)
-				complex<T> tp = 2.0f / (1.0f + nr);
-
-				cvec3<T> Er;
-				Er = Ei * rp;				// apply the Fresnel coefficients to set the amplitude of the scattered plane waves
-				// generate the reflected and transmitted waves
-				return planewave<T>(0, 0, -ki[2], Er[0], Er[1], Er[2]);
-			}
-			y = vec3<T>(si[0] / sin_theta_i, si[1] / sin_theta_i, 0);
-
-			vec3<T> x = z.cross(y);
-
-			vec3<T> kr(ki[0], ki[1], -ki[2]);		// calculate the reflected k vector
-
-			// use Snell's law to calculate the transmitted angle sine and cosine
-			complex<T> sin_theta_t = (1.0f / nr) * sin_theta_i;
-			complex<T> cos_theta_t = sqrt(1.0f - sin_theta_t * sin_theta_t);
-
-			// calculate the Fresnel coefficients
-			complex<T> sin_tmi = sin_theta_t * cos_theta_i - cos_theta_t * sin_theta_i;
-			complex<T> sin_2_tmi = sin_tmi * sin_tmi;
-			complex<T> tan_tmi = sin_2_tmi / (complex<T>(1, 0) - sin_2_tmi);
-			complex<T> sin_tpi = sin_theta_t * cos_theta_i + cos_theta_t * sin_theta_i;
-			complex<T> sin_2_tpi = sin_tpi * sin_tpi;
-			complex<T> tan_tpi = sin_2_tpi / (complex<T>(1, 0) - sin_2_tpi);
-
-			complex<T> rs = sin_tmi / sin_tpi;
-			complex<T> rp = tan_tmi / tan_tpi;
-
-			// calculate the p component directions for each E vector
-			vec3<T> Eip_dir = y * cos_theta_i - z * sin_theta_i;
-			vec3<T> Erp_dir = y * cos_theta_i + z * sin_theta_i;
-
-
-			// calculate the s and t components of each E vector
-			complex<T> Ei_s = Ei.dot(x);
-			complex<T> Ei_p = Ei.dot(Eip_dir);
-			complex<T> Er_s = rs * Ei_s;
-			complex<T> Er_p = rp * Ei_p;
-
-			// calculate the E vector for each plane wave
-			cvec3<T> Er;
-			Er[0] = Erp_dir[0] * Er_p + x[0] * Er_s;
-			Er[1] = Erp_dir[1] * Er_p + x[1] * Er_s;
-			Er[2] = Erp_dir[2] * Er_p + x[2] * Er_s;
-
-			// generate the reflected and transmitted waves
-			return planewave<T>(kr[0], kr[1], kr[2], Er[0], Er[1], Er[2]);
-		}
-
-		CUDA_CALLABLE planewave refract(complex<T> nr) {
-			vec3<T> ki = k_real();					// k vector
-			T k;
-			vec3<T> si = ki.normalize(k);			// direction of the k vector
-			cvec3<T> Ei = E0();						// incident electric field vector at the origin
-
-			T cos_theta_i = si[2];										// calculate the sine and cosine of the angle of incidence
-			T sin_theta_i = std::sqrt(1 - cos_theta_i * cos_theta_i);
-
-			// calculate the basis vectors for the plane of incidence
-			vec3<T> z(0, 0, 1);
-			vec3<T> y;
-			if (sin_theta_i == 0) {
-				complex<T> rp = (1.0f - nr) / (1.0f + nr);		// compute the Fresnel coefficients (only 2 needed)
-				complex<T> tp = 2.0f / (1.0f + nr);
-
-				cvec3<T> Er;
-				Er = Ei * rp;				// apply the Fresnel coefficients to set the amplitude of the scattered plane waves
-				cvec3<T> Et;
-				Et = Ei * tp;
-				// generate the reflected and transmitted waves
-				return planewave<T>(0, 0, ki[2] * nr, Et[0], Et[1], Et[2]);
-			}
-			y = vec3<T>(si[0] / sin_theta_i, si[1] / sin_theta_i, 0);
-
-			vec3<T> x = z.cross(y);
-
-			vec3<T> kr(ki[0], ki[1], -ki[2]);		// calculate the reflected k vector
-
-			// use Snell's law to calculate the transmitted angle sine and cosine
-			complex<T> sin_theta_t = (1.0f / nr) * sin_theta_i;
-			complex<T> cos_theta_t = sqrt(1.0f - sin_theta_t * sin_theta_t);
-
-			cvec3<T> kt;										// calculate the transmitted k vector
-			complex<T> kt_mag = k * nr;
-			kt[0] = kt_mag * (y[0] * sin_theta_t + z[0] * cos_theta_t);
-			kt[1] = kt_mag * (y[1] * sin_theta_t + z[1] * cos_theta_t);
-			kt[2] = kt_mag * (y[2] * sin_theta_t + z[2] * cos_theta_t);
-
-			// calculate the Fresnel coefficients
-			complex<T> sin_tmi = sin_theta_t * cos_theta_i - cos_theta_t * sin_theta_i;
-			complex<T> cos_tmi = sqrt(complex<T>(1, 0) - sin_tmi * sin_tmi);
-			complex<T> sin_2_tmi = sin_tmi * sin_tmi;
-			complex<T> tan_tmi = sin_2_tmi / (complex<T>(1, 0) - sin_2_tmi);
-			complex<T> sin_tpi = sin_theta_t * cos_theta_i + cos_theta_t * sin_theta_i;
-			//complex<T> cos_tpi = std::sqrt(complex<T>(1, 0) - sin_tpi * sin_tpi);
-			complex<T> sin_2_tpi = sin_tpi * sin_tpi;
-			complex<T> tan_tpi = sin_2_tpi / (complex<T>(1, 0) - sin_2_tpi);
-
-			complex<T> rs = sin_tmi / sin_tpi;
-			complex<T> rp = tan_tmi / tan_tpi;
-			complex<T> ts = (2.0f * (sin_theta_t * cos_theta_i)) / sin_tpi;
-			complex<T> tp = ((2.0f * sin_theta_t * cos_theta_i) / (sin_tpi * cos_tmi));
-
-			// calculate the p component directions for each E vector
-			vec3<T> Eip_dir = y * cos_theta_i - z * sin_theta_i;
-			vec3<T> Erp_dir = y * cos_theta_i + z * sin_theta_i;
-			cvec3<T> Etp_dir(0.0, 0.0, 0.0);
-			Etp_dir[0] = y[0] * cos_theta_t - z[0] * sin_theta_t;
-			Etp_dir[1] = y[1] * cos_theta_t - z[1] * sin_theta_t;
-			Etp_dir[2] = y[2] * cos_theta_t - z[2] * sin_theta_t;
-
-			// calculate the s and t components of each E vector
-			complex<T> Ei_s = Ei.dot(x);
-			complex<T> Ei_p = Ei.dot(Eip_dir);
-			complex<T> Er_s = rs * Ei_s;
-			complex<T> Er_p = rp * Ei_p;
-			complex<T> Et_s = ts * Ei_s;
-			complex<T> Et_p = tp * Ei_p;
-
-			// calculate the E vector for the transmitted wave
-			cvec3<T> Et;
-			Et[0] = Etp_dir[0] * Et_p + x[0] * Et_s;
-			Et[1] = Etp_dir[1] * Et_p + x[1] * Et_s;
-			Et[2] = Etp_dir[2] * Et_p + x[2] * Et_s;
-
-			// return the transmitted wave
-			return planewave<T>(kt[0], kt[1], kt[2], Et[0], Et[1], Et[2]);
-		}
-
-		CUDA_CALLABLE void scatter(complex<T> nr, planewave<T>& r, planewave<T>& t) {
-			vec3<T> ki = k_real();					// k vector
-			T k;
-			vec3<T> si = ki.normalize(k);			// direction of the k vector
-			cvec3<T> Ei = E0();						// incident electric field vector at the origin
-
-			T cos_theta_i = si[2];										// calculate the sine and cosine of the angle of incidence
-			T sin_theta_i = std::sqrt(1 - cos_theta_i * cos_theta_i);
-
-			// calculate the basis vectors for the plane of incidence
-			vec3<T> z(0, 0, 1);						
-			vec3<T> y;
-			if (sin_theta_i == 0) {
-				complex<T> rp = (1.0f - nr) / (1.0f + nr);		// compute the Fresnel coefficients (only 2 needed)
-				complex<T> tp = 2.0f / (1.0f + nr);
-
-				cvec3<T> Er;
-				Er = Ei * rp;				// apply the Fresnel coefficients to set the amplitude of the scattered plane waves
-				cvec3<T> Et;
-				Et = Ei * tp;
-				// generate the reflected and transmitted waves
-				r = planewave<T>(0, 0, -ki[2], Er[0], Er[1], Er[2]);
-				t = planewave<T>(0, 0, ki[2] * nr, Et[0], Et[1], Et[2]);
-				return;
-			}
-			y = vec3<T>(si[0] / sin_theta_i, si[1] / sin_theta_i, 0);
-			
-			vec3<T> x = z.cross(y);
-
-			vec3<T> kr(ki[0], ki[1], -ki[2]);		// calculate the reflected k vector
-
-			// use Snell's law to calculate the transmitted angle sine and cosine
-			complex<T> sin_theta_t = (1.0f / nr) * sin_theta_i;	
-			complex<T> cos_theta_t = std::sqrt(1.0f - sin_theta_t * sin_theta_t);
-
-			cvec3<T> kt;										// calculate the transmitted k vector
-			complex<T> kt_mag = k * nr;
-			kt[0] = kt_mag * (y[0] * sin_theta_t + z[0] * cos_theta_t);
-			kt[1] = kt_mag * (y[1] * sin_theta_t + z[1] * cos_theta_t);
-			kt[2] = kt_mag * (y[2] * sin_theta_t + z[2] * cos_theta_t);
-
-			
-			
-			// allocate variables to store the Fresnel coefficients
-			complex<T> rs, rp, ts, tp;
-
-			// allocate E-vector components for all plane waves
-			complex<T> Ei_s, Ei_p, Er_s, Er_p, Et_s, Et_p;
-
-			// calculate the s and t components of the incident E vector
-			vec3<T> Eip_dir = y * cos_theta_i - z * sin_theta_i;
-			Ei_s = Ei.dot(x);
-			Ei_p = Ei.dot(Eip_dir);
-
-			// calculate trigonometric functions required for the s Fresnel coefficients
-			complex<T> sin_tmi = sin_theta_t * cos_theta_i - cos_theta_t * sin_theta_i;
-			complex<T> sin_tpi = sin_theta_t * cos_theta_i + cos_theta_t * sin_theta_i;
-
-			// calculate the s components for the reflected and transmitted vector
-			// (the above if statement handles division by zero)
-			rs = sin_tmi / sin_tpi;
-			Er_s = rs * Ei_s;
-			ts = (2.0f * (sin_theta_t * cos_theta_i)) / sin_tpi;
-			Et_s = ts * Ei_s;
-
-			// calculate the trigonometric functions required for the p Fresnel coefficients
-			//complex<T> sin_2_tmi = sin_tmi * sin_tmi;
-			//complex<T> tan_tmi = sin_tmi / sqrt(complex<T>(1, 0) - sin_2_tmi);
-			complex<T> tan_tmi = sin_theta_t * cos_theta_t - sin_theta_i * cos_theta_i;
-			complex<T> sin_2_tpi = sin_tpi * sin_tpi;
-			if (sin_2_tpi.real() == 1.0f && sin_2_tpi.imag() == 0) {
-				Er_p = 0.0f;
-			}
-			else {
-				//complex<T> tan_tpi = sin_2_tpi / (complex<T>(1, 0) - sin_2_tpi);
-				complex<T> tan_tpi = sin_theta_t * cos_theta_t + sin_theta_i * cos_theta_i;
-				rp = tan_tmi / tan_tpi;
-				Er_p = rp * Ei_p;
-			}
-
-			complex<T> cos_tmi = std::sqrt(complex<T>(1, 0) - sin_tmi * sin_tmi);
-			//tp = ((2.0f * sin_theta_t * cos_theta_i) / (sin_tpi * cos_tmi));
-			tp = (2.0f * sin_theta_t * cos_theta_i) / (sin_theta_t * cos_theta_t + sin_theta_i * cos_theta_i);
-			Et_p = tp * Ei_p;
-			
-			// calculate the p component directions for each E vector
-			
-			vec3<T> Erp_dir = y * cos_theta_i + z * sin_theta_i;
-			cvec3<T> Etp_dir(0.0, 0.0, 0.0);
-			Etp_dir[0] = y[0] * cos_theta_t - z[0] * sin_theta_t;
-			Etp_dir[1] = y[1] * cos_theta_t - z[1] * sin_theta_t;
-			Etp_dir[2] = y[2] * cos_theta_t - z[2] * sin_theta_t;
-
-			// calculate the E vector for each plane wave
-			cvec3<T> Er;
-			Er[0] = Erp_dir[0] * Er_p + x[0] * Er_s;
-			Er[1] = Erp_dir[1] * Er_p + x[1] * Er_s;
-			Er[2] = Erp_dir[2] * Er_p + x[2] * Er_s;
-
-			cvec3<T> Et;
-			Et[0] = Etp_dir[0] * Et_p + x[0] * Et_s;
-			Et[1] = Etp_dir[1] * Et_p + x[1] * Et_s;
-			Et[2] = Etp_dir[2] * Et_p + x[2] * Et_s;
-
-			// generate the reflected and transmitted waves
-			r = planewave<T>(kr[0], kr[1], kr[2], Er[0], Er[1], Er[2]);
-			t = planewave<T>(kt[0], kt[1], kt[2], Et[0], Et[1], Et[2]);
-		}
 
 		/// @param P is a plane representing the position and orientation of the surface
 		/// @param r is the ratio n1/n0 (n0 is real)
 		/// @param r is the reflected component of the plane wave
 		/// @param t is the transmitted component of the plane wave
-		CUDA_CALLABLE void scatter(vec3<T> plane_normal, vec3<T> plane_position, complex<T> nr, planewave<T>& r, planewave<T>& t) {
+		void scatter(glm::vec<3, T> plane_normal, glm::vec<3, T> plane_position, std::complex<T> nr, planewave<T>& r, planewave<T>& t) {
 
 			// the k component for the input plane wave must be real (n0 is non-absorbing)
-#ifndef __CUDACC__
 			if(_k[0].imag() != 0.0 || _k[1].imag() != 0.0 || _k[2].imag() != 0.0)
 				throw "Cannot scatter a plane wave with an imaginary k-vector";
-#endif
 
-			vec3<T> ki(_k[0].real(), _k[1].real(), _k[2].real());	// make the k vector real
-			vec3<T> kr;											// the reflected wave can only have a real k vector
-			cvec3<T> kt(0.0, 0.0, 0.0);			// the transmitted plane wave can have a complex k vector
-			cvec3<T> Ei = E0();;				// All E vectors are complex
-			cvec3<T> Er(0.0, 0.0, 0.0);
-			cvec3<T> Et(0.0, 0.0, 0.0);
+			glm::tvec3<T> ki(_k[0].real(), _k[1].real(), _k[2].real());	// make the k vector real
+			glm::tvec3<T> kr;											// the reflected wave can only have a real k vector
+			glm::tvec3< std::complex<T> > kt(0.0, 0.0, 0.0);			// the transmitted plane wave can have a complex k vector
+			glm::tvec3< std::complex<T> > Ei = getE0();;				// All E vectors are complex
+			glm::tvec3< std::complex<T> > Er(0.0, 0.0, 0.0);
+			glm::tvec3< std::complex<T> > Et(0.0, 0.0, 0.0);
 
-			vec3<T> n = plane_normal.normalize();				// make sure that the plane normal is normalized
-			vec3<T> ki_dir = ki.normalize();						// calculate the direction of the k vector
+ 			glm::tvec3<T> n = glm::normalize(plane_normal);				// make sure that the plane normal is normalized
+			glm::tvec3<T> ki_dir = glm::normalize(ki);						// calculate the direction of the k vector
 
 			// swap the plane normal if necessary (it should be pointing in the opposite direction of ki)
-			if(ki_dir.dot(n) > 0) n = -n;
+			if(glm::dot(ki_dir, n) > 0) n = -n;
 
-			// use Snll's Law to calculate the incident angle
-			T cos_theta_i = ki_dir.dot(-n);
+			// use Snll's Law to calculate the transmitted angle
+			T cos_theta_i = glm::dot(ki_dir, -n);
 			T sin_theta_i = std::sqrt(1 - cos_theta_i * cos_theta_i);
 			T theta_i = std::acos(cos_theta_i);
 
 			// define the basis vectors for the calculation (plane of incidence)
-			vec3<T> z_hat = -n;
-			vec3<T> side = n * ki_dir.dot(n);
-			vec3<T> diff = ki_dir - side;
+			glm::tvec3<T> z_hat = -n;
+			glm::tvec3<T> side = n * glm::dot(ki_dir, n);
+			glm::tvec3<T> diff = ki_dir - side;
 			T diff_len_sq = diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2];
 
 			// handle the degenerate case where theta_i is 0 (the plane wave hits head-on)
 			if(diff_len_sq == 0){
-				complex<T> rp = (1.0f - nr) / (1.0f + nr);		// compute the Fresnel coefficients (only 2 needed)
-				complex<T> tp = 2.0f / (1.0f + nr);
+				std::complex<T> rp = (1.0 - nr) / (1.0 + nr);		// compute the Fresnel coefficients (only 2 needed)
+				std::complex<T> tp = 2.0 / (1.0 + nr);
 
 				kr = -ki;
 				kt[0] = ki[0] * nr;			// the transmission vector is just scaled by the refractive index change
@@ -774,8 +408,8 @@ namespace tira {
 				Et = Ei * tp;
 
 				// calculate the phase offset based on the plane position
-				T phase_r = plane_position.dot(ki - kr);
-				complex<T> phase_t = 
+				T phase_r = glm::dot(plane_position, ki - kr);
+				std::complex<T> phase_t = 
 					plane_position[0] * (ki[0] - kt[0]) +
 					plane_position[1] * (ki[1] - kt[1]) +
 					plane_position[2] * (ki[2] - kt[2]);
@@ -785,22 +419,22 @@ namespace tira {
 				T sin_theta_r = sin_theta_i;
 				T theta_r = theta_i;
 
-				complex<T> sin_theta_t = (1.0f/nr) * std::sin(theta_i);	// compute the sin of theta_t using Snell's law
-				complex<T> cos_theta_t = std::sqrt(1.0f - sin_theta_t * sin_theta_t);
-				complex<T> theta_t = std::asin(sin_theta_t);
+				std::complex<T> sin_theta_t = (1.0/nr) * std::sin(theta_i);	// compute the sin of theta_t using Snell's law
+				std::complex<T> cos_theta_t = std::sqrt(1.0 - sin_theta_t * sin_theta_t);
+				std::complex<T> theta_t = std::asin(sin_theta_t);
 
 				// calculate the remaining basis vectors
-				vec3<T> y_hat = (ki_dir - side).normalize();
-				vec3<T> x_hat = y_hat.cross(z_hat);
+				glm::tvec3<T> y_hat = glm::normalize(ki_dir - side);
+				glm::tvec3<T> x_hat = glm::cross(y_hat, z_hat);
 
 				// calculate the k-vector magnitudes (wave frequency)
-				T ki_mag = ki.norm();
+				T ki_mag = glm::length(ki);
 				T kr_mag = ki_mag;
-				complex<T> kt_mag = ki_mag * nr;
+				std::complex<T> kt_mag = ki_mag * nr;
 
 				// calculate the k vector directions
-				vec3<T> kr_dir = y_hat * sin_theta_r - z_hat * cos_theta_r;
-				cvec3<T> kt_dir(0.0, 0.0, 0.0);
+				glm::tvec3<T> kr_dir = y_hat * sin_theta_r - z_hat * cos_theta_r;
+				glm::vec<3, std::complex<T>> kt_dir(0.0, 0.0, 0.0);
 				kt_dir[0] = y_hat[0] * sin_theta_t + z_hat[0] * cos_theta_t;
 				kt_dir[1] = y_hat[1] * sin_theta_t + z_hat[1] * cos_theta_t;
 				kt_dir[2] = y_hat[2] * sin_theta_t + z_hat[2] * cos_theta_t;
@@ -811,26 +445,26 @@ namespace tira {
 				kt = kt_dir * kt_mag;
 
 				// calculate the Fresnel coefficients
-				complex<T> rs = std::sin(theta_t - theta_i) / std::sin(theta_t + theta_i);
-				complex<T> rp = std::tan(theta_t - theta_i) / std::tan(theta_t + theta_i);
-				complex<T> ts = (2.0f * (sin_theta_t * cos_theta_i)) / std::sin(theta_t + theta_i);
-				complex<T> tp = ((2.0f * sin_theta_t * cos_theta_i) / (std::sin(theta_t + theta_i) * std::cos(theta_t - theta_i)));
+				std::complex<T> rs = std::sin(theta_t - theta_i) / std::sin(theta_t + theta_i);
+				std::complex<T> rp = std::tan(theta_t - theta_i) / std::tan(theta_t + theta_i);
+				std::complex<T> ts = (2.0 * (sin_theta_t * cos_theta_i)) / std::sin(theta_t + theta_i);
+				std::complex<T> tp = ((2.0 * sin_theta_t * cos_theta_i) / (std::sin(theta_t + theta_i) * std::cos(theta_t - theta_i)));
 
 				// calculate the p component directions for each E vector
-				vec3<T> Eip_dir = y_hat * cos_theta_i - z_hat * sin_theta_i;
-				vec3<T> Erp_dir = y_hat * cos_theta_r + z_hat * sin_theta_r;
-				cvec3<T> Etp_dir(0.0, 0.0, 0.0);
+				glm::tvec3<T> Eip_dir = y_hat * cos_theta_i - z_hat * sin_theta_i;
+				glm::tvec3<T> Erp_dir = y_hat * cos_theta_r + z_hat * sin_theta_r;
+				glm::vec<3, std::complex<T>> Etp_dir(0.0, 0.0, 0.0);
 				Etp_dir[0] = y_hat[0] * cos_theta_t - z_hat[0] * sin_theta_t;
 				Etp_dir[1] = y_hat[1] * cos_theta_t - z_hat[1] * sin_theta_t;
 				Etp_dir[2] = y_hat[2] * cos_theta_t - z_hat[2] * sin_theta_t;
 				
 				// calculate the s and t components of each E vector
-				complex<T> Ei_s = Ei.dot(x_hat);
-				complex<T> Ei_p = Ei.dot(Eip_dir);
-				complex<T> Er_s = rs * Ei_s;
-				complex<T> Er_p = rp * Ei_p;
-				complex<T> Et_s = ts * Ei_s;
-				complex<T> Et_p = tp * Ei_p;
+				std::complex<T> Ei_s = _cDot(Ei, x_hat);
+				std::complex<T> Ei_p = _cDot(Ei, Eip_dir);
+				std::complex<T> Er_s = rs * Ei_s;
+				std::complex<T> Er_p = rp * Ei_p;
+				std::complex<T> Et_s = ts * Ei_s;
+				std::complex<T> Et_p = tp * Ei_p;
 
 				// calculate the E vector for each plane wave
 				Er[0] = Erp_dir[0] * Er_p + x_hat[0] * Er_s;
@@ -842,15 +476,15 @@ namespace tira {
 				Et[2] = Etp_dir[2] * Et_p + x_hat[2] * Et_s;
 			}
 			// calculate the phase offset based on the plane positions
-			T phase_r = plane_position.dot(ki - kr);
-			complex<T> phase_t =
+			T phase_r = glm::dot(plane_position, ki - kr);
+			std::complex<T> phase_t =
 				plane_position[0] * (ki[0] - kt[0]) +
 				plane_position[1] * (ki[1] - kt[1]) +
 				plane_position[2] * (ki[2] - kt[2]);
 
 			// apply the phase offset
-			Er = Er * std::exp(complex<T>(0, 1) * phase_r);
-			Et = Et * std::exp(complex<T>(0, 1) * phase_t);
+			Er = Er * std::exp(std::complex<T>(0, 1) * phase_r);
+			Et = Et * std::exp(std::complex<T>(0, 1) * phase_t);
 
 			// generate the reflected and transmitted waves
 			r = planewave<T>(kr[0], kr[1], kr[2], Er[0], Er[1], Er[2]);

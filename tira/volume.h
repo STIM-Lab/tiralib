@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <tira/image.h>
 #include <tira/progressbar.h>
@@ -133,7 +133,20 @@ namespace tira {
 
 
 			tira::volume<float> dist(w, h, l);										// create an image to store the distance field
-			dist = 9999.0f;																// initialize the distance field to a very large value
+			const float bignum = 9999.0f;
+			dist = bignum;																// initialize the distance field to a very large value
+			/*for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					for (int z = 0; z < l; z++) {
+						if (binary_boundary(x, y, z) == 1) {
+							dist(x, y, z) = 0.0f;  // Ensure contour is strictly zero
+						}
+						else {
+							dist(x, y, z) = bignum;  // Initialize all others to large value
+						}
+					}
+				}
+			}*/
 
 
 
@@ -147,11 +160,21 @@ namespace tira {
 								int nx = x + get<0>(neighbors[k]);								// calculate the x coordinate of the neighbor cell
 								int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
 								int nz = z + get<2>(neighbors[k]);								// calculate the z coordinate of the neighbor cell
-								if (binary_boundary(nx, ny, nz)) {												// if the neighboring cell (nx, ny) is ALSO in the boundary
-									float da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from pixel(x,y) to contour da
-									float db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));			// calculate distance from neighbor to contour db
+								if (binary_boundary(nx, ny, nz)) {							// if the neighboring cell (nx, ny) is ALSO in the boundary
+									float p_dist = abs(at(x, y, z));
+									float n_dist = abs(at(nx, ny, nz));
+
+									float da, db;
+									if (p_dist == n_dist) {											// handle division by zero
+										da = bignum;												// if the denominator is zero, we initialize the distance to its maximum
+										db = bignum;
+									}
+									else {
+										da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));
+										db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));
+									}
 									dist(x, y, z) = std::min(dist(x, y, z), da);									// minimum between distance and large boundary value of pixel (x,y)
-									dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);								// minimum between distance and large boundary value of neighbor (nx, ny)
+									dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);					// minimum between distance and large boundary value of neighbor (nx, ny)
 								}
 							}
 						}
@@ -161,134 +184,172 @@ namespace tira {
 
 
 			// at this point, the distance image has the correct distances in cells surround the boundary
+			
 
-			std::vector<float> dist1d;											// create a 1d representation of the distance field
-			dist1d.resize(h * w * l);
-
-			int row = w;
-
-			// copy the distance field into the 1d distance field
-			for (int y = 0; y < h; y++) {
-				for (int x = 0; x < w; x++) {
-					for (int z = 0; z < l; z++) {
-						dist1d[z * (w * h) + y * w + x] = dist(x, y, z);
-					}
-				}
-			}
-
-			// initializing fast sweeiping algorithm 
-			const int NSweeps = 8;
-
-			//// sweep directions { start, end, step }
-			const int dirX[NSweeps][3] = { {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1}, {0, w - 1, 1} , {w - 1, 0, -1}, {w - 1, 0, -1}, {0, w - 1, 1} };
-			const int dirY[NSweeps][3] = { {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1}, {0, h - 1, 1}, {0, h - 1, 1}, {h - 1, 0, -1}, {h - 1, 0, -1} };
-			const int dirZ[NSweeps][3] = { {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {0, l - 1, 1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1}, {l - 1, 0, -1} };
-			double aa[3], tmp, eps = 1e-6;
-			double d_new, a, b;
-			int s, ix, iy, iz, gridPos;
-			const double dx = 1.0, f = 1.0;
-
-			for (s = 0; s < NSweeps; s++) {
-
-				for (iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
-					for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
-						for (iz = dirZ[s][0]; dirZ[s][2] * iz <= dirZ[s][1]; iz += dirZ[s][2]) {
-
-							gridPos = ((iz * h + iy) * row + ix);
-
-							if (iy == 0 || iy == (h - 1)) {                    // calculation for ymin
-								if (iy == 0) {
-									aa[1] = dist1d[(iz * h + (iy + 1)) * row + ix];
-								}
-								if (iy == (h - 1)) {
-									aa[1] = dist1d[(iz * h + (iy - 1)) * row + ix];
-								}
-							}
-							else {
-								aa[1] = dist1d[(iz * h + (iy - 1)) * row + ix] < dist1d[(iz * h + (iy + 1)) * row + ix] ? dist1d[(iz * h + (iy - 1)) * row + ix] : dist1d[(iz * h + (iy + 1)) * row + ix];
-							}
-
-							if (ix == 0 || ix == (w - 1)) {                    // calculation for xmin
-								if (ix == 0) {
-									aa[0] = dist1d[(iz * h + iy) * row + (ix + 1)];
-								}
-								if (ix == (w - 1)) {
-									aa[0] = dist1d[(iz * h + iy) * row + (ix - 1)];
-								}
-							}
-							else {
-								aa[0] = dist1d[(iz * h + iy) * row + (ix - 1)] < dist1d[(iz * h + iy) * row + (ix + 1)] ? dist1d[(iz * h + iy) * row + (ix - 1)] : dist1d[(iz * h + iy) * row + (ix + 1)];
-							}
-
-							if (iz == 0 || iz == (l - 1)) {                    // calculation for Zmin
-								if (iz == 0) {
-									aa[2] = dist1d[((iz + 1) * h + iy) * row + ix];
-								}
-								if (iz == (l - 1)) {
-									aa[2] = dist1d[((iz - 1) * h + iy) * row + ix];
-								}
-							}
-							else {
-								aa[2] = dist1d[((iz - 1) * h + iy) * row + ix] < dist1d[((iz + 1) * h + iy) * row + ix] ? dist1d[((iz - 1) * h + iy) * row + ix] : dist1d[((iz + 1) * h + iy) * row + ix];
-							}
-
-
-							// simple bubble sort
-							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
-							if (aa[1] > aa[2]) { tmp = aa[1]; aa[1] = aa[2]; aa[2] = tmp; }
-							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; }
-
-							double d_curr = aa[0] + dx * f; // just a linear equation with the first neighbor value
-							double d_new;
-							if (d_curr <= (aa[1] + eps)) {
-								d_new = d_curr; // accept the solution
-							}
-							else {
-								// quadratic equation with coefficients involving 2 neighbor values aa
-								double a = 2.0;
-								double b = -2.0 * (aa[0] + aa[1]);
-								double c = aa[0] * aa[0] + aa[1] * aa[1] - dx * dx * f * f;
-								double D = sqrt(b * b - 4.0 * a * c);
-								// choose the minimal root
-								d_curr = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
-
-								if (d_curr <= (aa[2] + eps))
-									d_new = d_curr; // accept the solution
-								else {
-									// quadratic equation with coefficients involving all 3 neighbor values aa
-									a = 3.0;
-									b = -2.0 * (aa[0] + aa[1] + aa[2]);
-									c = aa[0] * aa[0] + aa[1] * aa[1] + aa[2] * aa[2] - dx * dx * f * f;
-									D = sqrt(b * b - 4.0 * a * c);
-									// choose the minimal root
-									d_new = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
-								}
-							}
-							// update if d_new is smaller
-							dist1d[gridPos] = dist1d[gridPos] < d_new ? dist1d[gridPos] : d_new;
-
-						}
-					}
-				}
-			}
-
-			for (int y = 0; y < h; y++)
-			{
-				for (int x = 0; x < w; x++)
-				{
-					for (int z = 0; z < l; z++)
-					{
-						dist(x, y, z) = dist1d[z * (w * h) + y * w + x];
-					}
-				}
-
-			}
+            _fast_sweep_3d(dist);
 
 
 			return dist;
 		}
 
 	public:
+
+		void _fast_sweep_3d(tira::volume<float>& dist) {
+
+			// Get volume dimensions
+			int x = X();  // Number of voxels in x-direction
+			int y = Y();  // Number of voxels in y-direction
+			int z = Z();  // Number of voxels in z-direction
+
+			int row = x;  // Row stride in flattened array is width (x)
+
+			// Allocate 1D array to store the 3D volume
+			std::vector<float> dist1d(x * y * z);
+
+			// Copy 3D data into 1D array for easier access during sweeping
+			for (int j = 0; j < y; j++) {
+				for (int i = 0; i < x; i++) {
+					for (int k = 0; k < z; k++) {
+						dist1d[k * (x * y) + j * x + i] = dist(i, j, k);
+					}
+				}
+			}
+
+			const int NSweeps = 8;  // Number of sweeping passes
+
+			// Sweep directions along each axis for 8 directional passes
+			const int dirX[NSweeps][3] = {
+				{0, x - 1, 1}, {x - 1, 0, -1}, {x - 1, 0, -1}, {0, x - 1, 1},
+				{0, x - 1, 1}, {x - 1, 0, -1}, {x - 1, 0, -1}, {0, x - 1, 1}
+			};
+			const int dirY[NSweeps][3] = {
+				{0, y - 1, 1}, {0, y - 1, 1}, {y - 1, 0, -1}, {y - 1, 0, -1},
+				{0, y - 1, 1}, {0, y - 1, 1}, {y - 1, 0, -1}, {y - 1, 0, -1}
+			};
+			const int dirZ[NSweeps][3] = {
+				{0, z - 1, 1}, {0, z - 1, 1}, {0, z - 1, 1}, {0, z - 1, 1},
+				{z - 1, 0, -1}, {z - 1, 0, -1}, {z - 1, 0, -1}, {z - 1, 0, -1}
+			};
+
+			// Temporary variables
+			double aa[3];         // Stores nearest neighbor distances in x, y, z
+			double tmp;           // For swapping
+			double eps = 1e-6;    // Small epsilon to avoid floating point precision issues
+			double d_new;         // Newly computed distance
+
+			// Spacing in each direction
+			const float dx = _spacing[0];
+			const float dy = _spacing[1];
+			const float dz = _spacing[2];
+			const double f = 1.0; // RHS of Eikonal equation ∇d = f
+
+			// Perform 8 directional sweeps
+			for (int s = 0; s < NSweeps; s++) {
+				for (int iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
+					for (int ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
+						for (int iz = dirZ[s][0]; dirZ[s][2] * iz <= dirZ[s][1]; iz += dirZ[s][2]) {
+
+							// Compute 1D index of current voxel
+							int gridPos = ((iz * y + iy) * row + ix);
+
+							// Neighbor in y-direction
+							if (iy == 0 || iy == (y - 1)) { // If on the y-boundary (top or bottom edge)
+								aa[1] = dist1d[(iz * y + (iy == 0 ? iy + 1 : iy - 1)) * row + ix]; // Use the inner neighbor along y
+							}
+							else {
+								aa[1] = std::min( // Otherwise, use the min of two neighbors in the y-direction
+									dist1d[(iz * y + (iy - 1)) * row + ix],  // Neighbor in -y
+									dist1d[(iz * y + (iy + 1)) * row + ix]   // Neighbor in +y
+								);
+							}
+
+							// Neighbor in x-direction
+							if (ix == 0 || ix == (x - 1)) { // If on the x-boundary (left or right edge)
+								aa[0] = dist1d[(iz * y + iy) * row + (ix == 0 ? ix + 1 : ix - 1)]; // Use the inner neighbor along x
+							}
+							else {
+								aa[0] = std::min( // Otherwise, use the min of two neighbors in the x-direction
+									dist1d[(iz * y + iy) * row + (ix - 1)],  // Neighbor in -x
+									dist1d[(iz * y + iy) * row + (ix + 1)]   // Neighbor in +x
+								);
+							}
+
+							// Neighbor in z-direction
+							if (iz == 0 || iz == (z - 1)) { // If on the z-boundary (front or back face)
+								aa[2] = dist1d[((iz == 0 ? iz + 1 : iz - 1) * y + iy) * row + ix]; // Use the inner neighbor along z
+							}
+							else {
+								aa[2] = std::min( // Otherwise, use the min of two neighbors in the z-direction
+									dist1d[((iz - 1) * y + iy) * row + ix],  // Neighbor in -z
+									dist1d[((iz + 1) * y + iy) * row + ix]   // Neighbor in +z
+								);
+							}
+
+							// Sort neighbors in ascending order (so aa[0] <= aa[1] <= aa[2])
+							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; } // Swap if needed
+							if (aa[1] > aa[2]) { tmp = aa[1]; aa[1] = aa[2]; aa[2] = tmp; } // Swap if needed
+							if (aa[0] > aa[1]) { tmp = aa[0]; aa[0] = aa[1]; aa[1] = tmp; } // Swap if needed
+
+							// Conservative estimate using smallest spacing and smallest neighbor
+							double min_spacing = std::min({ dx, dy, dz }); // Choose the smallest spacing
+							double d_curr = aa[0] + f * min_spacing;       // Initial guess: smallest neighbor + step
+
+							//double d_curr = aa[0] + f / std::sqrt(1.0 / (dx*dx) + 1.0 / (dy*dy) + 1.0 / (dz*dz));
+
+
+							// If the guess is less than next neighbor (valid), accept it
+							if (d_curr <= (aa[1] + eps)) {
+								d_new = d_curr; // Use 1 neighbor solution
+							}
+							else {
+								// Solve quadratic using first two neighbors (x and y)
+								double a = 1.0 / (dx * dx) + 1.0 / (dy * dy); // Coefficient a
+								double b = -2.0 * (aa[0] / (dx * dx) + aa[1] / (dy * dy)); // Coefficient b
+								double c = (aa[0] * aa[0]) / (dx * dx) + (aa[1] * aa[1]) / (dy * dy) - f * f; // Coefficient c
+
+								double D = sqrt(b * b - 4.0 * a * c); // Discriminant
+								d_curr = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a); // Choose smaller positive root
+
+								// If still valid (less than next neighbor)
+								if (d_curr <= (aa[2] + eps)) {
+									d_new = d_curr; // Use 2 neighbor solution
+								}
+								else {
+									// Solve quadratic using all three neighbors (x, y, z)
+									a = 1.0 / (dx * dx) + 1.0 / (dy * dy) + 1.0 / (dz * dz); // Update a
+									b = -2.0 * (aa[0] / (dx * dx) + aa[1] / (dy * dy) + aa[2] / (dz * dz)); // Update b
+									c = (aa[0] * aa[0]) / (dx * dx) + (aa[1] * aa[1]) / (dy * dy) + (aa[2] * aa[2]) / (dz * dz) - f * f; // Update c
+
+									D = sqrt(b * b - 4.0 * a * c); // Recompute discriminant
+									d_new = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a); // Choose smaller positive root
+								}
+							}
+
+
+							// Update voxel if new distance is smaller
+							dist1d[gridPos] = std::min(dist1d[gridPos], static_cast<float>(d_new));
+							//float abs_old = std::abs(dist1d[gridPos]);
+							//float sign = (dist1d[gridPos] >= 0.0f) ? 1.0f : -1.0f;
+							//dist1d[gridPos] = sign * std::min(abs_old, static_cast<float>(d_new));
+
+
+
+						}
+					}
+				}
+			}
+
+			// Copy result from 1D array back to 3D volume
+			for (int j = 0; j < y; j++) {
+				for (int i = 0; i < x; i++) {
+					for (int k = 0; k < z; k++) {
+						dist(i, j, k) = dist1d[k * (x * y) + j * x + i];
+					}
+				}
+			}
+
+		}
+
 
 		/// <summary>
 		/// Default constructor initializes an empty volume (0x0x0 with 0 channels)
@@ -304,8 +365,9 @@ namespace tira {
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="z">size of the image along the Z (slowest) axis</param>
 		/// <param name="c">number of channels</param>
-		volume(size_t x, size_t y, size_t z, size_t c = 1) : volume() {
+		volume(size_t x, size_t y, size_t z, size_t c = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume() {
 			init(x, y, z, c);
+			_spacing = spacing;
 		}
 
 		/// <summary>
@@ -316,12 +378,14 @@ namespace tira {
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="z">size of the image along the Z (slowest) axis</param>
 		/// <param name="c">number of channels (channels are interleaved)</param>
-		volume(T* data, size_t x, size_t y, size_t z, size_t c = 1) : volume(x, y, z, c) {
+		volume(T* data, size_t x, size_t y, size_t z, size_t c = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume(x, y, z, c) {
 			memcpy(&field<T>::_data[0], data, field<T>::bytes());									// use memcpy to copy the raw data into the field array
+			_spacing = spacing;
 		}
 
-		volume(std::vector<size_t> shape) : field<T>(shape) {
-			_spacing = { 1.0f, 1.0f, 1.0f };
+		volume(std::vector<size_t> shape, std::vector<double> spacing = {1.0, 1.0, 1.0}) : field<T>(shape) {
+			//_spacing = { 1.0f, 1.0f, 1.0f };
+			_spacing = spacing;
 		}
 
 		/// <summary>
@@ -330,6 +394,7 @@ namespace tira {
 		/// <param name="I">image object to be copied</param>
 		volume(const volume<T>& V) : volume(V.X(), V.Y(), V.Z(), V.C()) {
 			memcpy(&field<T>::_data[0], &V._data[0], field<T>::bytes());
+			_spacing = V._spacing;
 		}
 
 		/// <summary>
@@ -367,7 +432,7 @@ namespace tira {
 		inline double smax() const { return std::max(sx(), std::max(sy(), sz())); }
 
 		/// <summary>
-		/// Returns a channel of the current image as an independent one-channel image
+		/// Returns a single channel of the current volume as an independent one-channel volume
 		/// </summary>
 		/// <param name="c">channel to return</param>
 		/// <returns></returns>
@@ -405,6 +470,10 @@ namespace tira {
 		void spacing(double x, double y, double z) {
 			std::vector<double> spacing = { x, y, z };
 			_spacing = spacing;
+		}
+
+		std::vector<double> spacing() {
+			return _spacing;
 		}
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
@@ -483,10 +552,52 @@ namespace tira {
 		/// Retrieve a slice of the volume as a 2D image
 		/// </summary>
 		/// <param name="i">Slice to return</param>
-		/// <param name="z">Axis specifying the slice orientation</param>
+		/// <param name="axis">Axis specifying the slice orientation</param>
 		/// <returns></returns>
-		tira::image<T> slice(size_t i, unsigned int axis = 2) {
-			size_t width, height;
+		image<T> slice(size_t i, unsigned int axis = 2) {
+			size_t rx, ry;
+			size_t sx, sy, sz;
+
+			// calculate the size of the output slice image
+			if (axis == 0) {
+				rx = Y();
+				ry = Z();
+			}
+			else if (axis == 1) {
+				rx = X();
+				ry = Z();
+
+				image<T> result(rx, ry, C());					// allocate the output slice image
+
+				for (size_t zi = 0; zi < Z(); zi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, zi, ci) = at(xi, i, zi, ci);
+						}
+					}
+				}
+				return result;
+			}
+			else if (axis == 2) {
+				rx = X();
+				ry = Y();
+				image<T> result(rx, ry, C());					// allocate the output slice image
+
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, ci) = at(xi, yi, i, ci);
+						}
+					}
+				}
+				return result;
+			}
+
+
+
+
+
+			/*size_t width, height;
 			size_t min_x = 0;	size_t max_x = X() - 1;		
 			size_t min_y = 0;	size_t max_y = Y() - 1;		
 			size_t min_z = 0;	size_t max_z = Z() - 1;		
@@ -517,28 +628,157 @@ namespace tira {
 			size_t idx2 = 0;
 			T value;
 			for (size_t zi = 0; zi <= sz; zi++) {
-				idx_z = (zi + min_z) * Y() * X() * C();				// z index into the 3D volume
+				//idx_z = (zi + min_z) * Y() * X() * C();				// z index into the 3D volume
 				for (size_t yi = 0; yi <= sy; yi++) {
-					idx_y = (yi + min_y) * X() * C();				// y index into the 3D volume
+					//idx_y = (yi + min_y) * X() * C();				// y index into the 3D volume
 					for (size_t xi = 0; xi <= sx; xi++) {
-						idx_x = (xi + min_x) * C();					// x index into the 3D volume
+						//idx_x = (xi + min_x) * C();					// x index into the 3D volume
 						for (size_t ci = 0; ci < C(); ci++) {
-							idx3 = idx_x + idx_y + idx_z + ci;
-							value = field<T>::_data[idx3];
+							//idx3 = idx_x + idx_y + idx_z + ci;
+							//value = field<T>::_data[idx3];
+							value = at(xi, yi, zi, ci);
 							result.data()[idx2] = value;
 							idx2++;
 						}
 					}
 				}
 			}
-			return result;
+			return result;*/
 		}
 
+		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
+			
+			tira::field<float> F = tira::field<float>::derivative(axis, d, order, print_coefs);		// derivative of the field
+			tira::volume<float> D(tira::field<float>::shape());										// create a new volume
+			memcpy(D.data(), F.data(), D.bytes());										// copy the field to the volume
+			D._spacing = _spacing;																	// copy the spacing (a volume has spacing, but a field doesn't)
+			D = D * (1 / D._spacing[axis]);															// scale the gradient by the axis spacing
+			return D;
+		}
 
-		//calculate gradient along dx (3D)
+		tira::volume<float> gradmag(unsigned int order) {
+			tira::field<float> F = field<float>::gradmag(order);
+			tira::volume<float> R(F.data(), X(), Y(), Z());
+			return R;
+		}
+
+		/// <summary>
+		/// Calculates the sign() function at each point in the volume and returns the result.
+		/// </summary>
+		/// <returns></returns>
+		tira::volume<float> sign() {
+			tira::field<float> F = field<float>::sign();
+			tira::volume<float> R(F.data(), X(), Y(), Z());
+			return R;
+		}
+
+		
+		tira::volume<T> Phi_to_sdf() {
+			tira::volume<T> phi = *this;								// original field
+			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z(), phi.C(), _spacing);				// output SDF
+
+			float BIG = 99999;
+			sdf = BIG;
+
+			int X = phi.X();
+			int Y = phi.Y();
+			int Z = phi.Z();
+
+			
+			// generate the template to detect voxels that are adjacent to the boundary at phi = 0
+			std::vector<std::tuple<int, int, int>> neighbors;
+			neighbors.emplace_back(-1, -1, -1);
+			neighbors.emplace_back(-1, -1, 0);
+			neighbors.emplace_back(-1, -1, 1);
+			neighbors.emplace_back(-1, 0, -1);
+			neighbors.emplace_back(-1, 0, 0);
+			neighbors.emplace_back(-1, 0, 1);
+			neighbors.emplace_back(-1, 1, -1);
+			neighbors.emplace_back(-1, 1, 0);
+			neighbors.emplace_back(-1, 1, 1);
+
+			neighbors.emplace_back(0, -1, -1);
+			neighbors.emplace_back(0, -1, 0);
+			neighbors.emplace_back(0, -1, 1);
+			neighbors.emplace_back(0, 0, -1);
+			neighbors.emplace_back(0, 0, 0);
+			neighbors.emplace_back(0, 0, 1);
+			neighbors.emplace_back(0, 1, -1);
+			neighbors.emplace_back(0, 1, 0);
+			neighbors.emplace_back(0, 1, 1);
+
+			neighbors.emplace_back(1, -1, -1);
+			neighbors.emplace_back(1, -1, 0);
+			neighbors.emplace_back(1, -1, 1);
+			neighbors.emplace_back(1, 0, -1);
+			neighbors.emplace_back(1, 0, 0);
+			neighbors.emplace_back(1, 0, 1);
+			neighbors.emplace_back(1, 1, -1);
+			neighbors.emplace_back(1, 1, 0);
+			neighbors.emplace_back(1, 1, 1);
+
+			unsigned int band_cells = 0;
+			// identifying boundary cells where phi changes sign
+			for (int yi = 0; yi < Y; yi++) {							// for every row in the volume
+				for (int xi = 0; xi < X; xi++) {						// for every column in the volume
+					for (int zi = 0; zi < Z; zi++) {					// for every depth slice in the volume
+						float d_min = sdf(xi, yi, zi);			// get the current approximated distance from the SDF
+						for (int k = 0; k < neighbors.size(); k++) {	// for every neighbor
+
+							int nxi = xi + get<0>(neighbors[k]);		// compute x index of neighbor
+							int nyi = yi + get<1>(neighbors[k]);		// compute y index of neighbor
+							int nzi = zi + get<2>(neighbors[k]);		// compute z index of neighbor
+
+							// test if (nxi, nyi, nzi) is inside the image
+							if (nxi >= 0 && nyi >= 0 && nzi >= 0 &&
+								nxi < X && nyi < Y && nzi < Z) {
+
+								float phi_x = phi(xi, yi, zi);				// get the phi values corresponding to x and n
+								float phi_n = phi(nxi, nyi, nzi);
+
+								if (phi_x * phi_n < 0.0f) {							// if x and n are on opposite sides of the boundary
+									float phi_space = std::abs(phi_x - phi_n);		// calculate the spacing between the current cell and its neighbor in phi
+									float phi_frac = std::abs(phi_x) / phi_space;	// calculate the fraction of the distance between the current and neighbor points
+
+									float x = (float)xi * _spacing[0];
+									float y = (float)yi * _spacing[1];
+									float z = (float)zi * _spacing[2];
+									float nx = (float)nxi * _spacing[0];
+									float ny = (float)nyi * _spacing[1];
+									float nz = (float)nzi * _spacing[2];
+
+									float voxel_space = std::sqrt((x - nx) * (x - nx) + (y - ny) * (y - ny) + (z - nz) * (z - nz));
+									float d = phi_frac * voxel_space;			// calculate the distance to the surface
+									if (d < std::abs(d_min)) {					// if the current point is closer to the surface than the previous guess
+										d_min = d;
+									}
+									band_cells++;
+								}
+							}
+						}
+						sdf(xi, yi, zi) = d_min;
+					}
+				}
+			}
+			_fast_sweep_3d(sdf);
+
+			tira::volume<float> sign_phi = phi.sign();
+			sdf = sdf * sign_phi;
+
+
+			return sdf;
+
+			//return dist;
+		}
+	
+
+
+		// Calculate gradient along dx (3D) with spacing consideration
 		tira::volume<float> gradient_dx()
 		{
 			tira::volume<float> output(X(), Y(), Z());
+
+			double dx = _spacing[0]; // Spacing along X-direction
 
 			for (int j = 0; j < X(); j++)
 			{
@@ -548,26 +788,23 @@ namespace tira {
 					{
 						int j_left = j - 1;
 						int j_right = j + 1;
+
 						if (j_left < 0)
 						{
 							j_left = 0;
 							j_right = 1;
-							double dist_grad = at(j_right, i, k) - at(j_left, i, k);
-
+							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / dx;
 						}
-
 						else if (j_right >= X())
 						{
 							j_right = X() - 1;
 							j_left = j_right - 1;
-							double dist_grad = at(j_right,i, k) - at(j_left, i, k);
-
+							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / dx;
 						}
-
-
-						double dist_grad = (at(j_right, i, k) - at(j_left, i, k)) / 2.0f;
-
-						output(j, i, k) = dist_grad;
+						else
+						{
+							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / (2.0 * dx);
+						}
 					}
 				}
 			}
@@ -575,10 +812,13 @@ namespace tira {
 			return output;
 		}
 
-		// calculate gradient along dy(3D)
+
+		// Calculate gradient along dy (3D) with spacing consideration
 		tira::volume<float> gradient_dy()
 		{
 			tira::volume<float> output(X(), Y(), Z());
+
+			double dy = _spacing[1]; // Spacing along Y-direction
 
 			for (int j = 0; j < X(); j++)
 			{
@@ -588,26 +828,23 @@ namespace tira {
 					{
 						int i_left = i - 1;
 						int i_right = i + 1;
+
 						if (i_left < 0)
 						{
 							i_left = 0;
 							i_right = 1;
-							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
-
+							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / dy;
 						}
-
 						else if (i_right >= Y())
 						{
 							i_right = Y() - 1;
-							i_left = i_right -1 ;
-							double dist_grad = at(j, i_right, k) - at(j, i_left, k);
-
+							i_left = i_right - 1;
+							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / dy;
 						}
-
-
-						double dist_grad = (at(j, i_right, k) - at(j, i_left, k)) / 2.0f;
-
-						output(j, i, k) = dist_grad;
+						else
+						{
+							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / (2.0 * dy);
+						}
 					}
 				}
 			}
@@ -615,11 +852,13 @@ namespace tira {
 			return output;
 		}
 
+
+		// Calculate gradient along dz (3D) with spacing consideration
 		tira::volume<float> gradient_dz()
 		{
-			//volume<T>dxdy(X(), Y(), Z());
+			tira::volume<float> output(X(), Y(), Z());
 
-			tira::volume<float>output(X(), Y(), Z());
+			double dz = _spacing[2]; // Spacing along Z-direction
 
 			for (int j = 0; j < X(); j++)
 			{
@@ -629,29 +868,30 @@ namespace tira {
 					{
 						int k_left = k - 1;
 						int k_right = k + 1;
+
 						if (k_left < 0)
 						{
 							k_left = 0;
 							k_right = 1;
-							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / dz;
 						}
-
 						else if (k_right >= Z())
 						{
 							k_right = Z() - 1;
 							k_left = k_right - 1;
-							double dist_grad = at(j, i, k_right) - at(j, i, k_left);
+							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / dz;
 						}
-
-
-						double dist_grad = (at(j, i, k_right) - at(j, i, k_left)) / 2.0f;
-						output(j, i, k) = dist_grad;
+						else
+						{
+							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / (2.0 * dz);
+						}
 					}
 				}
 			}
 
 			return output;
 		}
+
 
 
 		/// <summary>
@@ -744,6 +984,357 @@ namespace tira {
 
 		}
 
+		// Convolves the volume with a Gaussian kernel and returns the result. This function
+		//    adjusts the sigma value to account for the pixel size (sigma is given in terms of the pixel spacing)
+		tira::volume<float> gaussian_filter(float sigma, int window_factor, bool pad = false) {
+
+			// calculate the kernel sizes along each dimension (in voxel units)
+			float sigma_x = sigma / _spacing[0];
+			int kernel_size_x = window_factor * sigma_x;
+			if (kernel_size_x % 2 == 0) kernel_size_x++;
+
+			float sigma_y = sigma / _spacing[1];
+			int kernel_size_y = window_factor * sigma_y;
+			if (kernel_size_y % 2 == 0) kernel_size_y++;
+
+			float sigma_z = sigma / _spacing[2];
+			int kernel_size_z = window_factor * sigma_z;
+			if (kernel_size_z % 2 == 0) kernel_size_z++;
+
+			// If padding is requested, apply it and re-call the filter with pad=false
+			if (pad) {
+				int rx = kernel_size_x / 2;
+				int ry = kernel_size_y / 2;
+				int rz = kernel_size_z / 2;
+				tira::volume<float> padded = this->border_separable(rx, ry, rz, 0.0f);
+				return padded.gaussian_filter(sigma, window_factor, false);
+			}
+
+			// ----- X Axis -----
+			float miu_x = static_cast<float>(kernel_size_x) / 2.0f;
+			float* kernel_x = (float*)malloc(kernel_size_x * sizeof(float));
+			for (int xi = 0; xi < kernel_size_x; xi++) {
+				int u = 2 * sigma_x * sigma_x;
+				kernel_x[xi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(xi - miu_x) * (xi - miu_x) / u);
+			}
+			// normalize kernel_x
+			float sum_x = 0.0f;
+			for (int i = 0; i < kernel_size_x; i++) sum_x += kernel_x[i];
+			for (int i = 0; i < kernel_size_x; i++) kernel_x[i] /= sum_x;
+
+			tira::volume<float> result_x(X() - (kernel_size_x - 1), Y(), Z());
+			for (size_t yi = 0; yi < result_x.Y(); yi++) {
+				for (size_t xi = 0; xi < result_x.X(); xi++) {
+					for (size_t zi = 0; zi < result_x.Z(); zi++) {
+						float sum = 0;
+						for (size_t ui = 0; ui < kernel_size_x; ui++) {
+							sum += at(xi + ui, yi, zi) * kernel_x[ui];
+						}
+						result_x(xi, yi, zi) = sum;
+					}
+				}
+			}
+			free(kernel_x);
+
+			// ----- Y Axis -----
+			float miu_y = static_cast<float>(kernel_size_y) / 2.0f;
+			float* kernel_y = (float*)malloc(kernel_size_y * sizeof(float));
+			for (int yi = 0; yi < kernel_size_y; yi++) {
+				int u = 2 * sigma_y * sigma_y;
+				kernel_y[yi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(yi - miu_y) * (yi - miu_y) / u);
+			}
+			// normalize kernel_y
+			float sum_y = 0.0f;
+			for (int i = 0; i < kernel_size_y; i++) sum_y += kernel_y[i];
+			for (int i = 0; i < kernel_size_y; i++) kernel_y[i] /= sum_y;
+
+			tira::volume<float> result_y(result_x.X(), result_x.Y() - (kernel_size_y - 1), result_x.Z());
+			for (size_t yi = 0; yi < result_y.Y(); yi++) {
+				for (size_t xi = 0; xi < result_y.X(); xi++) {
+					for (size_t zi = 0; zi < result_y.Z(); zi++) {
+						float sum = 0;
+						for (size_t ui = 0; ui < kernel_size_y; ui++) {
+							sum += result_x(xi, yi + ui, zi) * kernel_y[ui];
+						}
+						result_y(xi, yi, zi) = sum;
+					}
+				}
+			}
+			free(kernel_y);
+
+			// ----- Z Axis -----
+			float miu_z = static_cast<float>(kernel_size_z) / 2.0f;
+			float* kernel_z = (float*)malloc(kernel_size_z * sizeof(float));
+			for (int zi = 0; zi < kernel_size_z; zi++) {
+				int u = 2 * sigma_z * sigma_z;
+				kernel_z[zi] = 1.0f / sqrt(u * 3.14159265358979323846f) * exp(-(zi - miu_z) * (zi - miu_z) / u);
+			}
+			// normalize kernel_z
+			float sum_z = 0.0f;
+			for (int i = 0; i < kernel_size_z; i++) sum_z += kernel_z[i];
+			for (int i = 0; i < kernel_size_z; i++) kernel_z[i] /= sum_z;
+
+			tira::volume<float> result_z(result_y.X(), result_y.Y(), result_y.Z() - (kernel_size_z - 1));
+			for (size_t yi = 0; yi < result_z.Y(); yi++) {
+				for (size_t xi = 0; xi < result_z.X(); xi++) {
+					for (size_t zi = 0; zi < result_z.Z(); zi++) {
+						float sum = 0;
+						for (size_t ui = 0; ui < kernel_size_z; ui++) {
+							sum += result_y(xi, yi, zi + ui) * kernel_z[ui];
+						}
+						result_z(xi, yi, zi) = sum;
+					}
+				}
+			}
+			free(kernel_z);
+
+			return result_z;
+		}
+
+
+
+
+		/// <summary>
+        /// Upsamples the current volume by the given factor using trilinear interpolation.
+        /// Each dimension is scaled by 'factor', and new voxel values are interpolated
+        /// <param name="factor">Upsampling factor (e.g., 2 for doubling resolution)</param>
+        /// <returns>A new volume with higher resolution and interpolated values</returns>
+
+
+		tira::volume<float> Trilinear_interpolation(int factor) {
+			int new_x = X() * factor;
+			int new_y = Y() * factor;
+			int new_z = Z() * factor;
+
+			tira::volume<float> upsampled(new_x, new_y, new_z);
+
+			for (int z = 0; z < new_z; z++) {
+				float zf = (float)z / factor;
+				int z0 = (int)zf;
+				int z1 = z0 + 1;
+				if (z1 >= Z()) z1 = z0;
+
+				float wz = zf - z0;
+
+				for (int y = 0; y < new_y; y++) {
+					float yf = (float)y / factor;
+					int y0 = (int)yf;
+					int y1 = y0 + 1;
+					if (y1 >= Y()) y1 = y0;
+
+					float wy = yf - y0;
+
+					for (int x = 0; x < new_x; x++) {
+						float xf = (float)x / factor;
+						int x0 = (int)xf;
+						int x1 = x0 + 1;
+						if (x1 >= X()) x1 = x0;
+
+						float wx = xf - x0;
+
+						// Trilinear interpolation
+						float c000 = at(x0, y0, z0);
+						float c100 = at(x1, y0, z0);
+						float c010 = at(x0, y1, z0);
+						float c110 = at(x1, y1, z0);
+						float c001 = at(x0, y0, z1);
+						float c101 = at(x1, y0, z1);
+						float c011 = at(x0, y1, z1);
+						float c111 = at(x1, y1, z1);
+
+						float c00 = c000 * (1 - wx) + c100 * wx;
+						float c10 = c010 * (1 - wx) + c110 * wx;
+						float c01 = c001 * (1 - wx) + c101 * wx;
+						float c11 = c011 * (1 - wx) + c111 * wx;
+
+						float c0 = c00 * (1 - wy) + c10 * wy;
+						float c1 = c01 * (1 - wy) + c11 * wy;
+
+						float value = c0 * (1 - wz) + c1 * wz;
+
+						upsampled(x, y, z) = value;
+					}
+				}
+			}
+
+			return upsampled;
+		}
+
+
+		//Cubic interpolation using Catmull–Rom spline
+		tira::volume<float> Tricubic_interpolation(int factor) {
+			int new_x = X() * factor;                      // Scale original X dimension by factor
+			int new_y = Y() * factor;                      // Scale original Y dimension by factor
+			int new_z = Z() * factor;                      // Scale original Z dimension by factor
+
+			tira::volume<float> upsampled(new_x, new_y, new_z); // Create the upsampled volume with new dimensions
+
+			// Cubic interpolation using Catmull–Rom spline
+			auto cubicInterpolate = [&](const float p[4], float t) {
+				float a = -0.5f * p[0] + 1.5f * p[1] - 1.5f * p[2] + 0.5f * p[3]; // Compute coefficient a
+				float b = p[0] - 2.5f * p[1] + 2.0f * p[2] - 0.5f * p[3];           // Compute coefficient b
+				float c = -0.5f * p[0] + 0.5f * p[2];                                // Compute coefficient c
+				float d = p[1];                                                      // Coefficient d is the central value
+				return ((a * t + b) * t + c) * t + d;                                // Evaluate cubic polynomial at t
+				};
+
+			for (int z = 0; z < new_z; z++) {                   // Loop through each z coordinate in the upsampled volume
+				float zf = (float)z / factor;                 // Convert integer z to float 
+				int z_int = (int)zf;                          // Integer part of zf (floor)
+				float dz = zf - z_int;                        // Fractional part of z for interpolation
+
+				for (int y = 0; y < new_y; y++) {               // Loop through each y coordinate in the upsampled volume
+					float yf = (float)y / factor;             // Convert integer y to float 
+					int y_int = (int)yf;                      // Integer part of yf (floor)
+					float dy = yf - y_int;                    // Fractional part of y for interpolation
+
+					for (int x = 0; x < new_x; x++) {           // Loop through each x coordinate in the upsampled volume
+						float xf = (float)x / factor;         // Convert integer x to float
+						int x_int = (int)xf;                  // Integer part of xf (floor)
+						float dx = xf - x_int;                // Fractional part of x for interpolation
+
+						float interpz[4]; //  hold intermediate results from y-interpolation along z
+
+						// Interpolate over the 4 z-neighbors (from z_int - 1 to z_int + 2)
+						for (int iz = 0; iz < 4; iz++) {
+							int z_idx = z_int - 1 + iz;       // Compute original z index for neighbor
+							// ensure it lies within [0, Z()-1]
+							if (z_idx < 0) {
+								z_idx = 0;
+							}
+							else if (z_idx >= Z()) {
+								z_idx = Z() - 1;
+							}
+
+							float interpy[4]; // hold intermediate results from x-interpolation along y
+
+							// Interpolate over the 4 y-neighbors (from y_int - 1 to y_int + 2)
+							for (int iy = 0; iy < 4; iy++) {
+								int y_idx = y_int - 1 + iy;   // Compute original y index for neighbor
+								// ensure it lies within [0, Y()-1]
+								if (y_idx < 0) {
+									y_idx = 0;
+								}
+								else if (y_idx >= Y()) {
+									y_idx = Y() - 1;
+								}
+								float p[4]; // store values from 4 x-neighbors
+
+								// Interpolate over the 4 x-neighbors (from x_int - 1 to x_int + 2)
+								for (int ix = 0; ix < 4; ix++) {
+									int x_idx = x_int - 1 + ix; // Compute original x index for neighbor
+									// ensure it lies within [0, X()-1]
+									if (x_idx < 0) {
+										x_idx = 0;
+									}
+									else if (x_idx >= X()) {
+										x_idx = X() - 1;
+									}
+									p[ix] = at(x_idx, y_idx, z_idx); // Retrieve voxel value from original volume
+								}
+								interpy[iy] = cubicInterpolate(p, dx); // Interpolate along x-axis for fixed y and z
+							}
+							interpz[iz] = cubicInterpolate(interpy, dy); // Interpolate along y-axis for fixed z
+						}
+						float value = cubicInterpolate(interpz, dz);  // Final interpolation along z-axis
+						upsampled(x, y, z) = value;                    // Assign the computed value to the upsampled volume
+					}
+				}
+			}
+			upsampled._spacing[0] /= factor;
+			upsampled._spacing[1] /= factor;
+			upsampled._spacing[2] /= factor;
+			return upsampled; // Return the upsampled volume
+		}
+
+
+
+		tira::volume<float> reinitialize_osher(float d_tau, int num_iters) {
+
+			tira::volume<float> phi = *this;
+
+			const int nx = phi.X();
+			const int ny = phi.Y();
+			const int nz = phi.Z();
+
+			const float dx = _spacing[0];
+			const float dy = _spacing[1];
+			const float dz = _spacing[2];
+
+			// Initialize psi as a copy of φ to evolve it
+			tira::volume<float> psi = phi;
+
+			// Iterate over  time t
+			for (int iter = 0; iter < num_iters; ++iter) {
+				for (int z = 1; z < nz - 1; ++z) {
+					for (int y = 1; y < ny - 1; ++y) {
+						for (int x = 1; x < nx - 1; ++x) {
+
+							// Compute sign function of φ 
+							float val = phi(x, y, z);
+							float sgn = val / std::sqrt(val * val + 1e-8f);  // sgn_ε(φ)
+
+							// Compute forward and backward differences for psi
+							float Dx_plus = (psi(x + 1, y, z) - psi(x, y, z)) / dx;
+							float Dx_minus = (psi(x, y, z) - psi(x - 1, y, z)) / dx;
+							float Dy_plus = (psi(x, y + 1, z) - psi(x, y, z)) / dy;
+							float Dy_minus = (psi(x, y, z) - psi(x, y - 1, z)) / dy;
+							float Dz_plus = (psi(x, y, z + 1) - psi(x, y, z)) / dz;
+							float Dz_minus = (psi(x, y, z) - psi(x, y, z - 1)) / dz;
+
+							// Godunov's scheme: compute |∇psi| using one-sided upwind differences
+							float Dx_pos, Dx_neg;
+							if (Dx_minus > 0.0f) Dx_pos = Dx_minus * Dx_minus;
+							else Dx_pos = 0.0f;
+							if (Dx_plus < 0.0f) Dx_pos += Dx_plus * Dx_plus;
+
+							if (Dx_minus < 0.0f) Dx_neg = Dx_minus * Dx_minus;
+							else Dx_neg = 0.0f;
+							if (Dx_plus > 0.0f) Dx_neg += Dx_plus * Dx_plus;
+
+							float Dy_pos, Dy_neg;
+							if (Dy_minus > 0.0f) Dy_pos = Dy_minus * Dy_minus;
+							else Dy_pos = 0.0f;
+							if (Dy_plus < 0.0f) Dy_pos += Dy_plus * Dy_plus;
+
+							if (Dy_minus < 0.0f) Dy_neg = Dy_minus * Dy_minus;
+							else Dy_neg = 0.0f;
+							if (Dy_plus > 0.0f) Dy_neg += Dy_plus * Dy_plus;
+
+							float Dz_pos, Dz_neg;
+							if (Dz_minus > 0.0f) Dz_pos = Dz_minus * Dz_minus;
+							else Dz_pos = 0.0f;
+							if (Dz_plus < 0.0f) Dz_pos += Dz_plus * Dz_plus;
+
+							if (Dz_minus < 0.0f) Dz_neg = Dz_minus * Dz_minus;
+							else Dz_neg = 0.0f;
+							if (Dz_plus > 0.0f) Dz_neg += Dz_plus * Dz_plus;
+
+							float grad_psi = 0.0f;
+
+							// Select correct upwind norm based on sign of φ
+							if (sgn > 0.0f) {
+								grad_psi = std::sqrt(Dx_pos + Dy_pos + Dz_pos);
+							}
+							else {
+								grad_psi = std::sqrt(Dx_neg + Dy_neg + Dz_neg);
+							}
+
+							// Compute update term: sgn(φ) * (|∇psi| - 1)
+							float H = grad_psi - 1.0f;
+
+							// Euler update step
+							psi(x, y, z) = psi(x, y, z) - d_tau * sgn * H;
+						}
+					}
+				}
+			}
+
+			// Return the evolved (signed distance approximation)
+			return psi;
+		}
+
+
 
 		/// <summary>
 		/// Add a border to an image
@@ -765,8 +1356,28 @@ namespace tira {
 				}
 			}
 			return result;
-
 		}
+
+		/// Add a border around the volume, specifying the width for each dimension separately
+		//tira::volume<T> border(size_t wx, size_t wy, size_t wz, T value) {
+
+		//}
+
+		
+		tira::volume<T> border_separable(size_t wx, size_t wy, size_t wz, T value) {
+			tira::volume<T> result(X() + 2 * wx, Y() + 2 * wy, Z() + 2 * wz);
+			result = value; // Fill entire volume with padding value
+
+			for (size_t y = 0; y < Y(); ++y) {
+				for (size_t x = 0; x < X(); ++x) {
+					for (size_t z = 0; z < Z(); ++z) {
+						result(x + wx, y + wy, z + wz) = (*this)(x, y, z);
+					}
+				}
+			}
+			return result;
+		}
+
 		
 
 		/// <summary>
@@ -946,6 +1557,17 @@ namespace tira {
 				field<T>::_shape.push_back(1);
 		}
 
+		/// Save the volume as a Numpy file. If there is only one channel, this function will squeeze the dimensions.
+		template<typename D = T>
+		void save_npy(std::string filename) {
+			std::vector<size_t> squeezed_shape = field<T>::_shape;
+			if (field<T>::_shape[3] == 1) {
+				squeezed_shape.pop_back();
+			}
+			field<T>::template save_npy<D>(filename, squeezed_shape);
+
+		}
+
 		T& operator()(size_t x, size_t y, size_t z, size_t c = 0) {
 			return at(x, y, z, c);
 		}
@@ -960,9 +1582,25 @@ namespace tira {
 
 		tira::volume<T> operator*(T rhs) {
 			size_t N = field<T>::size();									// calculate the total number of values in the volume
-			tira::volume<T> r(this->shape());								// allocate space for the resulting image
+			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] * rhs;						// add the individual pixels
+				r._data[n] = field<T>::_data[n] * rhs;						// multiply the individual samples
+			return r;														// return the final result
+		}
+
+		tira::volume<T> operator+(T rhs) {
+			size_t N = field<T>::size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] + rhs;						// add the individual pixels
+			return r;														// return the summed result
+		}
+
+		tira::volume<T> operator-(T rhs) {
+			size_t N = field<T>::size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
+			for (size_t n = 0; n < N; n++)
+				r._data[n] = field<T>::_data[n] - rhs;						// add the individual pixels
 			return r;														// return the summed result
 		}
 
@@ -971,14 +1609,14 @@ namespace tira {
 				throw std::runtime_error("Images dimensions are incompatible");
 
 			if (C() == rhs.C()) {					// if both images have the same number of color channels
-				tira::volume<T> result(this->shape());
+				tira::volume<T> result(this->shape(), this->_spacing);
 				for (size_t i = 0; i < field<T>::size(); i++) {
 					result._data[i] = field<T>::_data[i] * rhs._data[i];
 				}
 				return result;
 			}
 			else if (C() == 1) {
-				tira::volume<T> result(X(), Y(), rhs.C());
+				tira::volume<T> result(X(), Y(), Z(), rhs.C(), this->_spacing);
 				for (size_t zi = 0; zi < Z(); zi++) {
 					for (size_t yi = 0; yi < Y(); yi++) {
 						for (size_t xi = 0; xi < X(); xi++) {
@@ -991,7 +1629,7 @@ namespace tira {
 				return result;
 			}
 			else if (rhs.C() == 1) {
-				tira::volume<T> result(this->shape());
+				tira::volume<T> result(this->shape(), this->_spacing);
 				for (size_t zi = 0; zi < Z(); zi++) {
 					for (size_t yi = 0; yi < Y(); yi++) {
 						for (size_t xi = 0; xi < X(); xi++) {
@@ -1007,6 +1645,58 @@ namespace tira {
 				throw std::runtime_error("Number of color channels are incompatible");
 			}
 		}
+
+		volume<T> operator+(volume<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
+			for (size_t zi = 0; zi < Z(); zi++) {
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) + rhs(xi, yi, zi);
+						}
+					}
+				}
+			}
+			return result;
+		}
+
+		volume<T> operator-(volume<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
+			for (size_t zi = 0; zi < Z(); zi++) {
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) - rhs(xi, yi, zi);
+						}
+					}
+				}
+			}
+			return result;
+		}
+
+		volume<T> operator/(volume<T> rhs) {							// point-wise multiplication
+			if (X() != rhs.X() || Y() != rhs.Y())
+				throw std::runtime_error("Images dimensions are incompatible");
+
+			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
+			for (size_t zi = 0; zi < Z(); zi++) {
+				for (size_t yi = 0; yi < Y(); yi++) {
+					for (size_t xi = 0; xi < X(); xi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) / rhs(xi, yi, zi);
+						}
+					}
+				}
+			}
+			return result;
+		}
+
 
 		void resize(size_t x, size_t y, size_t z, size_t c = 0) {
 			std::vector<size_t> shape = { z, y, x, c };
@@ -1037,6 +1727,7 @@ namespace tira {
 			return _dist(boundary);
 		}
 
+		/// Calculates the signed distance field from a binary image
 		volume<T> sdf() {
 			volume<int> boundary;
 			volume<T> D = _dist(boundary);

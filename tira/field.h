@@ -5,6 +5,7 @@
 #include <cmath>
 #include <numbers>
 #include <typeinfo>
+#include <fstream>
 
 #include "extern/libnpy/npy.hpp"
 #include "tira/calculus.h"
@@ -269,7 +270,7 @@ namespace tira {
 				npy::LoadArrayFromNumpy<D>(filename, shape, fortran_order, data);	// load NPY array and metadata
 			}
 			catch(const std::runtime_error &e){
-				std::cout << "ERROR loading NumPy file: " << e.what() << std::endl;
+				std::cout << "ERROR loading NumPy file "<<filename<<": " << e.what() << std::endl;
 				exit(1);
 			}
 
@@ -315,14 +316,30 @@ namespace tira {
 		
 		template<typename D = T>
 		void save_npy(const std::string& filename) {
-			bool fortran_order = false;
-			std::vector<unsigned long> shape(_shape.size());
-			for (int i = 0; i < shape.size(); i++)
-				shape[i] = _shape[i];
-			if (sizeof(D) < sizeof(T))
-				shape.push_back(sizeof(T) / sizeof(D));
+			bool fortran_order = false;								// default to standard (C) order
+			std::vector<size_t> destshape = _shape;
 
-			npy::SaveArrayAsNumpy(filename, fortran_order, shape.size(), (const unsigned long*)&shape[0], (D*)(&_data[0]));
+			//npy::SaveArrayAsNumpy(filename, fortran_order, shape.size(), (const unsigned long*)&shape[0], (D*)(&_data[0]));
+			save_npy<D>(filename, destshape);
+		}
+
+		template<typename D = T>
+		void save_npy(const std::string& filename, std::vector<size_t> dest_shape) {
+			bool fortran_order = false;								// default to standard (C) order
+			std::vector<unsigned long> cast_dest_shape(dest_shape.begin(), dest_shape.end());
+			//for (int i = 0; i < dest_shape.size(); i++)					// copy the grid shape
+			//	shape[i] = _shape[i];
+			if (sizeof(D) < sizeof(T))								// if the data type stored is smaller than the grid data type
+				cast_dest_shape.push_back(sizeof(T) / sizeof(D));			// add another dimension to account for this
+
+
+			npy::SaveArrayAsNumpy(filename, fortran_order, cast_dest_shape.size(), (const unsigned long*)&cast_dest_shape[0], (D*)(&_data[0]));
+		}
+
+		void save_raw(const std::string& filename) {
+			std::ofstream outfile;
+			outfile.open(filename, std::ios::app | std::ios::binary);
+			outfile.write((char*)&_data[0], bytes());
 		}
 
 
@@ -701,6 +718,14 @@ namespace tira {
 			//return iterator(this);
 		}
 
+		/// <summary>
+		/// Calculate the derivative of a field using the finite difference method.
+		/// </summary>
+		/// <param name="axis">Dimension of the derivative given as an axis index</param>
+		/// <param name="d">Derivative to calculate</param>
+		/// <param name="order">Order of the finite difference method used</param>
+		/// <param name="print_coefs">Display the coefficients used to weight the finite differences</param>
+		/// <returns></returns>
 		field<T> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false) {
 
 			T* ptr = _derivative_ptr(axis, d, order, print_coefs);
@@ -709,6 +734,60 @@ namespace tira {
 
 			delete ptr;
 			return result;
+		}
+
+		/// <summary>
+		/// Calculates the gradient magnitude at each point in the field
+		/// </summary>
+		/// <param name="order">Order used to calculate the finite differences</param>
+		/// <returns></returns>
+		field<T> gradmag(unsigned int order) {
+
+			T* sum_sq = new T[size()]{};							// allocate space to store the sum of squares of each derivative (initialize to zero)
+
+			for (size_t di = 0; di < _shape.size(); di++) {			// for each dimension
+				if (_shape[di] == 1) continue;						// if the dimension is singular, ignore it
+				T* part_deriv = _derivative_ptr(di, 1, order);		// calculate the partial derivative along dimension di
+				for (size_t xi = 0; xi < size(); xi++) {			// for each point in the field
+					sum_sq[xi] += part_deriv[xi] * part_deriv[xi];	// calculate the square and sum
+				}
+			}
+			
+			// calculate the square root for each element
+			for (size_t xi = 0; xi < size(); xi++) {			// for each point in the field
+				sum_sq[xi] = std::sqrt(sum_sq[xi]);				// calculate the square root
+			}
+			field<T> result(_shape, sum_sq);
+			delete sum_sq;
+			return result;
+		}
+
+		/// <summary>
+		/// Calculates the sign() function at each point in the field and returns the result.
+		/// </summary>
+		/// <returns></returns>
+		field<T> sign() {
+			tira::field<T> R(_shape);
+			for (size_t xi = 0; xi < size(); xi++) {
+				if (_data[xi] < 0) R._data[xi] = -1;
+				else if (_data[xi] > 0) R._data[xi] = 1;
+				else R._data[xi] = 0;
+			}
+			return R;
+		}
+
+		T sum() {
+			T s = 0;
+			for (size_t xi = 0; xi < size(); xi++) {
+				s += _data[xi];
+			}
+			return s;
+		}
+
+		T mean() {
+			T s = sum();
+			T m = s / size();
+			return m;
 		}
 
 		static std::vector<double> fd_coefficients(unsigned int d, unsigned int order) {
