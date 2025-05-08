@@ -547,7 +547,70 @@ namespace tira {
 			}
 		}
 
-		
+		// This function writes an OBJ file where for every nonzero voxel 
+        // in the input volume a cube is drawn. Each cube is defined by 8 vertices 
+        // and 6 faces.
+		void convertToCubeObj(const std::string& obj_file_name) {
+			// Open the OBJ file for writing.
+			std::ofstream obj_file(obj_file_name);
+			if (!obj_file.is_open()) {
+				std::cerr << "ERROR: Unable to open OBJ file for writing.\n";
+				return;
+			}
+
+			int vertex_counter = 1; // OBJ vertices are 1-indexed.
+
+			// Loop over every voxel in the volume.
+			for (int y = 0; y < this->Y(); ++y) {
+				for (int x = 0; x < this->X(); ++x) {
+					for (int z = 0; z < this->Z(); ++z) {
+						// Check if the voxel is non-zero
+						if (this->at(x, y, z) > 0) {
+							// Voxel center coordinates and half-size
+							double cx = static_cast<double>(x);
+							double cy = static_cast<double>(y);
+							double cz = static_cast<double>(z);
+							double hs = 0.5;
+
+							// Define the 8 vertices of the cube
+							double v[8][3] = {
+								{cx - hs, cy - hs, cz - hs}, {cx + hs, cy - hs, cz - hs},
+								{cx + hs, cy + hs, cz - hs}, {cx - hs, cy + hs, cz - hs},
+								{cx - hs, cy - hs, cz + hs}, {cx + hs, cy - hs, cz + hs},
+								{cx + hs, cy + hs, cz + hs}, {cx - hs, cy + hs, cz + hs}
+							};
+
+							// Write the vertices to the OBJ file
+							for (int i = 0; i < 8; ++i) {
+								obj_file << "v " << v[i][0] << " " << v[i][1] << " " << v[i][2] << "\n";
+							}
+
+							int base = vertex_counter;
+
+							// Define the cube faces (6 faces, 4 vertices each)
+							int faces[6][4] = {
+								{0, 1, 2, 3}, {4, 5, 6, 7}, {0, 1, 5, 4},
+								{3, 2, 6, 7}, {0, 3, 7, 4}, {1, 2, 6, 5}
+							};
+
+							// Write the faces to the OBJ file
+							for (const auto& face : faces) {
+								obj_file << "f " << base + face[0] << " " << base + face[1]
+									<< " " << base + face[2] << " " << base + face[3] << "\n";
+							}
+
+							// Increment the vertex counter for the next cube
+							vertex_counter += 8;
+						}
+					}
+				}
+			}
+
+			obj_file.close();
+			std::cout << "Cube OBJ file written successfully: " << obj_file_name << std::endl;
+		}
+
+
 		/// <summary>
 		/// Retrieve a slice of the volume as a 2D image
 		/// </summary>
