@@ -2,15 +2,16 @@
 
 #include <cmath>
 
-#include "geometry.h"
+#include "mesh_triangle.h"
 
 namespace tira{
 
 	template <typename T>
-	class cube : public geometry<T>{
-	protected:
-		void genGeometry(){
-			T v[] = {
+	trimesh<T> cube(){
+
+		trimesh<T> C;
+
+		std::vector<T> v = {
 				-0.5, -0.5, -0.5,
 				-0.5, 0.5, -0.5,
 				0.5, 0.5, -0.5,
@@ -36,9 +37,9 @@ namespace tira{
 				0.5, 0.5, 0.5,
 				0.5, 0.5, -0.5
 			};
-			geometry<T>::_vertices.insert(geometry<T>::_vertices.begin(), std::begin(v), std::end(v));
+			C.vertices(v);
 
-			T n[] = {
+			std::vector<T> n = {
 				0.0, 0.0, -1.0,
 				0.0, 0.0, -1.0,
 				0.0, 0.0, -1.0,
@@ -64,9 +65,9 @@ namespace tira{
 				0.0, 1.0, 0.0,
 				0.0, 1.0, 0.0
 			};
-			geometry<T>::_normals.insert(geometry<T>::_normals.begin(), std::begin(n), std::end(n));
+			C.normals(n);
 
-			T t[] = {
+			std::vector<T> t = {
 				// negative z plane
 				0.0, 0.0,
 				0.0, 1.0,
@@ -98,9 +99,9 @@ namespace tira{
 				1.0, 1.0,
 				1.0, 0.0
 			};
-			geometry<T>::_texcoords.insert(geometry<T>::_texcoords.begin(), std::begin(t), std::end(t));
+			C.texcoords(t);
 
-			int i[] = {
+			std::vector<unsigned int> i = {
 				0, 1, 2,
 				0, 2, 3,
 
@@ -119,12 +120,16 @@ namespace tira{
 				20, 21, 22,
 				20, 22, 23
 			};
-			geometry<T>::_indices.insert(geometry<T>::_indices.begin(), std::begin(i), std::end(i));
-		}
+			C.indices(i);
+			return C;
+	}
 
-		public:
-			cube() {
-				genGeometry();
-			}
-	};
+	/// Generate a cube with a center at position p and size s
+	template <typename T>
+	trimesh<T> cube(std::vector<T> p, T s){
+		trimesh<T> C = cube<T>();
+		C = C.scale({s, s, s});
+		C = C.translate(p);
+		return C;
+	}
 }

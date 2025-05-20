@@ -19,6 +19,8 @@
 #include <sstream>
 #include <math.h>
 
+#include "mesh_triangle.h"
+
 namespace tira {
     template <typename F>
     class icosphere : public geometry<F>

@@ -2,12 +2,11 @@
 
 #include <cmath>
 
-#include "geometry.h"
+#include "mesh_triangle.h"
 
 namespace tira {
 	template <typename T>
-	class sphere : public geometry<T>{
-		void genGeometry(unsigned int stacks, unsigned int sectors) {
+	trimesh<T> sphere(unsigned int stacks, unsigned int sectors){
 
 			float radius = 0.5f;
 			float x, y, z, xy;                              // vertex position
@@ -18,17 +17,20 @@ namespace tira {
 			float stackStep = 3.14159265358979323846 / stacks;
 			float sectorAngle, stackAngle;
 
+            std::vector<float> vertices;
 			// add the first vertex (top of the sphere)
-			geometry<T>::m_vertices.push_back(0);
-			geometry<T>::m_vertices.push_back(0);
-			geometry<T>::m_vertices.push_back(radius);
+			vertices.push_back(0);
+			vertices.push_back(0);
+			vertices.push_back(radius);
 
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(1);
+            std::vector<float> normals;
+			normals.push_back(0);
+			normals.push_back(0);
+			normals.push_back(1);
 
-			geometry<T>::m_texcoords.push_back(0);
-			geometry<T>::m_texcoords.push_back(0);
+            std::vector<float> texcoords;
+			texcoords.push_back(0);
+			texcoords.push_back(0);
 
 			for (int i = 1; i < stacks; ++i)
 			{
@@ -45,37 +47,37 @@ namespace tira {
 					// vertex position (x, y, z)
 					x = xy * cosf(sectorAngle);             // r * cos(u) * cos(v)
 					y = xy * sinf(sectorAngle);             // r * cos(u) * sin(v)
-					geometry<T>::m_vertices.push_back(x);
-					geometry<T>::m_vertices.push_back(y);
-					geometry<T>::m_vertices.push_back(z);
+					vertices.push_back(x);
+					vertices.push_back(y);
+					vertices.push_back(z);
 
 					// normalized vertex normal (nx, ny, nz)
 					nx = x * lengthInv;
 					ny = y * lengthInv;
 					nz = z * lengthInv;
-					geometry<T>::m_normals.push_back(nx);
-					geometry<T>::m_normals.push_back(ny);
-					geometry<T>::m_normals.push_back(nz);
+					normals.push_back(nx);
+					normals.push_back(ny);
+					normals.push_back(nz);
 
 					// vertex tex coord (s, t) range between [0, 1]
 					s = (float)j / sectors;
 					t = (float)i / stacks;
-					geometry<T>::m_texcoords.push_back(s);
-					geometry<T>::m_texcoords.push_back(t);
+					texcoords.push_back(s);
+					texcoords.push_back(t);
 				}
 			}
 
 			// add the first vertex (top of the sphere)
-			geometry<T>::m_vertices.push_back(0);
-			geometry<T>::m_vertices.push_back(0);
-			geometry<T>::m_vertices.push_back(-radius);
+			vertices.push_back(0);
+			vertices.push_back(0);
+			vertices.push_back(-radius);
 
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(0);
-			geometry<T>::m_normals.push_back(-1);
+			normals.push_back(0);
+			normals.push_back(0);
+			normals.push_back(-1);
 
-			geometry<T>::m_texcoords.push_back(1);
-			geometry<T>::m_texcoords.push_back(1);
+			texcoords.push_back(1);
+			texcoords.push_back(1);
 
 			// generate CCW index list of sphere triangles
 			// k1--k1+1
@@ -84,6 +86,7 @@ namespace tira {
 			// k2--k2+1
 			//idx.clear();
 			//std::vector<int> lineIndices;
+            std::vector<unsigned int> indices;
 			int k1, k2;
 			for (int i = 0; i < stacks; ++i)
 			{
@@ -99,40 +102,40 @@ namespace tira {
 					// 2 triangles per sector excluding first and last stacks
 					// k1 => k2 => k1+1
 					if (i == 0) {
-						geometry<T>::m_indices.push_back(0);
-						geometry<T>::m_indices.push_back(j + 1);
+						indices.push_back(0);
+						indices.push_back(j + 1);
 
 						if (j == sectors - 1)
-							geometry<T>::m_indices.push_back(1);
+							indices.push_back(1);
 						else
-							geometry<T>::m_indices.push_back(j + 2);
+							indices.push_back(j + 2);
 					}
 					else if (i == (stacks - 1)) {
-						int last = geometry<T>::m_vertices.size() / 3 - 1;
-						geometry<T>::m_indices.push_back(k1);
-						geometry<T>::m_indices.push_back(last);
+						int last = vertices.size() / 3 - 1;
+						indices.push_back(k1);
+						indices.push_back(last);
 						if (j == sectors - 1)
-							geometry<T>::m_indices.push_back(last - sectors);
+							indices.push_back(last - sectors);
 						else
-							geometry<T>::m_indices.push_back(k1 + 1);
+							indices.push_back(k1 + 1);
 					}
 					else
 					{
 						if (j == sectors - 1) {
-							geometry<T>::m_indices.push_back(k1);
-							geometry<T>::m_indices.push_back(k2);
-							geometry<T>::m_indices.push_back(k1 - sectors + 1);
-							geometry<T>::m_indices.push_back(k1 - sectors + 1);
-							geometry<T>::m_indices.push_back(k2);
-							geometry<T>::m_indices.push_back(k2 - sectors + 1);
+							indices.push_back(k1);
+							indices.push_back(k2);
+							indices.push_back(k1 - sectors + 1);
+							indices.push_back(k1 - sectors + 1);
+							indices.push_back(k2);
+							indices.push_back(k2 - sectors + 1);
 						}
 						else {
-							geometry<T>::m_indices.push_back(k1);
-							geometry<T>::m_indices.push_back(k2);
-							geometry<T>::m_indices.push_back(k1 + 1);
-							geometry<T>::m_indices.push_back(k1 + 1);
-							geometry<T>::m_indices.push_back(k2);
-							geometry<T>::m_indices.push_back(k2 + 1);
+							indices.push_back(k1);
+							indices.push_back(k2);
+							indices.push_back(k1 + 1);
+							indices.push_back(k1 + 1);
+							indices.push_back(k2);
+							indices.push_back(k2 + 1);
 						}
 					}
 
@@ -146,11 +149,11 @@ namespace tira {
 
 				}
 			}
+            trimesh<T> S;
+            S.vertices(vertices);
+            S.normals(normals);
+            S.texcoords(texcoords);
+            S.indices(indices);
+            return S;
 		} // end GenerateSphere()
-
-	public:
-		sphere(unsigned int stacks = 10, unsigned int slices = 10) {
-			genGeometry(stacks, slices);
-		}
-	};
 }
