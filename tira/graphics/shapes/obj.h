@@ -13,7 +13,10 @@ namespace tira{
         public:
             void write_entries(std::stringstream& s, std::vector<T> a, std::string prefix, unsigned int dims) {
                 for (size_t i = 0; i < a.size(); i+=dims) {
-                    s << prefix << " " << a[i + 0] << " " << a[i + 1] << " " << a[i + 2] << std::endl;
+                    s << prefix << " ";
+                    for(size_t di = 0; di < dims; di++)
+                        s << " " << a[i + di];
+                    s << std::endl;
                 }
             }
 
