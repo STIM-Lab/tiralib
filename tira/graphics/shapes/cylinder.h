@@ -6,7 +6,7 @@
 
 namespace tira {
     template <typename T>
-   trimesh<T> cylinder(unsigned int stacks = 1, unsigned int sectors = 10, T radius = 0.5, T height = 1) {
+	trimesh<T> cylinder(unsigned int stacks = 1, unsigned int sectors = 10, T radius = 0.5, T height = 1) {
 
 	   std::vector<T> vertices;
 	   std::vector<T> normals;
