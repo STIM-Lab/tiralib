@@ -22,17 +22,17 @@
 #include "mesh_triangle.h"
 
 namespace tira {
-    
+    template<typename Type>
     class Icosphere
     {
     public:
-        std::vector<float> _vertices;
-        std::vector<float> _texcoords;
-        std::vector<float> _normals;
+        std::vector<Type> _vertices;
+        std::vector<Type> _texcoords;
+        std::vector<Type> _normals;
         std::vector<unsigned int> _indices;
 
         // ctor/dtor
-        Icosphere(float radius = 1.0f, int sub = 1, bool smooth = false) : radius(radius), subdivision(sub), smooth(smooth), interleavedStride(32) {
+        Icosphere(Type radius = 1.0f, int sub = 1, bool smooth = false) : radius(radius), subdivision(sub), smooth(smooth), interleavedStride(32) {
                 if (smooth)
                     buildVerticesSmooth();
                 else
@@ -111,66 +111,66 @@ namespace tira {
     protected:
 
         // static functions
-        static void computeFaceNormal(const float v1[3], const float v2[3], const float v3[3], float n[3]) {
-            const float EPSILON = 0.000001f;
+        static void computeFaceNormal(const Type v1[3], const Type v2[3], const Type v3[3], Type n[3]) {
+            const Type EPSILON = 0.000001f;
 
             // default return value (0, 0, 0)
             n[0] = n[1] = n[2] = 0;
 
             // find 2 edge vectors: v1-v2, v1-v3
-            float ex1 = v2[0] - v1[0];
-            float ey1 = v2[1] - v1[1];
-            float ez1 = v2[2] - v1[2];
-            float ex2 = v3[0] - v1[0];
-            float ey2 = v3[1] - v1[1];
-            float ez2 = v3[2] - v1[2];
+            Type ex1 = v2[0] - v1[0];
+            Type ey1 = v2[1] - v1[1];
+            Type ez1 = v2[2] - v1[2];
+            Type ex2 = v3[0] - v1[0];
+            Type ey2 = v3[1] - v1[1];
+            Type ez2 = v3[2] - v1[2];
 
             // cross product: e1 x e2
-            float nx, ny, nz;
+            Type nx, ny, nz;
             nx = ey1 * ez2 - ez1 * ey2;
             ny = ez1 * ex2 - ex1 * ez2;
             nz = ex1 * ey2 - ey1 * ex2;
 
             // normalize only if the length is > 0
-            float length = sqrtf(nx * nx + ny * ny + nz * nz);
+            Type length = sqrtf(nx * nx + ny * ny + nz * nz);
             if (length > EPSILON)
             {
                 // normalize
-                float lengthInv = 1.0f / length;
+                Type lengthInv = 1.0f / length;
                 n[0] = nx * lengthInv;
                 n[1] = ny * lengthInv;
                 n[2] = nz * lengthInv;
             }
         }
-        static void computeVertexNormal(const float v[3], float normal[3]) {
+        static void computeVertexNormal(const Type v[3], Type normal[3]) {
             // normalize
             float scale = Icosphere::computeScaleForLength(v, 1);
             normal[0] = v[0] * scale;
             normal[1] = v[1] * scale;
             normal[2] = v[2] * scale;
         }
-        static float computeScaleForLength(const float v[3], float length) {
+        static float computeScaleForLength(const Type v[3], Type length) {
             // and normalize the vector then re-scale to new radius
             return length / sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
         }
-        static void computeHalfVertex(const float v1[3], const float v2[3], float length, float newV[3]) {
+        static void computeHalfVertex(const Type v1[3], const Type v2[3], Type length, Type newV[3]) {
             newV[0] = v1[0] + v2[0];
             newV[1] = v1[1] + v2[1];
             newV[2] = v1[2] + v2[2];
-            float scale = Icosphere::computeScaleForLength(newV, length);
+            Type scale = Icosphere::computeScaleForLength(newV, length);
             newV[0] *= scale;
             newV[1] *= scale;
             newV[2] *= scale;
         }
-        static void computeHalfTexCoord(const float t1[2], const float t2[2], float newT[2]) {
+        static void computeHalfTexCoord(const Type t1[2], const Type t2[2], Type newT[2]) {
             newT[0] = (t1[0] + t2[0]) * 0.5f;
             newT[1] = (t1[1] + t2[1]) * 0.5f;
         }
-        static bool isSharedTexCoord(const float t[2]) {
+        static bool isSharedTexCoord(const Type t[2]) {
             // 20 non-shared line segments
-            const float S = 1.0f / 11;  // texture steps
-            const float T = 1.0f / 3;
-            static float segments[] = { S, 0,       0, T,       // 00 - 05
+            const Type S = 1.0f / 11;  // texture steps
+            const Type T = 1.0f / 3;
+            static Type segments[] = { S, 0,       0, T,       // 00 - 05
                                         S, 0,       S * 2, T,     // 00 - 06
                                         S * 3, 0,     S * 2, T,     // 01 - 06
                                         S * 3, 0,     S * 4, T,     // 01 - 07
@@ -202,8 +202,8 @@ namespace tira {
 
             return true;
         }
-        static bool isOnLineSegment(const float a[2], const float b[2], const float c[2]) {
-            const float EPSILON = 0.0001f;
+        static bool isOnLineSegment(const Type a[2], const Type b[2], const Type c[2]) {
+            const Type EPSILON = 0.0001f;
 
             // cross product must be 0 if c is on the line
             float cross = ((b[0] - a[0]) * (c[1] - a[1])) - ((b[1] - a[1]) * (c[0] - a[0]));
@@ -239,14 +239,14 @@ namespace tira {
         }
         std::vector<float> computeIcosahedronVertices() {
             //const float PI = acos(-1);
-            const float H_ANGLE = 3.14159265358979323846 / 180 * 72;    // 72 degree = 360 / 5
-            const float V_ANGLE = atanf(1.0f / 2);  // elevation = 26.565 degree
+            const Type H_ANGLE = 3.14159265358979323846 / 180 * 72;    // 72 degree = 360 / 5
+            const Type V_ANGLE = atanf(1.0f / 2);  // elevation = 26.565 degree
 
-            std::vector<float> vertices(12 * 3);    // 12 vertices
+            std::vector<Type> vertices(12 * 3);    // 12 vertices
             int i1, i2;                             // indices
-            float z, xy;                            // coords
-            float hAngle1 = -3.14159265358979323846 / 2 - H_ANGLE / 2;  // start from -126 deg at 2nd row
-            float hAngle2 = -3.14159265358979323846 / 2;                // start from -90 deg at 3rd row
+            Type z, xy;                            // coords
+            Type hAngle1 = -3.14159265358979323846 / 2 - H_ANGLE / 2;  // start from -126 deg at 2nd row
+            Type hAngle2 = -3.14159265358979323846 / 2;                // start from -90 deg at 3rd row
 
             // the first top vertex (0, 0, r)
             vertices[0] = 0;
@@ -283,24 +283,24 @@ namespace tira {
             return vertices;
         }
         void buildVerticesFlat() {
-            const float S_STEP = 1 / 11.0f;         // horizontal texture step
-            const float T_STEP = 1 / 3.0f;          // vertical texture step
+            const Type S_STEP = 1 / 11.0f;         // horizontal texture step
+            const Type T_STEP = 1 / 3.0f;          // vertical texture step
             //const float S_STEP = 186 / 2048.0f;     // horizontal texture step
             //const float T_STEP = 322 / 1024.0f;     // vertical texture step
 
             // compute 12 vertices of icosahedron
-            std::vector<float> tmpVertices = computeIcosahedronVertices();
+            std::vector<Type> tmpVertices = computeIcosahedronVertices();
 
             // clear memory of prev arrays
-            std::vector<float>().swap(_vertices);
-            std::vector<float>().swap(_normals);
-            std::vector<float>().swap(_texcoords);
+            std::vector<Type>().swap(_vertices);
+            std::vector<Type>().swap(_normals);
+            std::vector<Type>().swap(_texcoords);
             std::vector<unsigned int>().swap(_indices);
             std::vector<unsigned int>().swap(lineIndices);
 
-            const float* v0, * v1, * v2, * v3, * v4, * v11;          // vertex positions
-            float n[3];                                         // face normal
-            float t0[2], t1[2], t2[2], t3[2], t4[2], t11[2];    // texCoords
+            const Type* v0, * v1, * v2, * v3, * v4, * v11;          // vertex positions
+            Type n[3];                                         // face normal
+            Type t0[2], t1[2], t2[2], t3[2], t4[2], t11[2];    // texCoords
             unsigned int index = 0;
 
             // compute and add 20 tiangles of icosahedron first
@@ -390,25 +390,25 @@ namespace tira {
         void buildVerticesSmooth() {
             //const float S_STEP = 1 / 11.0f;         // horizontal texture step
     //const float T_STEP = 1 / 3.0f;          // vertical texture step
-            const float S_STEP = 186 / 2048.0f;     // horizontal texture step
-            const float T_STEP = 322 / 1024.0f;     // vertical texture step
+            const Type S_STEP = 186 / 2048.0f;     // horizontal texture step
+            const Type T_STEP = 322 / 1024.0f;     // vertical texture step
 
             // compute 12 vertices of icosahedron
             // NOTE: v0 (top), v11(bottom), v1, v6(first vert on each row) cannot be
             // shared for smooth shading (they have different texcoords)
-            std::vector<float> tmpVertices = computeIcosahedronVertices();
+            std::vector<Type> tmpVertices = computeIcosahedronVertices();
 
             // clear memory of prev arrays
-            std::vector<float>().swap(_vertices);
-            std::vector<float>().swap(_normals);
-            std::vector<float>().swap(_texcoords);
+            std::vector<Type>().swap(_vertices);
+            std::vector<Type>().swap(_normals);
+            std::vector<Type>().swap(_texcoords);
             std::vector<unsigned int>().swap(_indices);
             std::vector<unsigned int>().swap(lineIndices);
-            std::map<std::pair<float, float>, unsigned int>().swap(sharedIndices);
+            std::map<std::pair<Type, Type>, unsigned int>().swap(sharedIndices);
 
-            float v[3];                             // vertex
-            float n[3];                             // normal
-            float scale;                            // scale factor for normalization
+            Type v[3];                             // vertex
+            Type n[3];                             // normal
+            Type scale;                            // scale factor for normalization
 
             // smooth icosahedron has 14 non-shared (0 to 13) and
             // 8 shared vertices (14 to 21) (total 22 vertices)
@@ -602,15 +602,15 @@ namespace tira {
             buildInterleavedVertices();
         }
         void subdivideVerticesFlat() {
-            std::vector<float> tmpVertices;
-            std::vector<float> tmpTexCoords;
+            std::vector<Type> tmpVertices;
+            std::vector<Type> tmpTexCoords;
             std::vector<unsigned int> tmpIndices;
             int indexCount;
-            const float* v1, * v2, * v3;          // ptr to original vertices of a triangle
-            const float* t1, * t2, * t3;          // ptr to original texcoords of a triangle
-            float newV1[3], newV2[3], newV3[3]; // new vertex positions
-            float newT1[2], newT2[2], newT3[2]; // new texture coords
-            float normal[3];                    // new face normal
+            const Type* v1, * v2, * v3;          // ptr to original vertices of a triangle
+            const Type* t1, * t2, * t3;          // ptr to original texcoords of a triangle
+            Type newV1[3], newV2[3], newV3[3]; // new vertex positions
+            Type newT1[2], newT2[2], newT3[2]; // new texture coords
+            Type normal[3];                    // new face normal
             unsigned int index = 0;             // new index value
             int i, j;
 
@@ -686,11 +686,11 @@ namespace tira {
             std::vector<unsigned int> tmpIndices;
             int indexCount;
             unsigned int i1, i2, i3;            // indices from original triangle
-            const float* v1, * v2, * v3;          // ptr to original vertices of a triangle
-            const float* t1, * t2, * t3;          // ptr to original texcoords of a triangle
-            float newV1[3], newV2[3], newV3[3]; // new subdivided vertex positions
-            float newN1[3], newN2[3], newN3[3]; // new subdivided normals
-            float newT1[2], newT2[2], newT3[2]; // new subdivided texture coords
+            const Type* v1, * v2, * v3;          // ptr to original vertices of a triangle
+            const Type* t1, * t2, * t3;          // ptr to original texcoords of a triangle
+            Type newV1[3], newV2[3], newV3[3]; // new subdivided vertex positions
+            Type newN1[3], newN2[3], newN3[3]; // new subdivided normals
+            Type newT1[2], newT2[2], newT3[2]; // new subdivided texture coords
             unsigned int newI1, newI2, newI3;   // new subdivided indices
             int i, j;
 
@@ -749,7 +749,7 @@ namespace tira {
             }
         }
         void buildInterleavedVertices() {
-            std::vector<float>().swap(interleavedVertices);
+            std::vector<Type>().swap(interleavedVertices);
 
             std::size_t i, j;
             std::size_t count = _vertices.size();
@@ -767,12 +767,12 @@ namespace tira {
                 interleavedVertices.push_back(_texcoords[j + 1]);
             }
         }
-        void addVertex(float x, float y, float z) {
+        void addVertex(Type x, Type y, Type z) {
             _vertices.push_back(x);
             _vertices.push_back(y);
             _vertices.push_back(z);
         }
-        void addVertices(const float v1[3], const float v2[3], const float v3[3]) {
+        void addVertices(const Type v1[3], const Type v2[3], const Type v3[3]) {
             _vertices.push_back(v1[0]);  // x
             _vertices.push_back(v1[1]);  // y
             _vertices.push_back(v1[2]);  // z
@@ -783,12 +783,12 @@ namespace tira {
             _vertices.push_back(v3[1]);
             _vertices.push_back(v3[2]);
         }
-        void addNormal(float nx, float ny, float nz) {
+        void addNormal(Type nx, Type ny, Type nz) {
             _normals.push_back(nx);
             _normals.push_back(ny);
             _normals.push_back(nz);
         }
-        void addNormals(const float n1[3], const float n2[3], const float n3[3]) {
+        void addNormals(const Type n1[3], const Type n2[3], const Type n3[3]) {
             _normals.push_back(n1[0]);  // nx
             _normals.push_back(n1[1]);  // ny
             _normals.push_back(n1[2]);  // nz
@@ -799,11 +799,11 @@ namespace tira {
             _normals.push_back(n3[1]);
             _normals.push_back(n3[2]);
         }
-        void addTexCoord(float s, float t) {
+        void addTexCoord(Type s, Type t) {
             _texcoords.push_back(s);
             _texcoords.push_back(t);
         }
-        void addTexCoords(const float t1[2], const float t2[2], const float t3[2]) {
+        void addTexCoords(const Type t1[2], const Type t2[2], const Type t3[2]) {
             _texcoords.push_back(t1[0]); // s
             _texcoords.push_back(t1[1]); // t
             _texcoords.push_back(t2[0]);
@@ -833,7 +833,7 @@ namespace tira {
             lineIndices.push_back(i4);      // i4 - i5
             lineIndices.push_back(i5);
         }
-        unsigned int addSubVertexAttribs(const float v[3], const float n[3], const float t[2]) {
+        unsigned int addSubVertexAttribs(const Type v[3], const Type n[3], const Type t[2]) {
             unsigned int index;     // return value;
 
     // check if is shared vertex or not first
@@ -842,8 +842,8 @@ namespace tira {
                 // find if it does already exist in sharedIndices map using (s,t) key
                 // if not in the list, add the vertex attribs to arrays and return its index
                 // if exists, return the current index
-                std::pair<float, float> key = std::make_pair(t[0], t[1]);
-                std::map<std::pair<float, float>, unsigned int>::iterator iter = sharedIndices.find(key);
+                std::pair<Type, Type> key = std::make_pair(t[0], t[1]);
+                typename std::map<std::pair<Type, Type>, unsigned int>::iterator iter = sharedIndices.find(key);
                 if (iter == sharedIndices.end())
                 {
                     addVertex(v[0], v[1], v[2]);
@@ -870,25 +870,25 @@ namespace tira {
         }
 
         // memeber vars
-        float radius;                           // circumscribed radius
+        Type radius;                           // circumscribed radius
         int subdivision;
         bool smooth;
-        //std::vector<float> vertices;
-        //std::vector<float> normals;
-        //std::vector<float> texCoords;
+        //std::vector<Type> vertices;
+        //std::vector<Type> normals;
+        //std::vector<Type> texCoords;
         //std::vector<unsigned int> indices;
         std::vector<unsigned int> lineIndices;
-        std::map<std::pair<float, float>, unsigned int> sharedIndices;   // indices of shared vertices, key is tex coord (s,t)
+        std::map<std::pair<Type, Type>, unsigned int> sharedIndices;   // indices of shared vertices, key is tex coord (s,t)
 
         // interleaved
-        std::vector<float> interleavedVertices;
+        std::vector<Type> interleavedVertices;
         int interleavedStride;                  // # of bytes to hop to the next vertex (should be 32 bytes)
 
     };
 
-    template<typename T>
-    trimesh<T> icosphere(float radius = 1.0f, int sub = 1, bool smooth = false) {
-        trimesh<T> S;
+    template<typename Type>
+    trimesh<Type> icosphere(Type radius = 1.0f, int sub = 1, bool smooth = false) {
+        trimesh<Type> S;
 
         Icosphere s(radius, sub, smooth);
         S.vertices(s._vertices);
