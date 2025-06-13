@@ -154,14 +154,24 @@ CUDA_CALLABLE void evec2Dpolar(const T* matrix, const T* lambdas, T& theta0, T& 
     const float b = matrix[2];
     const float d = matrix[3];
 
-    if (c != 0) {
-        theta0 = std::atan2(c, lambdas[0] - d);
-        theta1 = std::atan2(c, lambdas[1] - d);
+    float a_l0 = a - lambdas[0];
+    float a_l1 = a - lambdas[1];
+
+    if (b == 0) {
+
+        // if the matrix is diagonal
+        if (c == 0) {
+            if (a_l0 < a_l1) theta0 = std::atan2(0, 1);
+            else theta0 = std::atan2(1, 0);
+        }
+        else {
+            if (a_l0 != 0) theta0 = std::atan2(a_l0, -b);
+            else theta0 = std::atan2(-c, d - lambdas[0]);
+        }
     }
-    else {
-        theta0 = std::atan2(lambdas[0] - a, b);
-        theta1 = std::atan2(lambdas[1] - a, b);
-    }
+    else theta0 = std::atan2(-c, d - lambdas[0]);
+
+    theta1 = theta0 + (PI / 2.0);
 }
 
 namespace tira::cpu {
