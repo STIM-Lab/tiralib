@@ -33,8 +33,8 @@ namespace tira::cpu {
 	}
 
 	template <typename ImageType, typename KernelType>
-	static ImageType* convolve2(ImageType* input, unsigned in_sx, unsigned in_sy,
-		KernelType* kernel, unsigned k_sx, unsigned k_sy,
+	static ImageType* convolve2(const ImageType* input, const unsigned in_sx, const unsigned in_sy,
+		const KernelType* kernel, const unsigned k_sx, const unsigned k_sy,
 		unsigned& out_sx, unsigned& out_sy) {
 
 		out_sx = in_sx - (k_sx - 1);

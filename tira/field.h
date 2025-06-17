@@ -316,10 +316,8 @@ namespace tira {
 		
 		template<typename D = T>
 		void save_npy(const std::string& filename) {
-			bool fortran_order = false;								// default to standard (C) order
 			std::vector<size_t> destshape = _shape;
 
-			//npy::SaveArrayAsNumpy(filename, fortran_order, shape.size(), (const unsigned long*)&shape[0], (D*)(&_data[0]));
 			save_npy<D>(filename, destshape);
 		}
 

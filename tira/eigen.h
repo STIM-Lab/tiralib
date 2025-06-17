@@ -82,17 +82,13 @@ CUDA_CALLABLE void eval2D(const T* matrix, T& eval0, T& eval1) {
 /// The eigenvectors are returned in polar coordinates (theta). The input matrices are assumed to be in
 /// column-major format (similar to OpenGL).
 template<typename T>
-CUDA_CALLABLE void evec2Dpolar(const T* matrix, const T* lambdas, T& theta0, T& theta1) {
+CUDA_CALLABLE void evec2polar(const T* matrix, const T* lambdas, T& theta0, T& theta1) {
     //[a  b]
     //[c  d]
 
     const float a = matrix[0];
     const float c = matrix[1];
-    const float b = matrix[2];
-    const float d = matrix[3];
 
-    //float a_l0 = a - lambdas[0];
-    //float a_l1 = a - lambdas[1];
     float l0 = lambdas[0];
     float l1 = lambdas[1];
 
@@ -111,30 +107,6 @@ CUDA_CALLABLE void evec2Dpolar(const T* matrix, const T* lambdas, T& theta0, T& 
         if (theta1 > PI) theta1 -= 2 * PI;
     }
 
-    //theta0 = theta1 - (PI / 2.0);
-
-    //if (c != 0) theta1 = std::atan2(c, l1 - d);
-    //else if (b != 0) theta1 = std::atan2(l1 - a, b);
-    //else theta1 = std::atan2(0, 1);
-    //theta1 = std::atan2(d - l0, b);
-    //theta0 = std::atan2(a - l1, c);
-
-    /*if (b == 0) {
-
-        // if the matrix is diagonal
-        if (c == 0) {
-            if (a_l0 < a_l1) theta0 = std::atan2(0, 1);
-            else theta0 = std::atan2(1, 0);
-        }
-        else {
-            if (a_l0 != 0) theta0 = std::atan2(a_l0, -b);
-            else theta0 = std::atan2(-c, d - lambdas[0]);
-        }
-    }
-    else theta0 = std::atan2(-c, d - lambdas[0]);
-    */
-
-    //theta0 = theta1 - (PI / 2.0);
 }
 
 /// Calculate the eigenvalues of a 3x3 matrix
@@ -272,7 +244,7 @@ namespace tira::cpu {
     /// <param name="n"></param>
     /// <returns></returns>
     template<typename T>
-    T* Eigenvalues2D(const T* mats, const size_t n) {
+    T* eigenvalues2(const T* mats, const size_t n) {
 
         T* evals = new T[2*n];
         T eval0, eval1;
@@ -295,12 +267,12 @@ namespace tira::cpu {
     /// <param name="n">is the number of matrices and eigenvalue pairs in the array</param>
     /// <returns></returns>
     template<typename T>
-    T* Eigenvectors2DPolar(const T* mats, const T* evals, const size_t n) {
+    T* eigenvectors2polar(const T* mats, const T* evals, const size_t n) {
 
         T* vecs = new T[2 * n];
         T vec0, vec1;
         for (size_t i = 0; i < n; i++) {
-            evec2Dpolar(&mats[i * 4], &evals[i * 2], vec0, vec1);
+            evec2polar(&mats[i * 4], &evals[i * 2], vec0, vec1);
             vecs[i * 2 + 0] = vec0;
             vecs[i * 2 + 1] = vec1;
         }

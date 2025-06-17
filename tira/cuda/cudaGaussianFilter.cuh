@@ -20,9 +20,9 @@ namespace tira {
 
 		/// 1D convolution along the Y (slow) axis
 		template<typename T>
-		__global__ void kernel_Convolve1DY(T* source, T* dest,
-			unsigned int width, unsigned int out_height,
-			float* kernel, unsigned int kernel_len) {
+		__global__ void kernel_Convolve1DY(const T* source, T* dest,
+			const unsigned int width, const unsigned int out_height,
+			const float* kernel, const unsigned int kernel_len) {
 
 			unsigned int xi = blockIdx.x * blockDim.x + threadIdx.x;		// calculate the coordinates of the output
 			unsigned int yi = blockIdx.y * blockDim.y + threadIdx.y;
@@ -115,7 +115,7 @@ namespace tira {
 		/// <param name="out_height">height of the output image after the convolution</param>
 		/// <returns></returns>
 		template<typename T>
-		T* GaussianFilter2D(T* source, unsigned int width, unsigned int height,
+		T* GaussianFilter2D(const T* source, unsigned int width, unsigned int height,
 			float sigma1, float sigma2,
 			unsigned int& out_width, unsigned int& out_height) {
 
@@ -126,7 +126,8 @@ namespace tira {
 
 			size_t bytes = sizeof(T) * width * height;							// calculate the number of bytes in the image
 
-			T* gpu_source;														// create a pointer for the GPU source image
+			const T* gpu_source;														// create a pointer for the GPU source image
+			T* temp_source;
 
 			// determine if the source image is provided on the CPU or GPU
 			cudaPointerAttributes attribs;										// create a pointer attribute structure
@@ -136,8 +137,9 @@ namespace tira {
 				gpu_source = source;											// set the gpu_source pointer to source
 			}
 			else {																// otherwise copy the source image to the GPU
-				HANDLE_ERROR(cudaMalloc(&gpu_source, bytes));								// allocate space on the GPU for the source image
-				HANDLE_ERROR(cudaMemcpy(gpu_source, source, bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+				HANDLE_ERROR(cudaMalloc(&temp_source, bytes));								// allocate space on the GPU for the source image
+				HANDLE_ERROR(cudaMemcpy(temp_source, source, bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+				gpu_source = static_cast<const T*>(temp_source);
 			}
 
 			/////////////// Calculate Convolution Kernels
@@ -204,7 +206,7 @@ namespace tira {
 
 			// free everything
 			if (attribs.type == cudaMemoryTypeHost) {				// if the source pointer was on the host, free the interim GPU versions
-				HANDLE_ERROR(cudaFree(gpu_source));
+				HANDLE_ERROR(cudaFree(temp_source));
 				HANDLE_ERROR(cudaFree(gpu_out));
 			}
 

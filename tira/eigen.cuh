@@ -10,17 +10,17 @@ namespace tira::cuda {
 
 
     template<typename T>
-    __global__ void kernel_eval2D(T* mats, size_t n, T* evals) {
+    __global__ void cuda_eval2(T* mats, size_t n, T* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         eval2D(&mats[i * 4], evals[i * 2 + 0], evals[i * 2 + 1]);
     }
 
     template<typename T>
-    T* Eigenvalues2D(T* mats, size_t n, int device) {
+    T* eigenvalues2(T* mats, size_t n, int device) {
 
         if (device < 0)                                                     // if the device is < zero, run the CPU version
-            return cpu::Eigenvalues2D(mats, n);
+            return cpu::eigenvalues2(mats, n);
 
         T* gpu_mats;
         size_t mats_bytes = sizeof(T) * 4 * n;
@@ -48,7 +48,7 @@ namespace tira::cuda {
 
         T* gpu_evals;
         HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
-        kernel_eval2D << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
+        cuda_eval2 << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
 
         T* evals;
         if (attribs.type == cudaMemoryTypeDevice) {
@@ -67,16 +67,16 @@ namespace tira::cuda {
     
 
     template<typename T>
-    __global__ void kernel_evec2Dpolar(T* mats, T* evals, size_t n, T* evecs) {
+    __global__ void cuda_evec2polar(T* mats, T* evals, size_t n, T* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
-        evec2Dpolar(&mats[i * 4], &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
+        evec2polar(&mats[i * 4], &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
     }
 
 
 
     template<typename T>
-    T* Eigenvectors2DPolar(T* mats, T* evals, size_t n, int device) {
+    T* eigenvectors2polar(T* mats, T* evals, size_t n, int device) {
 
         T* gpu_mats;
         T* gpu_evals;
@@ -108,7 +108,7 @@ namespace tira::cuda {
 
         T* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
-        kernel_evec2Dpolar << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
+        cuda_evec2polar << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
 
         T* evecs;
         if (attribs.type == cudaMemoryTypeDevice) {

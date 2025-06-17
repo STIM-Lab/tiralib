@@ -18,7 +18,7 @@ __global__ static void cuda_stickvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V
     VT[x0 * s1 + x1] += Receiver;
 }
 
-__global__ static void cuda_platevote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power,
+__global__ static void cuda_platevote2(glm::mat2* VT, glm::vec2* L, glm::vec2 sigma, unsigned int power,
     int w, int s0, int s1, unsigned samples) {
 
     int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
@@ -26,7 +26,7 @@ __global__ static void cuda_platevote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V
     if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
         return;
 
-    glm::mat2 Receiver = platevote2(L, V, sigma, power, w, s0, s1, glm::ivec2(x0, x1), samples);
+    glm::mat2 Receiver = platevote2(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
     VT[x0 * s1 + x1] += Receiver;
 }
 
@@ -45,8 +45,8 @@ namespace tira::cuda {
 
         start = std::chrono::high_resolution_clock::now();
         //float* L = EigenValues2(input_field, s0 * s1, device);
-        float* L = tira::cuda::Eigenvalues2D<float>(input_field, s0 * s1, device);
-        float* V = tira::cuda::Eigenvectors2DPolar(input_field, L, s0 * s1, device);
+        float* L = tira::cuda::eigenvalues2<float>(input_field, s0 * s1, device);
+        float* V = tira::cuda::eigenvectors2polar(input_field, L, s0 * s1, device);
         end = std::chrono::high_resolution_clock::now();
         float t_eigendecomposition = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -89,9 +89,7 @@ namespace tira::cuda {
         if(STICK)
             cuda_stickvote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, glm::vec2(sigma, sigma2), power, sn, w, s0, s1);
         if (PLATE)
-            cuda_platevote2 <<< blocks, threads >>>((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, glm::vec2(sigma, sigma2), power, w, s0, s1, samples);
-            //kernelPlateVote2D << <blocks, threads >> > (gpuOutputField, gpuL, gpuV, sigma, sigma2, power, w, s0, s1);
-        //    kernelPlateVote2D << <blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, glm::vec2(sigma, sigma2), power, w, s0, s1);
+            cuda_platevote2 <<< blocks, threads >>>((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, glm::vec2(sigma, sigma2), power, w, s0, s1, samples);
         cudaDeviceSynchronize();
         end = std::chrono::high_resolution_clock::now();
         float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();

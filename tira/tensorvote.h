@@ -150,7 +150,7 @@ CUDA_CALLABLE  static glm::mat2 platevote2_numerical(glm::vec2 uv, glm::vec2 sig
 
 
 
-CUDA_CALLABLE static glm::mat2 platevote2(glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, 
+CUDA_CALLABLE static glm::mat2 platevote2(glm::vec2* L, glm::vec2 sigma,
     int w, int s0, int s1, glm::ivec2 x, unsigned samples = 0) {
 
     int x0 = x[0];
@@ -174,9 +174,6 @@ CUDA_CALLABLE static glm::mat2 platevote2(glm::vec2* L, glm::vec2* V, glm::vec2 
                             Receiver += std::abs(l0) * platevote2_numerical(uv, sigma, samples);
                         else                         // otherwise use analytical integration (in progress)
                             Receiver += std::abs(l0) * platevote2(uv, sigma);
-                        //glm::mat2 Voter = platevote2_numerical(uv, sigma);
-                        //glm::mat2 Voter = platevote2(uv, sigma);
-                        //Receiver += std::abs(l0) * Voter;
                     }
                 }
             }
@@ -190,15 +187,13 @@ namespace tira::cpu {
         int w, int s0, int s1, bool STICK = true, bool PLATE = true, unsigned samples = 0) {
 
         float sticknorm = 1.0 / sticknorm2(sigma[0], sigma[1], power);
-        unsigned int idx;
         for (int x0 = 0; x0 < s0; x0++) {
             for (int x1 = 0; x1 < s1; x1++) {
-                idx = x0 * s1 + x1;
                 glm::mat2 Vote(0.0f);
                 if(STICK)
                     Vote = Vote + stickvote2(L, V, sigma, power, sticknorm, w, s0, s1, glm::ivec2(x0, x1));
                 if(PLATE)
-                    Vote = Vote + platevote2(L, V, sigma, power, w, s0, s1, glm::ivec2(x0, x1), samples);
+                    Vote = Vote + platevote2(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
                 VT[x0 * s1 + x1] = Vote;
             }
         }

@@ -577,6 +577,10 @@ namespace tira {
 			return &field<T>::_data[0];
 		}
 
+		const T* const_data() const {
+			return &field<T>::_data[0];
+		}
+
 		/// <summary>
 		/// Returns the number of foreground pixels (given a specific background value)
 		/// </summary>
@@ -802,7 +806,7 @@ namespace tira {
 		/// <param name="mask"></param>
 		/// <returns></returns>
 		template <typename D>
-		image<T> convolve2(image<D> mask) {
+		image<T> convolve2(image<D> mask) const {
 			image<T> result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), C());		// output image will be smaller than the input (only valid region returned)
 
 			const size_t width = result.width();
