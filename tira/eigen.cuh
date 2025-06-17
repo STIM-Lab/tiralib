@@ -3,7 +3,8 @@
 */
 
 #pragma once
-#include <tira/math/eigen.h>
+#include <tira/eigen.h>
+#include <tira/cuda/error.h>
 
 namespace tira::cuda {
 

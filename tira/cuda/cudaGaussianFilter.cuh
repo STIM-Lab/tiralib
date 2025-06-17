@@ -28,7 +28,7 @@ namespace tira {
 			unsigned int yi = blockIdx.y * blockDim.y + threadIdx.y;
 			if (yi >= out_height || xi >= width) return;					// return if we are out of bounds of the output image
 
-			T sum = 0;														// initialize the running sum
+			T sum = (T)0;														// initialize the running sum
 			for (unsigned int ki = 0; ki < kernel_len; ki++) {				// for each sample in the convolution kernel
 				sum = sum + kernel[ki] * source[(yi + ki) * width + xi];	// calculate the sample contribution
 			}
@@ -45,7 +45,7 @@ namespace tira {
 			unsigned int yi = blockIdx.y * blockDim.y + threadIdx.y;
 			if (yi >= out_height || xi >= out_width) return;				// return if out of bounds of the output image
 
-			T sum = 0;														// initialize the summation
+			T sum = (T)0;														// initialize the summation
 			for (unsigned int ki = 0; ki < kernel_len; ki++) {				// for each sample in the convolution kernel
 				sum = sum + kernel[ki] * source[yi * width + xi + ki];		// calculate the sample contribution
 			}
@@ -61,7 +61,7 @@ namespace tira {
 
 			if (xi >= out_width || yi >= out_height || zi >= out_depth) return;
 
-			T conv = 0;
+			T conv = (T)0;
 			for (unsigned int ki = 0; ki < K; ki++)
 				conv = conv + source[(zi * out_height + yi) * width + (xi + ki)] * kernel[ki];
 
@@ -77,7 +77,7 @@ namespace tira {
 
 			if (xi >= width || yi >= out_height || zi >= out_depth) return;
 
-			T conv = 0;
+			T conv = (T)0;
 			for (unsigned int ki = 0; ki < K; ki++)
 				conv = conv + source[(zi * height + (yi + ki)) * width + xi] * kernel[ki];
 
@@ -93,7 +93,7 @@ namespace tira {
 
 			if (xi >= width || yi >= height || zi >= out_depth) return;
 
-			T conv = 0;
+			T conv = (T)0;
 			for (unsigned int ki = 0; ki < K; ki++)
 				conv = conv + source[((zi + ki) * height + yi) * width + xi] * kernel[ki];
 
