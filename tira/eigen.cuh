@@ -10,19 +10,20 @@ namespace tira::cuda {
 
 
     template<typename T>
-    __global__ void cuda_eval2(T* mats, size_t n, T* evals) {
+    __global__ void cuda_eval2(const T* mats, const size_t n, T* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         eval2D(&mats[i * 4], evals[i * 2 + 0], evals[i * 2 + 1]);
     }
 
     template<typename T>
-    T* eigenvalues2(T* mats, size_t n, int device) {
+    T* eigenvalues2(const T* mats, const size_t n, int device) {
 
         if (device < 0)                                                     // if the device is < zero, run the CPU version
             return cpu::eigenvalues2(mats, n);
 
-        T* gpu_mats;
+        const T* gpu_mats;
+        T* temp_gpu_mats;
         size_t mats_bytes = sizeof(T) * 4 * n;
         size_t evals_bytes = sizeof(T) * 2 * n;
 
@@ -34,8 +35,9 @@ namespace tira::cuda {
             gpu_mats = mats;									            // set the gpu_source pointer to source
         }
         else {																// otherwise copy the source image to the GPU
-            HANDLE_ERROR(cudaMalloc(&gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
-            HANDLE_ERROR(cudaMemcpy(gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+            gpu_mats = static_cast<const T*>(temp_gpu_mats);
         }
 
         // get the active device properties to calculate the optimal the block size
@@ -58,7 +60,7 @@ namespace tira::cuda {
             evals = new T[2 * n];
             HANDLE_ERROR(cudaMemcpy(evals, gpu_evals, evals_bytes, cudaMemcpyDeviceToHost));
             HANDLE_ERROR(cudaFree(gpu_evals));
-            HANDLE_ERROR(cudaFree(gpu_mats));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
         }
 
         return evals;
@@ -67,7 +69,7 @@ namespace tira::cuda {
     
 
     template<typename T>
-    __global__ void cuda_evec2polar(T* mats, T* evals, size_t n, T* evecs) {
+    __global__ void cuda_evec2polar(const T* mats, const T* evals, const size_t n, T* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         evec2polar(&mats[i * 4], &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
@@ -76,10 +78,12 @@ namespace tira::cuda {
 
 
     template<typename T>
-    T* eigenvectors2polar(T* mats, T* evals, size_t n, int device) {
+    T* eigenvectors2polar(const T* mats, T* evals, size_t n, int device) {
 
-        T* gpu_mats;
-        T* gpu_evals;
+        const T* gpu_mats;
+        const T* gpu_evals;
+        T* temp_gpu_mats;
+        T* temp_gpu_evals;
         size_t mats_bytes = sizeof(T) * 4 * n;
         size_t ev_bytes = sizeof(T) * 2 * n;
 
@@ -92,10 +96,12 @@ namespace tira::cuda {
             gpu_evals = evals;
         }
         else {																// otherwise copy the source image to the GPU
-            HANDLE_ERROR(cudaMalloc(&gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
-            HANDLE_ERROR(cudaMemcpy(gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
-            HANDLE_ERROR(cudaMalloc(&gpu_evals, ev_bytes));
-            HANDLE_ERROR(cudaMemcpy(gpu_evals, evals, ev_bytes, cudaMemcpyHostToDevice));
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_evals, ev_bytes));
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_evals, evals, ev_bytes, cudaMemcpyHostToDevice));
+            gpu_mats = static_cast<const T*>(temp_gpu_mats);
+            gpu_evals = static_cast<const T*>(temp_gpu_evals);
         }
 
         // get the active device properties to calculate the optimal the block size
@@ -118,8 +124,8 @@ namespace tira::cuda {
             evecs = new T[2 * n];
             HANDLE_ERROR(cudaMemcpy(evecs, gpu_evecs, ev_bytes, cudaMemcpyDeviceToHost));
             HANDLE_ERROR(cudaFree(gpu_evecs));
-            HANDLE_ERROR(cudaFree(gpu_evals));
-            HANDLE_ERROR(cudaFree(gpu_mats));
+            HANDLE_ERROR(cudaFree(temp_gpu_evals));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
         }
 
         return evecs;
@@ -130,7 +136,7 @@ namespace tira::cuda {
     
 
     template<typename T>
-    __global__ void kernel_eval3D(T* mats, size_t n, T* evals) {
+    __global__ void kernel_eval3D(const T* mats, const size_t n, T* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         eval3D(&mats[i * 9], evals[i * 3 + 0], evals[i * 3 + 1], evals[i * 3 + 2]);

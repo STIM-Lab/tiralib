@@ -32,7 +32,7 @@ __global__ static void cuda_platevote2(glm::mat2* VT, glm::vec2* L, glm::vec2 si
 
 namespace tira::cuda {
 
-    static void tensorvote2(float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
+    static void tensorvote2(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
         unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
 
         auto start = std::chrono::high_resolution_clock::now();

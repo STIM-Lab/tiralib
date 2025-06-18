@@ -3,7 +3,7 @@
 #include <tira/cuda/callable.h>
 
 template <typename T>
-CUDA_CALLABLE static T decay(T term, T length, T sigma, unsigned int power = 1) {
+CUDA_CALLABLE static T decay(T term, T length, T sigma, const unsigned power = 1) {
     T c = exp(-(length * length) / (sigma * sigma));
 
     T tp = term;
@@ -19,7 +19,7 @@ CUDA_CALLABLE static T PlateDecay2D(T length, T sigma) {
     return c;
 }
 
-CUDA_CALLABLE static double factorial(unsigned int n) {
+CUDA_CALLABLE static double factorial(const unsigned n) {
     double fac = 1;
     for (unsigned int i = 1; i <= n; i++)
         fac *= i;
@@ -27,7 +27,7 @@ CUDA_CALLABLE static double factorial(unsigned int n) {
 }
 
 template <typename T>
-CUDA_CALLABLE static T sticknorm2(T sigma1, T sigma2, unsigned int p) {
+CUDA_CALLABLE static T sticknorm2(const T sigma1, const T sigma2, const unsigned p) {
     T num = PI * factorial(2 * p);
     T ex = std::pow(2, 2 * p);
     T facp = factorial(p);
@@ -39,23 +39,23 @@ CUDA_CALLABLE static T sticknorm2(T sigma1, T sigma2, unsigned int p) {
 /// <summary>
 /// Calculate the stick vote for the relative position (u, v) given the voter eigenvales and eigenvectors
 /// </summary>
-/// <param name="u">u coordinate for the relative position of the receiver</param>
-/// <param name="v">v coordinate for the relative position of the receiver</param>
+/// <param name="uv">position of the receiver relative to the voter</param>
 /// <param name="sigma">decay value (standard deviation)</param>
-/// <param name="eigenvectors">array containing the largest eigenvector</param>
+/// <param name="theta">orientation of the voter</param>
+/// <param name="power">refinement term</param>
 /// <returns></returns>
-CUDA_CALLABLE static glm::mat2 stickvote2(glm::vec2 uv, glm::vec2 sigma, float theta, unsigned int power) {
+CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2 uv, const glm::vec2 sigma, const float theta, const unsigned power) {
 
-    float cos_theta = cos(theta);
-    float sin_theta = sin(theta);
-    glm::vec2 q(cos_theta, sin_theta);
+    const float cos_theta = cos(theta);
+    const float sin_theta = sin(theta);
+    const glm::vec2 q(cos_theta, sin_theta);
 
     glm::vec2 d = uv;                                       // normalize the direction vector
-    float l = glm::length(d);                               // calculate ell (distance between voter/votee)
+    const float l = glm::length(d);                               // calculate ell (distance between voter/votee)
     if (l == 0) d = glm::vec2(0, 0);                         // assumes that the voter DOES contribute to itself
     else d = glm::normalize(d);
 
-    float qTd = glm::dot(q, d);
+    const float qTd = glm::dot(q, d);
 
     float eta1 = 0;
     float eta2 = 0;
@@ -64,37 +64,49 @@ CUDA_CALLABLE static glm::mat2 stickvote2(glm::vec2 uv, glm::vec2 sigma, float t
     if (sigma[1] > 0)
         eta2 = decay(qTd * qTd, l, sigma[1], power);
 
-    glm::mat2 R = glm::mat2(1.0f) - 2.0f * glm::outerProduct(d, d);
-    glm::vec2 Rq = R * q;
-    glm::mat2 RqRq = glm::outerProduct(Rq, Rq);
+    const glm::mat2 R = glm::mat2(1.0f) - 2.0f * glm::outerProduct(d, d);
+    const glm::vec2 Rq = R * q;
+    const glm::mat2 RqRq = glm::outerProduct(Rq, Rq);
 
     return RqRq * (eta1 + eta2);
 }
 
-CUDA_CALLABLE static glm::mat2 stickvote2(glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, float norm,
-    int w, int s0, int s1, glm::ivec2 x) {
+/// <summary>
+/// Calculate the receiver vote from an image of eigenvalues and eigenvectors.
+/// </summary>
+/// <param name="L">pointer to an image of eigenvalues</param>
+/// <param name="V">pointer to an image of eigenvectors</param>
+/// <param name="sigma">decay value (standard deviation)</param>
+/// <param name="power">refinement term</param>
+/// <param name="norm"></param>
+/// <param name="w">width of the vote region</param>
+/// <param name="s0">size of the L and V images along the first dimension</param>
+/// <param name="s1">size of the L and V images along the second dimension</param>
+/// <param name="x">position of the receiver</param>
+/// <returns></returns>
+CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2* L, const glm::vec2* V, const glm::vec2 sigma, const unsigned power, const float norm,
+    const int w, const int s0, const int s1, const glm::ivec2 x) {
 
-    int x0 = x[0];
-    int x1 = x[1];
+    const int x0 = x[0];
+    const int x1 = x[1];
 
     glm::mat2 Votee(0.0f);
 
-    int hw = w / 2;
-    int r0, r1;
+    const int hw = w / 2;
     for (int v = -hw; v < hw; v++) {                    // for each pixel in the window
-        r0 = x0 + v;
+        const int r0 = static_cast<int>(x0) + v;
         if (r0 >= 0 && r0 < s0) {
             for (int u = -hw; u < hw; u++) {
 
-                r1 = x1 + u;
+                const int r1 = static_cast<int>(x1) + u;
                 if (r1 >= 0 && r1 < s1) {
                     // calculate the contribution of (u,v) to (x,y)
                     glm::vec2 Vpolar = V[r0 * s1 + r1];
-                    float theta = Vpolar[1];
-                    glm::vec2 uv(u, v);
+                    const float theta = Vpolar[1];
+                    const glm::vec2 uv(u, v);
                     glm::mat2 vote = stickvote2(uv, sigma, theta, power);
-                    float l0 = L[r0 * s1 + r1][0];
-                    float l1 = L[r0 * s1 + r1][1];
+                    const float l0 = L[r0 * s1 + r1][0];
+                    const float l1 = L[r0 * s1 + r1][1];
                     float scale = std::abs(l1) - std::abs(l0);
                     if (l1 < 0) scale = scale * (-1);
                     Votee = Votee + scale * vote * norm;
@@ -138,38 +150,38 @@ CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, glm::vec2 sigma) {
 
 CUDA_CALLABLE  static glm::mat2 platevote2_numerical(glm::vec2 uv, glm::vec2 sigma, unsigned int n = 20) {
 
-    float dtheta = PI / (double)n;
+    const float dtheta = PI / static_cast<double>(n);
     glm::mat2 V(0.0f);
     for (unsigned int i = 0; i < n; i++) {
-        float theta = dtheta * i;
+        const float theta = dtheta * i;
         V = V + stickvote2(uv, sigma, theta, 1);
     }
-    float norm = (float)1.0f / (float)n;
+    const float norm = (float)1.0f / static_cast<float>(n);
     return V * norm;
 }
 
 
 
-CUDA_CALLABLE static glm::mat2 platevote2(glm::vec2* L, glm::vec2 sigma,
-    int w, int s0, int s1, glm::ivec2 x, unsigned samples = 0) {
+CUDA_CALLABLE static glm::mat2 platevote2(const glm::vec2* L, const glm::vec2 sigma,
+    const int w, const int s0, const int s1, const glm::ivec2 x, const unsigned samples = 0) {
 
-    int x0 = x[0];
-    int x1 = x[1];
+    const int x0 = x[0];
+    const int x1 = x[1];
 
 
     glm::mat2 Receiver(0.0f);
 
-    int hw = w / 2;
-    int r0, r1;
+    const int hw = w / 2;
+
     for (int v = -hw; v < hw; v++) {                    // for each pixel in the window
-        r0 = x0 + v;
+        const int r0 = static_cast<int>(x0) + v;
         if (r0 >= 0 && r0 < s0) {
             for (int u = -hw; u < hw; u++) {
-                r1 = x1 + u;
+                int r1 = static_cast<int>(x1) + u;
                 if (r1 >= 0 && r1 < s1) {
-                    float l0 = L[r0 * s1 + r1][0];
+                    const float l0 = L[r0 * s1 + r1][0];
                     if (l0 != 0) {
-                        glm::vec2 uv(u, v);
+                        const glm::vec2 uv(u, v);
                         if (samples > 0)             // if a sample number is provided, use numerical integration
                             Receiver += std::abs(l0) * platevote2_numerical(uv, sigma, samples);
                         else                         // otherwise use analytical integration (in progress)
@@ -184,9 +196,9 @@ CUDA_CALLABLE static glm::mat2 platevote2(glm::vec2* L, glm::vec2 sigma,
 
 namespace tira::cpu {
     static void tensorvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power,
-        int w, int s0, int s1, bool STICK = true, bool PLATE = true, unsigned samples = 0) {
+        const unsigned w, const unsigned s0, const unsigned s1, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
 
-        float sticknorm = 1.0 / sticknorm2(sigma[0], sigma[1], power);
+        const float sticknorm = 1.0 / sticknorm2(sigma[0], sigma[1], power);
         for (int x0 = 0; x0 < s0; x0++) {
             for (int x1 = 0; x1 < s1; x1++) {
                 glm::mat2 Vote(0.0f);
