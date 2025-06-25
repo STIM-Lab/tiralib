@@ -1,6 +1,9 @@
 #pragma once
 
 #include <tira/cuda/callable.h>
+#include <glm/glm.hpp>
+
+#define TV_PI 3.14159265358979323846
 
 template <typename T>
 CUDA_CALLABLE static T decay(T term, T length, T sigma, const unsigned power = 1) {
@@ -15,7 +18,7 @@ CUDA_CALLABLE static T decay(T term, T length, T sigma, const unsigned power = 1
 
 template <typename T>
 CUDA_CALLABLE static T PlateDecay2D(T length, T sigma) {
-    T c = PI * exp(-(length * length) / (sigma * sigma)) / 2.0f;
+    T c = TV_PI * exp(-(length * length) / (sigma * sigma)) / 2.0f;
     return c;
 }
 
@@ -28,7 +31,7 @@ CUDA_CALLABLE static double factorial(const unsigned n) {
 
 template <typename T>
 CUDA_CALLABLE static T sticknorm2(const T sigma1, const T sigma2, const unsigned p) {
-    T num = PI * factorial(2 * p);
+    T num = TV_PI * factorial(2 * p);
     T ex = std::pow(2, 2 * p);
     T facp = factorial(p);
     T trig_int = num / (ex * facp * facp);
@@ -120,10 +123,10 @@ CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2* L, const glm::vec2* V
 CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, glm::vec2 sigma) {
 
     //float length = sqrt(u * u + v * v);                     // calculate the distance between voter and votee
-    float length = sqrt(uv[0] * uv[0] + uv[1] * uv[1]);
-    float l2 = length * length;
-    float s12 = sigma[0] * sigma[0];
-    float s22 = sigma[1] * sigma[1];
+    const float length = sqrt(uv[0] * uv[0] + uv[1] * uv[1]);
+    const float l2 = length * length;
+    const float s12 = sigma[0] * sigma[0];
+    const float s22 = sigma[1] * sigma[1];
     float e1 = 0;
     if (sigma[0] > 0)
         e1 = std::exp(-l2 / s12);
@@ -131,26 +134,26 @@ CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, glm::vec2 sigma) {
     if (sigma[1] > 0)
         e2 = std::exp(-l2 / s22);
 
-    float alpha = std::atan2(uv[1], uv[0]);
-    float two_a = 2 * alpha;
-    float cos_2a = std::cos(two_a);
-    float sin_2a = std::sin(two_a);
+    const float alpha = std::atan2(uv[1], uv[0]);
+    const float two_a = 2 * alpha;
+    const float cos_2a = std::cos(two_a);
+    const float sin_2a = std::sin(two_a);
     glm::mat2 M;
     M[0][0] = cos_2a + 2;
     M[1][0] = sin_2a;
     M[0][1] = sin_2a;
     M[1][1] = 2 - cos_2a;
 
-    glm::mat2 I(1.0f);
+    const glm::mat2 I(1.0f);
 
-    float c = 1.0f / (PI * (s12 + s22));
+    const float c = 1.0f / (TV_PI * (s12 + s22));
 
     return c * (e1 * (I - 0.25f * M) + e2 * (0.25f * M));
 }
 
-CUDA_CALLABLE  static glm::mat2 platevote2_numerical(glm::vec2 uv, glm::vec2 sigma, unsigned int n = 20) {
+CUDA_CALLABLE  static glm::mat2 platevote2_numerical(const glm::vec2 uv, const glm::vec2 sigma, const unsigned int n = 20) {
 
-    const float dtheta = PI / static_cast<double>(n);
+    const float dtheta = TV_PI / static_cast<double>(n);
     glm::mat2 V(0.0f);
     for (unsigned int i = 0; i < n; i++) {
         const float theta = dtheta * i;

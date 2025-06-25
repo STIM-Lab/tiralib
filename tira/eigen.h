@@ -55,26 +55,20 @@ CUDA_CALLABLE void quad_root(T b, T c, T& r1, T& r2) {
 
 /// Calculate the eigenvalues of a 2x2 matrix
 template<typename T>
-CUDA_CALLABLE void eval2D(const T* matrix, T& eval0, T& eval1) {
-    //T d = matrix[0];
-    //T e = matrix[1];
-    //T f = matrix[2];
-    //T g = matrix[3];
+CUDA_CALLABLE void eval2_symmetric(const T a, const T b, const T c, T& eval0, T& eval1) {
+    // | a  b |
+    // | b  c |
 
-    T tr = trace2(matrix);
-    T det = determinant2(matrix);
+
+    // this algorithm uses the trace method to calculate the eigenvalues
+    T tr = a + c; //trace2(matrix);              // calculate the matrix trace
+    T det = a * c - b * b; //determinant2(matrix);       // calculate the determinant
 
     T l0, l1;
-    quad_root(-tr, det, l0, l1);  
+    quad_root(-tr, det, l0, l1);    // find the roots of the quadratic equation - these are the eigenvalues
 
 
-    //const T dpg = d + g;
-    //T disc = sqrt((4 * e * f) + pow(d - g, 2));
-    //if (isnan(disc)) disc = 0;
-    //T a = (dpg + disc) / 2.0f;
-    //T b = (dpg - disc) / 2.0f;
-
-    eval0 = std::abs(l0) < std::abs(l1) ? l0 : l1;
+    eval0 = std::abs(l0) < std::abs(l1) ? l0 : l1;  // sort the eigenvalues based on their magnitude
     eval1 = std::abs(l0) > std::abs(l1) ? l0 : l1;
 }
 
@@ -82,27 +76,28 @@ CUDA_CALLABLE void eval2D(const T* matrix, T& eval0, T& eval1) {
 /// The eigenvectors are returned in polar coordinates (theta). The input matrices are assumed to be in
 /// column-major format (similar to OpenGL).
 template<typename T>
-CUDA_CALLABLE void evec2polar(const T* matrix, const T* lambdas, T& theta0, T& theta1) {
+CUDA_CALLABLE void evec2polar_symmetric(const T a, const T b, const T c, const T* lambdas, T& theta0, T& theta1) {
     //[a  b]
-    //[c  d]
+    //[b  c]
 
-    const float a = matrix[0];
-    const float c = matrix[1];
+    //const float a = matrix[0];
+    //const float b = matrix[1];
 
-    float l0 = lambdas[0];
-    float l1 = lambdas[1];
+    T l0 = lambdas[0];
+    T l1 = lambdas[1];
 
-    float a_l0 = a - l0;
-    float a_l1 = a - l1;
-    float abs_a_l0 = std::abs(a_l0);
-    float abs_a_l1 = std::abs(a_l1);
+    T a_l0 = a - l0;
+    T a_l1 = a - l1;
+
+    T abs_a_l0 = std::abs(a_l0);
+    T abs_a_l1 = std::abs(a_l1);
     if (abs_a_l0 >= abs_a_l1) {
-        theta1 = std::atan2(c, a_l0);
+        theta1 = std::atan2(b, a_l0);
         theta0 = theta1 + (PI / 2.0);
         if (theta0 > PI) theta0 -= 2 * PI;
     }
     else {
-        theta0 = std::atan2(c, a_l1);
+        theta0 = std::atan2(b, a_l1);
         theta1 = theta0 + (PI / 2.0);
         if (theta1 > PI) theta1 -= 2 * PI;
     }
@@ -111,7 +106,7 @@ CUDA_CALLABLE void evec2polar(const T* matrix, const T* lambdas, T& theta0, T& t
 
 /// Calculate the eigenvalues of a 3x3 matrix
 template<typename T>
-CUDA_CALLABLE void eval3D(const T* A, T& eval0, T& eval1, T& eval2) {
+CUDA_CALLABLE void eval3(const T* A, T& eval0, T& eval1, T& eval2) {
 
     T a, b, c, d, e, f, g, h, i;
     a = A[0 * 3 + 0]; b = A[0 * 3 + 1]; c = A[0 * 3 + 2];
@@ -170,7 +165,7 @@ CUDA_CALLABLE void eval3D(const T* A, T& eval0, T& eval1, T& eval2) {
 /// Calculate the eigenvector of a 3x3 matrix associated with the eigenvalue lambda.
 /// The result is returned in polar coordinates (theta, phi).
 template<typename T>
-CUDA_CALLABLE void evec3Dpolar(const T* matrix, T lambda, T& theta, T& phi) {
+CUDA_CALLABLE void evec3polar(const T* matrix, T lambda, T& theta, T& phi) {
 
     float a, b, c, d, e, f, g, h, i;
     a = matrix[0 * 3 + 0]; b = matrix[0 * 3 + 1]; c = matrix[0 * 3 + 2];
@@ -244,12 +239,15 @@ namespace tira::cpu {
     /// <param name="n"></param>
     /// <returns></returns>
     template<typename T>
-    T* eigenvalues2(const T* mats, const size_t n) {
+    T* eigenvalues2_symmetric(const T* mats, const size_t n) {
 
         T* evals = new T[2*n];
         T eval0, eval1;
         for (size_t i = 0; i < n; i++) {
-            eval2D(&mats[i * 4], eval0, eval1);
+            T a = mats[i * 4 + 0];
+            T b = mats[i * 4 + 1];
+            T c = mats[i * 4 + 3];
+            eval2_symmetric(a, b, c, eval0, eval1);
             evals[i * 2 + 0] = eval0;
             evals[i * 2 + 1] = eval1;
         }
@@ -272,7 +270,10 @@ namespace tira::cpu {
         T* vecs = new T[2 * n];
         T vec0, vec1;
         for (size_t i = 0; i < n; i++) {
-            evec2polar(&mats[i * 4], &evals[i * 2], vec0, vec1);
+            T a = mats[i * 4 + 0];
+            T b = mats[i * 4 + 1];
+            T c = mats[i * 4 + 3];
+            evec2polar_symmetric(a, b, c, &evals[i * 2], vec0, vec1);
             vecs[i * 2 + 0] = vec0;
             vecs[i * 2 + 1] = vec1;
         }
@@ -288,7 +289,7 @@ namespace tira::cpu {
     /// <param name="n"></param>
     /// <returns></returns>
     template<typename T>
-    T* Eigenvalues3D(const T* mats, const size_t n) {
+    T* eigenvalues3(const T* mats, const size_t n) {
 
         T* evals = new T[3 * n];
         T eval0, eval1, eval2;
@@ -302,7 +303,7 @@ namespace tira::cpu {
     }
 
     template<typename T>
-    T* Eigenvectors3DPolar(const T* mats, const T* lambda, const size_t n) {
+    T* eigenvectors3polar(const T* mats, const T* lambda, const size_t n) {
 
         T* evec = new T[4 * n];
         for (size_t i = 0; i < n; i++) {
