@@ -569,6 +569,7 @@ namespace tira {
 				channel(&list[c].channel(0)._data[0], c);	//insert the channel into the output image
 		}
 
+		/*
 		/// <summary>
 		/// Returns a pointer to the raw image data
 		/// </summary>
@@ -580,6 +581,7 @@ namespace tira {
 		const T* const_data() const {
 			return &field<T>::_data[0];
 		}
+		*/
 
 		/// <summary>
 		/// Returns the number of foreground pixels (given a specific background value)

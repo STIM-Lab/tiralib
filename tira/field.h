@@ -708,6 +708,10 @@ namespace tira {
 			return &_data[0];
 		}
 
+		const T* const_data() const {
+			return &_data[0];
+		}
+
 		iterator begin() { 
 			return iterator(this);
 		}

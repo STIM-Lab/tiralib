@@ -106,7 +106,7 @@ CUDA_CALLABLE void evec2polar_symmetric(const T a, const T b, const T c, const T
 
 /// Calculate the eigenvalues of a 3x3 matrix
 template<typename T>
-CUDA_CALLABLE void eval3(const T* A, T& eval0, T& eval1, T& eval2) {
+CUDA_CALLABLE void eval3_symmetric(const T* A, T& eval0, T& eval1, T& eval2) {
 
     T a, b, c, d, e, f, g, h, i;
     a = A[0 * 3 + 0]; b = A[0 * 3 + 1]; c = A[0 * 3 + 2];
@@ -165,7 +165,7 @@ CUDA_CALLABLE void eval3(const T* A, T& eval0, T& eval1, T& eval2) {
 /// Calculate the eigenvector of a 3x3 matrix associated with the eigenvalue lambda.
 /// The result is returned in polar coordinates (theta, phi).
 template<typename T>
-CUDA_CALLABLE void evec3polar(const T* matrix, T lambda, T& theta, T& phi) {
+CUDA_CALLABLE void evec3spherical_symmetric(const T* matrix, T lambda, T& theta, T& phi) {
 
     float a, b, c, d, e, f, g, h, i;
     a = matrix[0 * 3 + 0]; b = matrix[0 * 3 + 1]; c = matrix[0 * 3 + 2];
@@ -265,7 +265,7 @@ namespace tira::cpu {
     /// <param name="n">is the number of matrices and eigenvalue pairs in the array</param>
     /// <returns></returns>
     template<typename T>
-    T* eigenvectors2polar(const T* mats, const T* evals, const size_t n) {
+    T* eigenvectors2polar_symmetric(const T* mats, const T* evals, const size_t n) {
 
         T* vecs = new T[2 * n];
         T vec0, vec1;
@@ -289,12 +289,12 @@ namespace tira::cpu {
     /// <param name="n"></param>
     /// <returns></returns>
     template<typename T>
-    T* eigenvalues3(const T* mats, const size_t n) {
+    T* eigenvalues3_symmetric(const T* mats, const size_t n) {
 
         T* evals = new T[3 * n];
         T eval0, eval1, eval2;
         for (size_t i = 0; i < n; i++) {
-            eval3D(&mats[i * 9], eval0, eval1, eval2);
+            eval3_symmetric(&mats[i * 9], eval0, eval1, eval2);
             evals[i * 3 + 0] = eval0;
             evals[i * 3 + 1] = eval1;
             evals[i * 3 + 2] = eval2;
@@ -303,12 +303,12 @@ namespace tira::cpu {
     }
 
     template<typename T>
-    T* eigenvectors3polar(const T* mats, const T* lambda, const size_t n) {
+    T* eigenvectors3spherical_symmetric(const T* mats, const T* lambda, const size_t n) {
 
         T* evec = new T[4 * n];
         for (size_t i = 0; i < n; i++) {
             T theta, phi;
-            evec3Dpolar(&mats[i * 9], lambda[i * 3 + 1], theta, phi);
+            evec3spherical_symmetric(&mats[i * 9], lambda[i * 3 + 1], theta, phi);
             if (isnan(theta) || isnan(phi)) {
                 evec[i * 4 + 0] = acos(0);
                 evec[i * 4 + 1] = atan2(1, 0);
@@ -318,7 +318,7 @@ namespace tira::cpu {
                 evec[i * 4 + 1] = phi;
             }
 
-            evec3Dpolar(&mats[i * 9], lambda[i * 3 + 2], theta, phi);
+            evec3spherical_symmetric(&mats[i * 9], lambda[i * 3 + 2], theta, phi);
 
             if (isnan(theta) || isnan(phi)) {
                 evec[i * 4 + 2] = acos(1);

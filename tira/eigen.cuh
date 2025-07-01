@@ -73,7 +73,7 @@ namespace tira::cuda {
     
 
     template<typename T>
-    __global__ void cuda_evec2polar(const T* mats, const T* evals, const size_t n, T* evecs) {
+    __global__ void cuda_evec2polar_symmetric(const T* mats, const T* evals, const size_t n, T* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         T a = mats[i * 4 + 0];
@@ -85,7 +85,7 @@ namespace tira::cuda {
 
 
     template<typename T>
-    T* eigenvectors2polar(const T* mats, T* evals, size_t n, int device) {
+    T* eigenvectors2polar_symmetric(const T* mats, T* evals, size_t n, int device) {
 
         const T* gpu_mats;
         const T* gpu_evals;
@@ -121,7 +121,7 @@ namespace tira::cuda {
 
         T* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
-        cuda_evec2polar << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
+        cuda_evec2polar_symmetric << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
 
         T* evecs;
         if (attribs.type == cudaMemoryTypeDevice) {
@@ -143,10 +143,10 @@ namespace tira::cuda {
     
 
     template<typename T>
-    __global__ void kernel_eval3D(const T* mats, const size_t n, T* evals) {
+    __global__ void kernel_eval3_symmetric(const T* mats, const size_t n, T* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
-        eval3D(&mats[i * 9], evals[i * 3 + 0], evals[i * 3 + 1], evals[i * 3 + 2]);
+        eval3_symmetric(&mats[i * 9], evals[i * 3 + 0], evals[i * 3 + 1], evals[i * 3 + 2]);
     }
 
     
@@ -154,7 +154,7 @@ namespace tira::cuda {
     
 
     template<typename T>
-    T* eigenvalues3(T* mats, size_t n) {
+    T* eigenvalues3_symmetric(T* mats, size_t n) {
 
         T* gpu_mats;
         size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
@@ -183,7 +183,7 @@ namespace tira::cuda {
 
         T* gpu_evals;
         HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
-        kernel_eval3D << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
+        kernel_eval3_symmetric << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
 
         if (attribs.type == cudaMemoryTypeDevice) {
             return gpu_evals;
@@ -203,7 +203,7 @@ namespace tira::cuda {
         if (i >= n) return;
 
         T theta, phi;
-        evec3Dpolar(&mats[i * 9], lambda[i * 3 + 1], theta, phi);
+        evec3spherical_symmetric(&mats[i * 9], lambda[i * 3 + 1], theta, phi);
         if (isnan(theta) || isnan(phi)) {
             evec[i * 4 + 0] = PI / 2.0;         // acos(0)
             evec[i * 4 + 1] = PI / 2.0;         // std::atan2(1, 0);
@@ -213,7 +213,7 @@ namespace tira::cuda {
             evec[i * 4 + 1] = phi;
         }
 
-        evec3Dpolar(&mats[i * 9], lambda[i * 3 + 2], theta, phi);
+        evec3spherical_symmetric(&mats[i * 9], lambda[i * 3 + 2], theta, phi);
 
         if (isnan(theta) || isnan(phi)) {
             evec[i * 4 + 2] = PI / 2.0;         // acos(0)
@@ -226,7 +226,7 @@ namespace tira::cuda {
     }
 
     template<typename T>
-    T* eigenvectors3polar(T* mats, T* lambda, const size_t n) {
+    T* eigenvectors3spherical_symmetric(T* mats, T* lambda, const size_t n) {
         T* gpu_mats;
         T* gpu_lambda;
         size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
@@ -259,7 +259,7 @@ namespace tira::cuda {
 
         T* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, evecs_bytes));
-        kernel_evec3DPolar << <gridDim, blockDim >> > (gpu_mats, gpu_lambda, n, gpu_evecs);
+        kernel_evec3polar << <gridDim, blockDim >> > (gpu_mats, gpu_lambda, n, gpu_evecs);
 
         T* evecs;
         if (attribs.type == cudaMemoryTypeDevice) {
