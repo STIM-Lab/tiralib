@@ -8,6 +8,7 @@
 #include <openvdb/tools/Interpolation.h>
 #include <unordered_set>
 
+namespace tira {
 struct medial_pt {
     float p[3]; // position: x, y, z
     float r;    // radius
@@ -358,5 +359,5 @@ void vasc::load_vdb(openvdb::FloatGrid::Ptr grid) {
     std::cout << "Loaded VDB skeleton into vasc structure.\n";
 }
 
-
+}
 
