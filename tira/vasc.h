@@ -117,6 +117,9 @@ void vasc::load(const std::string& filename) {
     in.close();
 }
 
+/*
+It writes in-memory (made of _points, _nodes, _edges) to a .vasc file 
+*/
 
 void vasc::save(const std::string& filename) {
     std::ofstream out(filename, std::ios::binary);
