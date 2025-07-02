@@ -167,8 +167,10 @@ void vasc::save(const std::string& filename) {
     out.write(reinterpret_cast<const char*>(&header), sizeof(header));
 
     // backpatch edge headers with correct skel_offsets 
+    //for each edge header: Jump to its skel_offset field (+8 bytes into header: after node0 + node1)
+    // write the actual file offset where that edge's point list begins.
     for (size_t i = 0; i < _edges.size(); ++i) {
-        out.seekp(static_cast<std::streamoff>(edge_offset_positions[i]) + 8);
+        out.seekp(static_cast<std::streamoff>(edge_offset_positions[i]) + 8); //+8 makes sure we overwrite just the skel_offset field — not the node IDs.
         out.write(reinterpret_cast<const char*>(&skel_offsets[i]), sizeof(uint64_t));
     }
 
