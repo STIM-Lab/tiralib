@@ -55,6 +55,13 @@ public:
     void load_vdb(openvdb::FloatGrid::Ptr skeletonGrid);
 };
 
+/*
+This function is loading an in-memory graph structure
+_points = all 3D coordinates with radius
+_nodes = key junction points 
+_edges = curved lines between nodes, stored as paths made of points
+
+*/
 void vasc::load(const std::string& filename) {
     std::ifstream in(filename, std::ios::binary);
     if (!in.is_open()) {
