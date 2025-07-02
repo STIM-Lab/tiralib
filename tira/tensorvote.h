@@ -163,7 +163,8 @@ CUDA_CALLABLE  static glm::mat2 platevote2_numerical(const glm::vec2 uv, const g
     return V * norm;
 }
 
-
+void hsa_tensorvote2(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
+    unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples);
 
 CUDA_CALLABLE static glm::mat2 platevote2(const glm::vec2* L, const glm::vec2 sigma,
     const int w, const int s0, const int s1, const glm::ivec2 x, const unsigned samples = 0) {

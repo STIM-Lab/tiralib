@@ -106,13 +106,12 @@ CUDA_CALLABLE void evec2polar_symmetric(const T a, const T b, const T c, const T
 
 /// Calculate the eigenvalues of a 3x3 matrix
 template<typename T>
-CUDA_CALLABLE void eval3_symmetric(const T* A, T& eval0, T& eval1, T& eval2) {
+CUDA_CALLABLE void eval3_symmetric(const T a, const T b, const T c, const T e, const T f, const T i, 
+    T& eval0, T& eval1, T& eval2) {
 
-    T a, b, c, d, e, f, g, h, i;
-    a = A[0 * 3 + 0]; b = A[0 * 3 + 1]; c = A[0 * 3 + 2];
-    d = A[1 * 3 + 0]; e = A[1 * 3 + 1]; f = A[1 * 3 + 2];
-    g = A[2 * 3 + 0]; h = A[2 * 3 + 1]; i = A[2 * 3 + 2];
-
+    // |a   b   c |
+    // |d   e   f |
+    // |g   h   i |
 
     // Case: matrix is diagonal
     T p1 = b * b + c * c + f * f;
@@ -136,10 +135,10 @@ CUDA_CALLABLE void eval3_symmetric(const T* A, T& eval0, T& eval1, T& eval2) {
     B[2][2] = pinv * (i - q);
     B[0][1] = pinv * b;
     B[0][2] = pinv * c;
-    B[1][0] = pinv * d;
     B[1][2] = pinv * f;
-    B[2][0] = pinv * g;
-    B[2][1] = pinv * h;
+    B[1][0] = B[0][1];
+    B[2][0] = B[0][2];
+    B[2][1] = B[1][2];
     T detB = B[0][0] * (B[1][1] * B[2][2] - B[1][2] * B[2][1]) -
         B[0][1] * (B[1][0] * B[2][2] - B[1][2] * B[2][0]) +
         B[0][2] * (B[1][0] * B[2][1] - B[1][1] * B[2][0]);
@@ -292,9 +291,15 @@ namespace tira::cpu {
     T* eigenvalues3_symmetric(const T* mats, const size_t n) {
 
         T* evals = new T[3 * n];
-        T eval0, eval1, eval2;
+        double eval0, eval1, eval2;
         for (size_t i = 0; i < n; i++) {
-            eval3_symmetric(&mats[i * 9], eval0, eval1, eval2);
+			double a = mats[i * 9 + 0];
+			double b = mats[i * 9 + 1];
+			double c = mats[i * 9 + 2];
+			double e = mats[i * 9 + 4];
+			double f = mats[i * 9 + 5];
+			double j = mats[i * 9 + 8];
+            eval3_symmetric(a,b,c,e,f,j, eval0, eval1, eval2);
             evals[i * 3 + 0] = eval0;
             evals[i * 3 + 1] = eval1;
             evals[i * 3 + 2] = eval2;

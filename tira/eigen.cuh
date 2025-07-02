@@ -146,7 +146,17 @@ namespace tira::cuda {
     __global__ void kernel_eval3_symmetric(const T* mats, const size_t n, T* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
-        eval3_symmetric(&mats[i * 9], evals[i * 3 + 0], evals[i * 3 + 1], evals[i * 3 + 2]);
+        double a = mats[i * 9 + 0];
+        double b = mats[i * 9 + 1];
+        double c = mats[i * 9 + 2];
+        double e = mats[i * 9 + 4];
+        double f = mats[i * 9 + 5];
+        double j = mats[i * 9 + 8];
+        double eval0, eval1, eval2;
+        eval3_symmetric(a,b,c,e,f,j, eval0, eval1, eval2);
+        evals[i * 3 + 0] = eval0;
+        evals[i * 3 + 1] = eval1;
+		evals[i * 3 + 2] = eval2;
     }
 
     
