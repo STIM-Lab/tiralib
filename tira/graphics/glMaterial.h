@@ -219,6 +219,14 @@ namespace tira{
             SetTexture<T>(name, texvolume.data(), texvolume.X(), texvolume.Y(), texvolume.Z(), texvolume.C(), internalFormat, filter_type);
         }
 
+        void SetTexture(const std::string name, const glTexture tex) {
+            const auto i = m_TextureUnits.find(name); // create an iterator
+            if (i == m_TextureUnits.end())               // if the texture name doesn't exist
+                throw std::runtime_error("ERROR: texture name " + name + " not found");
+
+            i->second.texture = tex;
+        }
+
         /// <summary>
         /// Return a glTexture object representing a texture with a given sampler name
         /// </summary>

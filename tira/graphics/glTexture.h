@@ -7,10 +7,11 @@ namespace tira {
 	//enum glTextureFilterType { TextureFilterLinear, TextureFilterNearest };
 
 	class glTexture {
-		GLuint m_TextureID;		// texture OpenGL name
+		GLuint m_TextureID;				// texture OpenGL name
 		int m_Width, m_Height;			// width and height (2D and 3D textures)
 		int m_Depth;					// depth = 0 for a 2D texture
 		GLenum m_TextureType;			// GL_TEXTURE_1D, GL_TEXTURE_2D, GL_TEXTURE_3D, etc.
+
 
 	public:
 
@@ -72,9 +73,9 @@ namespace tira {
 
 			GLERROR(glBindTexture(m_TextureType, m_TextureID));	// bind the texture
 			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+			//GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+			//GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+			//GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 			if (m_TextureType == GL_TEXTURE_3D) {
 				GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE));
@@ -125,10 +126,25 @@ namespace tira {
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MAG_FILTER, filter_type));
 		}
 
+		GLenum internalFormat() {
+			GLint format;
+			glGetTextureLevelParameteriv(
+				m_TextureType,
+				0, //e.g. 0
+				GL_TEXTURE_INTERNAL_FORMAT,
+				&format
+			);
+			return (GLenum)format;
+		}
+
 		inline int Width() const { return m_Width; }
 		inline int Height() const { return m_Height; }
 		inline int Depth() const { return m_Depth; }
 		inline GLuint ID() const { return m_TextureID; }
+		inline bool valid() {
+			if (m_TextureID > 0) return true;
+			else return false;
+		}
 	};
 
 }

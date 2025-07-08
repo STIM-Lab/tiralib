@@ -28,6 +28,13 @@ namespace tira{
 			_texture.AssignImage((unsigned char*)volData, X, Y, Z, internalFormat, externalFormat, externalDataType);
 		}
 
+		void update_texture() {
+			GLenum internalFormat = glTexture::format2gl(this->C());
+			GLenum externalFormat = glTexture::format2gl(this->C());
+			GLenum externalDataType = glTexture::type2gl<T>();
+			_texture.AssignImage((unsigned char*)this->data(), this->X(), this->Y(), this->Z(), internalFormat, externalFormat, externalDataType);
+		}
+
 		template<typename D = T>
 		void load_npy(std::string filename)
 		{
@@ -57,6 +64,10 @@ namespace tira{
 
 		void Unbind(){
 			_texture.Unbind();
+		}
+
+		glTexture getTexture() {
+			return _texture;
 		}
 
 	};

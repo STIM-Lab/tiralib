@@ -1034,7 +1034,7 @@ namespace tira {
 			}
 			image<unsigned char> color_result(X(), Y(), 3);									// create the new color image
 			for (size_t i = 0; i < field<T>::_data.size(); i++) {
-				cmap::cmap(field<T>::_data[i], minval, maxval, color_result.data()[i * 3 + 0], color_result.data()[i * 3 + 1], color_result.data()[i * 3 + 2], colormap);
+				cmap::colormap(field<T>::_data[i], minval, maxval, color_result.data()[i * 3 + 0], color_result.data()[i * 3 + 1], color_result.data()[i * 3 + 2], colormap);
 			}
 			return color_result;
 		}

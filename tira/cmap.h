@@ -61,7 +61,7 @@ static float  RAINBOWCYCLE_PTS[7 * 4] = { 1.0f, 0.0f, 0.0f, 1.0f,
 
 namespace tira::cmap {
 	template<typename T>
-	void cmap(T val, T vmin, T vmax, unsigned char& r, unsigned char& g, unsigned char& b, ColorMap colormap) {
+	void colormap(T val, T vmin, T vmax, unsigned char& r, unsigned char& g, unsigned char& b, ColorMap colormap) {
 		T a = 0.5;
 		if (vmin != vmax)
 			a = (val - vmin) / (vmax - vmin);
@@ -112,6 +112,32 @@ namespace tira::cmap {
 		r = 255 * fr;											// save the resulting color in the output image
 		g = 255 * fg;
 		b = 255 * fb;
+	}
+
+	template<typename Type>
+	void colormap(Type* input_scalar, unsigned char* output_colors, unsigned num_values, Type min_val, Type max_val, ColorMap cmap = ColorMap::Brewer) {
+		for (unsigned int i = 0; i < num_values; i++) {
+			unsigned char r, g, b;
+			colormap(input_scalar[i], min_val, max_val, r, g, b, cmap);
+			output_colors[i * 3 + 0] = r;
+			output_colors[i * 3 + 1] = g;
+			output_colors[i * 3 + 2] = b;
+		}
+	}
+
+	template<typename Type>
+	void colormap(Type* input_scalar, unsigned char* output_colors, unsigned num_values, ColorMap cmap = ColorMap::Brewer) {
+
+		// calculate the minimum and maximum values in the image
+		Type min_val = input_scalar[0];
+		Type max_val = input_scalar[1];
+
+		for (unsigned int i = 1; i < num_values; i++) {
+			if (input_scalar[i] < min_val) min_val = input_scalar[i];
+			if (input_scalar[i] > max_val) max_val = input_scalar[i];
+		}
+
+		colormap(input_scalar, output_colors, num_values, min_val, max_val);
 	}
 
 }
