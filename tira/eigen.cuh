@@ -208,30 +208,46 @@ namespace tira::cuda {
     }
 
     template<typename T>
-    __global__ void kernel_evec3polar(T* mats, T* lambda, size_t n, T* evec) {
+    __global__ void kernel_evec3polar(T* mats, T* lambda, size_t n, T* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
 
-        T theta, phi;
-        evec3spherical_symmetric(&mats[i * 9], lambda[i * 3 + 1], theta, phi);
-        if (isnan(theta) || isnan(phi)) {
-            evec[i * 4 + 0] = PI / 2.0;         // acos(0)
-            evec[i * 4 + 1] = PI / 2.0;         // std::atan2(1, 0);
+        double theta, phi;
+        double* evec0 = new double[3];
+        double* evec1 = new double[3];
+        double* evec2 = new double[3];
+        double a = mats[i * 9 + 0];
+        double b = mats[i * 9 + 1];
+        double d = mats[i * 9 + 2];
+        double c = mats[i * 9 + 4];
+        double e = mats[i * 9 + 5];
+        double f = mats[i * 9 + 8];
+		double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
+        double norm = b * b + d * d + e * e; // norm of the off-diagonal elements
+        if (norm > 0.0) {
+            evec3spherical_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
+
+			for (int j = 0; j < 3; j++) {
+				double* vector = (j == 0) ? evec0 : (j == 1) ? evec1 : evec2;
+                theta = acos(vector[2]);                        // angle from z-axis
+                phi = atan2(vector[1], vector[0]);              // angle in x–y plane
+                if (phi < 0) phi += 2 * PI;                     // map phi to [0, 2pi]
+                if (isnan(theta) || isnan(phi)) {
+                    evecs[i * 4 + j*2] = PI / 2.0;              // acos(0)
+                    evecs[i * 4 + j*2 + 1] = 0;                 // std::atan2(1, 0);
+                }
+                else {
+                    evecs[i * 4 + j*2] = theta;
+                    evecs[i * 4 + j*2 + 1] = phi;
+                }
+			}
         }
         else {
-            evec[i * 4 + 0] = theta;
-            evec[i * 4 + 1] = phi;
-        }
-
-        evec3spherical_symmetric(&mats[i * 9], lambda[i * 3 + 2], theta, phi);
-
-        if (isnan(theta) || isnan(phi)) {
-            evec[i * 4 + 2] = PI / 2.0;         // acos(0)
-            evec[i * 4 + 3] = 0;                // atan2(0, 0);
-        }
-        else {
-            evec[i * 4 + 2] = theta;
-            evec[i * 4 + 3] = phi;
+            // matrix is diagonal, eigenvectors are aligned with the axes
+            evecs[i * 4 + 0] = PI / 2.0;        // theta for x-axis
+            evecs[i * 4 + 1] = 0;               // phi for x-axis
+            evecs[i * 4 + 2] = PI / 2.0;        // theta for y-axis
+            evecs[i * 4 + 3] = PI / 2.0;        // phi for y-axis
         }
     }
 
