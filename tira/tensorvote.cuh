@@ -45,8 +45,8 @@ namespace tira::cuda {
 
         start = std::chrono::high_resolution_clock::now();
         //float* L = EigenValues2(input_field, s0 * s1, device);
-        float* L = tira::cuda::eigenvalues2<float>(input_field, s0 * s1, device);
-        float* V = tira::cuda::eigenvectors2polar_symmetric(input_field, L, s0 * s1, device);
+        float* L = tira::cuda::evals2_symmetric<float>(input_field, s0 * s1, device);
+        float* V = tira::cuda::evecs2polar_symmetric(input_field, L, s0 * s1, device);
         end = std::chrono::high_resolution_clock::now();
         float t_eigendecomposition = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 

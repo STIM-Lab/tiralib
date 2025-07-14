@@ -21,10 +21,10 @@ namespace tira::cuda {
     }
 
     template<typename T>
-    T* eigenvalues2(const T* mats, const size_t n, int device) {
+    T* evals2_symmetric(const T* mats, const size_t n, int device) {
 
         if (device < 0)                                                     // if the device is < zero, run the CPU version
-            return cpu::eigenvalues2_symmetric(mats, n);
+            return cpu::evals2_symmetric(mats, n);
 
         const T* gpu_mats;
         T* temp_gpu_mats;
@@ -85,7 +85,7 @@ namespace tira::cuda {
 
 
     template<typename T>
-    T* eigenvectors2polar_symmetric(const T* mats, T* evals, size_t n, int device) {
+    T* evecs2polar_symmetric(const T* mats, T* evals, size_t n, int device) {
 
         const T* gpu_mats;
         const T* gpu_evals;
@@ -164,7 +164,7 @@ namespace tira::cuda {
     
 
     template<typename T>
-    T* eigenvalues3_symmetric(T* mats, size_t n) {
+    T* evals3_symmetric(T* mats, size_t n) {
 
         T* gpu_mats;
         size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
@@ -207,7 +207,7 @@ namespace tira::cuda {
         }
     }
 
-    template<typename T>
+    /*template<typename T>
     __global__ void kernel_evec3polar(T* mats, T* lambda, size_t n, T* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
@@ -225,12 +225,12 @@ namespace tira::cuda {
 		double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
         double norm = b * b + d * d + e * e; // norm of the off-diagonal elements
         if (norm > 0.0) {
-            evec3spherical_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
+            evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
 
 			for (int j = 0; j < 3; j++) {
 				double* vector = (j == 0) ? evec0 : (j == 1) ? evec1 : evec2;
                 theta = acos(vector[2]);                        // angle from z-axis
-                phi = atan2(vector[1], vector[0]);              // angle in x–y plane
+                phi = atan2(vector[1], vector[0]);              // angle in xï¿½y plane
                 if (phi < 0) phi += 2 * PI;                     // map phi to [0, 2pi]
                 if (isnan(theta) || isnan(phi)) {
                     evecs[i * 4 + j*2] = PI / 2.0;              // acos(0)
@@ -250,9 +250,10 @@ namespace tira::cuda {
             evecs[i * 4 + 3] = PI / 2.0;        // phi for y-axis
         }
     }
+    */
 
-    template<typename T>
-    T* eigenvectors3spherical_symmetric(T* mats, T* lambda, const size_t n) {
+    /*template<typename T>
+    T* evecs3_symmetric(T* mats, T* lambda, const size_t n) {
         T* gpu_mats;
         T* gpu_lambda;
         size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
@@ -302,4 +303,5 @@ namespace tira::cuda {
         return evecs;
        
     }
+    */
 }
