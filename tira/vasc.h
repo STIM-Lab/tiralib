@@ -1,363 +1,278 @@
 ﻿#include <vector>
+#include <numeric>
 #include <string>
 #include <fstream>
-#include <iostream>
 #include <cstdint>
-#include <unordered_map>
-#include <openvdb/openvdb.h>
-#include <openvdb/tools/Interpolation.h>
-#include <unordered_set>
+
+#include <glm/glm.hpp>
+
 
 namespace tira {
-struct medial_pt {
-    float p[3]; // position: x, y, z
-    float r;    // radius
-};
-
-struct edge {
-    std::vector<uint32_t> pts; // indices into points
-    uint32_t nodes[2];          // node indices
-};
-
-struct node {
-    unsigned pt;                // index into points
-    std::vector<uint32_t> edges; // indices of connected edges
-};
-
-struct VascHeader {
-    uint32_t num_vertices;
-    uint32_t num_edges;
-    uint64_t skel_offset;
-};
-
-struct VascEdgeHeader {
-    uint32_t node0, node1;
-    uint64_t skel_offset;
-};
-
-struct CoordHash {
-    std::size_t operator()(const openvdb::Coord& c) const {
-        return std::hash<int>()(c.x()) ^ (std::hash<int>()(c.y()) << 1) ^ (std::hash<int>()(c.z()) << 2);
-    }
-};
-
 
 class vasc {
+
+    static constexpr uint8_t major = 1;
+    static constexpr uint8_t minor = 0;
+
+    typedef glm::vec4 medial_pt;
+
+    struct edge {
+        std::vector<uint32_t> ipts;      // stores the starting and ending IDs for the points representing the centerline for this edge
+        uint32_t inodes[2];              // node indices
+    };
+
+    struct node {
+        uint32_t ipt;                   // index to the point on the skeleton corresponding to the node
+        std::vector<uint32_t> iedges;    // indices of connected edges
+    };
+
+    // data structure stores header information from a vasc file
+    struct header {
+        //uint8_t version[2];            // major and minor version numbers
+        uint8_t major;
+        uint8_t minor;
+        uint32_t num_nodes;             // number of nodes in the vascular network
+        uint32_t num_edges;             // total number of edges in the vascular network (corresponds to microvessesl)
+        uint64_t skel_offset;           // number of bytes from the beginning of the file where the skeleton information starts
+        uint64_t surf_offset;           // number of bytes from the beginning of the file where the surface information starts
+        uint64_t vol_offset;           // number of bytes from the beginning of the file where the volume information starts
+
+        void write(std::ofstream& fout) {
+            fout.write(reinterpret_cast<char*>(&major), sizeof(uint8_t));
+            fout.write(reinterpret_cast<char*>(&minor), sizeof(uint8_t));
+            fout.write(reinterpret_cast<char*>(&num_nodes), sizeof(uint32_t));
+            fout.write(reinterpret_cast<char*>(&num_edges), sizeof(uint32_t));
+            fout.write(reinterpret_cast<char*>(&skel_offset), sizeof(uint64_t));
+            fout.write(reinterpret_cast<char*>(&surf_offset), sizeof(uint64_t));
+            fout.write(reinterpret_cast<char*>(&vol_offset), sizeof(uint64_t));
+        }
+
+        void read(std::ifstream& fin) {
+            fin.read(reinterpret_cast<char*>(&major), sizeof(uint8_t));
+            fin.read(reinterpret_cast<char*>(&minor), sizeof(uint8_t));
+            fin.read(reinterpret_cast<char*>(&num_nodes), sizeof(uint32_t));
+            fin.read(reinterpret_cast<char*>(&num_edges), sizeof(uint32_t));
+            fin.read(reinterpret_cast<char*>(&skel_offset), sizeof(uint64_t));
+            fin.read(reinterpret_cast<char*>(&surf_offset), sizeof(uint64_t));
+            fin.read(reinterpret_cast<char*>(&vol_offset), sizeof(uint64_t));
+        }
+    };
+
+    struct VascEdgeHeader {
+        uint32_t node0, node1;
+        uint64_t skel_offset;
+    };
 protected:
     std::vector<medial_pt> _points;
     std::vector<node> _nodes;
     std::vector<edge> _edges;
+
+    size_t _graph_bytes() const;                  // returns the size (in bytes) for each sub-section of the vasc file
+    size_t _skeleton_bytes() const;
+    size_t _surface_bytes() const;
+    size_t _volume_bytes() const;
 
 public:
     void load(const std::string& filename);
     void save(const std::string& filename);
     void obj(const std::string& filename);
     void smooth_paths();
-    void load_vdb(openvdb::FloatGrid::Ptr skeletonGrid);
+    //void load_vdb(openvdb::FloatGrid::Ptr skeletonGrid);
+
+    // functions used to edit the vasc structure
+    uint32_t add_node(glm::vec4 pt);
+    uint32_t add_edge(uint32_t inode0, uint32_t inode1, std::vector<glm::vec4> pts);
 };
 
-/*
-This function is loading an in-memory graph structure
-_points = all 3D coordinates with radius
-_nodes = key junction points 
-_edges = curved lines between nodes, stored as paths made of points
-
-*/
-void vasc::load(const std::string& filename) {
-    std::ifstream in(filename, std::ios::binary);
-    if (!in.is_open()) {
-        std::cerr << "failed to open VASC file: " << filename << "\n";
-        return;
+    inline size_t vasc::_graph_bytes() const {
+        return _nodes.size() * sizeof(uint32_t) + _edges.size() * (2 * sizeof(uint32_t) + 3 * sizeof(uint64_t));
     }
 
-    //read VASC file header
-    VascHeader header;
-    in.read(reinterpret_cast<char*>(&header), sizeof(header)); // contains num_vertices, num_edges, etc.
+    inline size_t vasc::_skeleton_bytes() const {
+        size_t s = sizeof(uint32_t) + _points.size() * 4 * sizeof(float);
+        for (size_t ei = 0; ei < _edges.size(); ei++) {
+            s += sizeof(uint32_t) + _edges[ei].ipts.size();
+        }
+        return s;
+    }
+    inline size_t vasc::_surface_bytes() const { return 0; }        // Not implemented yet
+    inline size_t vasc::_volume_bytes() const { return 0; }         // Not implemented yet
 
-    // node to point mapping 
-    std::vector<uint32_t> nodePts(header.num_vertices);
-    for (auto& id : nodePts)
-        in.read(reinterpret_cast<char*>(&id), sizeof(uint32_t));  // one uint32 per node // reinterpret_cast<char*> is for reading binary data directly into memory.
+    /**
+     * This function loads a .vasc file into the current vasc object
+     * @param filename is the name of the .vasc file to load
+     */
+    void vasc::load(const std::string& filename) {
+        std::ifstream in(filename, std::ios::binary);                       // create an input file stream
+        if (!in.is_open())                                                      // make sure that the file is loaded
+            throw std::runtime_error("Could not open file " + filename);    // otherwise throw an exception
 
-    // read edge headers (node pair + skeleton offset) 
-    std::vector<VascEdgeHeader> edgeHeaders(header.num_edges);
-    in.read(reinterpret_cast<char*>(edgeHeaders.data()), sizeof(VascEdgeHeader) * header.num_edges);
 
-    //  _nodes with point references 
-    _nodes.resize(header.num_vertices);
-    for (size_t i = 0; i < _nodes.size(); ++i)
-        _nodes[i].pt = nodePts[i];
+        //read VASC file header
+        header h;
+        h.read(in);
+        //in.read(reinterpret_cast<char*>(&h), sizeof(header));                    // reads the header directly from the file stream
 
-    //reading per_edge skeleton data 
-    _edges.resize(header.num_edges);
-    for (size_t i = 0; i < edgeHeaders.size(); ++i) {
-        // seek to this edge's skeleton data offset
-        in.seekg(edgeHeaders[i].skel_offset);
+        _nodes.resize(h.num_nodes);                                             // allocate an array to store node data
+        _edges.resize(h.num_edges);                                             // allocate space to store the edge data
 
-        // how many points are on this edge
+        // load the medial axis point ID associated with each node
+        for (size_t ni = 0; ni < h.num_nodes; ni++)                                 // iterate through each node
+            in.read(reinterpret_cast<char*>(&_nodes[ni].ipt), sizeof(uint32_t));   // load the corresponding ID from the file
+
+
+        // load the edges (capillaries) from the file
+        for (size_t ei = 0; ei < h.num_edges; ei++) {
+            in.read(reinterpret_cast<char*>(&_edges[ei].inodes[0]), sizeof(uint32_t));
+            in.read(reinterpret_cast<char*>(&_edges[ei].inodes[1]), sizeof(uint32_t));
+
+            // when loading the entire file, these variables are unnecessary (they'll be used
+            // later for streaming)
+            uint64_t skeleton_offset;
+            in.read(reinterpret_cast<char*>(&skeleton_offset), sizeof(uint64_t));
+            uint64_t surface_offset;
+            in.read(reinterpret_cast<char*>(&surface_offset), sizeof(uint64_t));
+            uint64_t volume_offset;
+            in.read(reinterpret_cast<char*>(&volume_offset), sizeof(uint64_t));
+        }
+
+        // We now have all of the necessary information to generate a graph, so this is a good time
+        //  to assign edges to each node structure.
+        for (size_t ei = 0; ei < h.num_edges; ei++) {
+            _nodes[_edges[ei].inodes[0]].iedges.push_back(ei);
+            _nodes[_edges[ei].inodes[1]].iedges.push_back(ei);
+        }
+
+        // Load the skeleton data. This consists of a 32-bit integer providing the number of points
+        // and then each point stored as a 4d vertex (x, y, z) and radius
+
+        // get the number of medial axis points stored in the file
         uint32_t num_pts;
-        in.read(reinterpret_cast<char*>(&num_pts), sizeof(num_pts));
+        in.read(reinterpret_cast<char*>(&num_pts), sizeof(uint32_t));
 
-        // fill edge data
-        edge& e = _edges[i];
-        e.nodes[0] = edgeHeaders[i].node0;
-        e.nodes[1] = edgeHeaders[i].node1;
-
-        for (uint32_t j = 0; j < num_pts; ++j) {
-            medial_pt pt;
-            in.read(reinterpret_cast<char*>(&pt), sizeof(pt));  // read x, y, z, r
-            e.pts.push_back(_points.size());                    // store global point index
-            _points.push_back(pt);                              // store point
+        _points.resize(num_pts);                                // pre-allocate the array that will store all of the medial axis points
+        for (size_t pi = 0; pi < num_pts; pi++) {               // for each point
+            in.read(reinterpret_cast<char*>(&_points[pi]), sizeof(medial_pt));      // read the point coordinates and radius into the array
         }
 
-        // link edge to its two nodes
-        _nodes[e.nodes[0]].edges.push_back(i);
-        _nodes[e.nodes[1]].edges.push_back(i);
-    }
+        // Load the indices representing the medial axis for each edge
+        for (size_t ei = 0; ei < h.num_edges; ei++) {                           // for each edge
+            uint32_t n_pts;
+            in.read(reinterpret_cast<char*>(&n_pts), sizeof(uint32_t));       // get the number of medial axis points in the current edge
+            _edges[ei].ipts.resize(n_pts);                                      // allocate the length of the medial axis index array for the current edge
 
-    in.close();
-}
-
-/*
-It writes in-memory (made of _points, _nodes, _edges) to a .vasc file 
-*/
-
-void vasc::save(const std::string& filename) {
-    std::ofstream out(filename, std::ios::binary);
-    if (!out.is_open()) {
-        std::cerr << "failed to write VASC file: " << filename << "\n";
-        return;
-    }
-
-    //  initial VASC header (with placeholder skel_offset = 0) 
-    VascHeader header{ (uint32_t)_nodes.size(), (uint32_t)_edges.size(), 0 };
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
-
-    // write node table (each node's point index into _points) 
-    for (const node& n : _nodes) {
-        out.write(reinterpret_cast<const char*>(&n.pt), sizeof(uint32_t));
-    }
-
-    // write placeholder edge headers (node0, node1, skel_offset = 0) 
-    std::vector<std::streampos> edge_offset_positions;
-    for (const edge& e : _edges) {
-        VascEdgeHeader h{ e.nodes[0], e.nodes[1], 0 };
-        edge_offset_positions.push_back(out.tellp());  // save where to patch later
-        out.write(reinterpret_cast<const char*>(&h), sizeof(h));
-    }
-
-    //write skeleton path data (per edge point sequences) 
-    header.skel_offset = static_cast<uint64_t>(out.tellp()); // store true offset
-    std::vector<uint64_t> skel_offsets;
-
-    for (const edge& e : _edges) {
-        skel_offsets.push_back(static_cast<uint64_t>(out.tellp()));
-
-        // write number of points in this edge
-        uint32_t npts = (uint32_t)e.pts.size();
-        out.write(reinterpret_cast<const char*>(&npts), sizeof(npts));
-
-        // write each medial_pt (x, y, z, radius) from _points
-        for (uint32_t pid : e.pts) {
-            out.write(reinterpret_cast<const char*>(&_points[pid]), sizeof(medial_pt));
-        }
-    }
-
-    // backpatch header with correct skel_offset 
-    out.seekp(0);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
-
-    // backpatch edge headers with correct skel_offsets 
-    //for each edge header: Jump to its skel_offset field (+8 bytes into header: after node0 + node1)
-    // write the actual file offset where that edge's point list begins.
-    for (size_t i = 0; i < _edges.size(); ++i) {
-        out.seekp(static_cast<std::streamoff>(edge_offset_positions[i]) + 8); //+8 makes sure we overwrite just the skel_offset field — not the node IDs.
-        out.write(reinterpret_cast<const char*>(&skel_offsets[i]), sizeof(uint64_t));
-    }
-
-    out.close();
-}
-
-
-void vasc::obj(const std::string& filename) {
-    std::ofstream out(filename);
-    if (!out.is_open()) {
-        std::cerr << "Failed to write OBJ: " << filename << "\n";
-        return;
-    }
-    for (const medial_pt& pt : _points)
-        out << "v " << pt.p[0] << " " << pt.p[1] << " " << pt.p[2] << "\n";
-    for (const edge& e : _edges) {
-        for (size_t i = 1; i < e.pts.size(); ++i)
-            out << "l " << e.pts[i - 1] + 1 << " " << e.pts[i] + 1 << "\n";
-    }
-    out.close();
-}
-
-void vasc::smooth_paths() {
-    for (edge& e : _edges) {
-        if (e.pts.size() < 3) continue;  // Not enough points to smooth
-
-        // create a copy of original points
-        std::vector<medial_pt> new_pts(e.pts.size());
-
-        // first and last points stay the same
-        new_pts[0] = _points[e.pts[0]];
-        new_pts.back() = _points[e.pts.back()];
-
-        // apply 3 point averaging
-        for (size_t i = 1; i + 1 < e.pts.size(); ++i) {
-            const medial_pt& prev = _points[e.pts[i - 1]];
-            const medial_pt& curr = _points[e.pts[i]];
-            const medial_pt& next = _points[e.pts[i + 1]];
-
-            medial_pt smoothed;
-            smoothed.p[0] = (prev.p[0] + curr.p[0] + next.p[0]) / 3.0f;
-            smoothed.p[1] = (prev.p[1] + curr.p[1] + next.p[1]) / 3.0f;
-            smoothed.p[2] = (prev.p[2] + curr.p[2] + next.p[2]) / 3.0f;
-            smoothed.r = curr.r;  // keep original radius
-
-            new_pts[i] = smoothed;
+            for (size_t epi = 0; epi < n_pts; epi++)                            // for each point in the edge, read the corresponding index
+                in.read(reinterpret_cast<char*>(&_edges[ei].ipts[epi]), sizeof(uint32_t));
         }
 
-        // update global _points and e.pts with new values
-        for (size_t i = 0; i < e.pts.size(); ++i) {
-            _points[e.pts[i]] = new_pts[i];
+        in.close();
+    }
+
+    /**
+     * Saves a vasc file to disk
+     * @param filename is the filename
+     */
+    void vasc::save(const std::string& filename) {
+        std::ofstream out(filename, std::ios::binary);                       // create an input file stream
+        if (!out.is_open())                                                      // make sure that the file is loaded
+            throw std::runtime_error("Could not open file " + filename);    // otherwise throw an exception
+
+
+        // save the vasc file header
+        header h;                                                       // create a header structure and fill it with the necessary data
+        h.major = major;                                           // get the major and minor version numbers
+        h.minor = minor;
+        h.num_edges = _edges.size();                                    // number of edges and nodes in the graph
+        h.num_nodes = _nodes.size();
+        h.skel_offset = sizeof(header) + _graph_bytes();                // calculate the size for each of the offsets
+        h.surf_offset = h.skel_offset + _skeleton_bytes();
+        h.vol_offset = h.surf_offset + _surface_bytes();
+        h.write(out);
+        //out.write(reinterpret_cast<char*>(&h), sizeof(header));       // write the header structure to the file
+
+
+        // write the medial axis point ID associated with each node
+        for (size_t ni = 0; ni < _nodes.size(); ni++)                                 // iterate through each node
+            out.write(reinterpret_cast<char*>(&_nodes[ni].ipt), sizeof(uint32_t));   // load the corresponding ID from the file
+
+
+        // write the edges (capillaries) to the file
+        size_t skel_edge_offset = h.skel_offset + sizeof(uint32_t) + _points.size() * sizeof(medial_pt);
+        size_t surf_edge_offset = h.surf_offset;
+        size_t vol_edge_offset = h.vol_offset;
+
+        for (size_t ei = 0; ei < h.num_edges; ei++) {
+            out.write(reinterpret_cast<char*>(&_edges[ei].inodes[0]), sizeof(uint32_t));
+            out.write(reinterpret_cast<char*>(&_edges[ei].inodes[1]), sizeof(uint32_t));
+
+            // write the data offsets for the edge
+            out.write(reinterpret_cast<char*>(&skel_edge_offset), sizeof(uint64_t));
+            out.write(reinterpret_cast<char*>(&surf_edge_offset), sizeof(uint64_t));
+            out.write(reinterpret_cast<char*>(&vol_edge_offset), sizeof(uint64_t));
+
+            // update the edge offsets for each type of data
+            skel_edge_offset += sizeof(uint32_t) + _edges[ei].ipts.size() * sizeof(uint32_t);
+            surf_edge_offset += 0;
+            vol_edge_offset += 0;
         }
-    }
-}
 
-///////////// steps /////////////////////
-/*
-Extract active voxels with value > 0 from the input VDB grid.
+        // Write the skeleton data. This consists of a 32-bit integer providing the number of points
+        // and then each point stored as a 4d vertex (x, y, z) and radius
 
-Convert them to world coordinates, assign an index and default radius.
-
-Build an adjacency list by checking 26-connected neighbors.
-
-Detect node points, voxels with degree not equal to 2.
-
-Trace edges between nodes by walking through degree-2 voxels.
-
-Store the graph as _nodes, _edges, and _points.
+        // get the number of medial axis points stored in the file
+        uint32_t num_pts = _points.size();
+        out.write(reinterpret_cast<char*>(&num_pts), sizeof(uint32_t));
+        out.write(reinterpret_cast<char*>(&_points[0]), sizeof(medial_pt) * num_pts);       // the entire point array can be written at once
 
 
-*/
+        // Write the indices representing the medial axis for each edge
+        for (size_t ei = 0; ei < h.num_edges; ei++) {                           // for each edge
+            uint32_t n_pts = _edges[ei].ipts.size();
+            out.write(reinterpret_cast<char*>(&n_pts), sizeof(uint32_t));       // get the number of medial axis points in the current edge
 
-void vasc::load_vdb(openvdb::FloatGrid::Ptr grid) {
-    using Coord = openvdb::Coord;
-    using Vec3f = openvdb::Vec3f;
-
-    // map from voxel coordinate to unique index (used to track point IDs)
-    std::unordered_map<openvdb::Coord, uint32_t, CoordHash> coordToIndex;
-
-    // store the world space coordinates of active skeleton voxels
-    std::vector<Vec3f> worldPoints;
-
-    // extract active voxels from grid 
-    for (auto iter = grid->cbeginValueOn(); iter; ++iter) {
-        if (iter.getValue() <= 0.0f) continue; // skip background
-        Coord ijk = iter.getCoord();
-        Vec3f xyz = grid->transform().indexToWorld(ijk); // convert to world coords
-        coordToIndex[ijk] = static_cast<uint32_t>(worldPoints.size());
-        worldPoints.push_back(xyz);
-    }
-
-    // store medial points with default radius 
-    for (const auto& p : worldPoints) {
-        medial_pt mp;
-        mp.p[0] = p.x(); mp.p[1] = p.y(); mp.p[2] = p.z();
-        mp.r = 1.0f; // set default radius (can be updated later via SDF)
-        _points.push_back(mp);
-    }
-
-    // create adjacency graph for all points 
-    std::vector<std::vector<int>> adjacency(_points.size());
-    std::vector<Coord> neighbors;
-
-    // build 26-neighborhood (6-face + 12-edge + 8-corner)
-    for (int dx = -1; dx <= 1; ++dx)
-        for (int dy = -1; dy <= 1; ++dy)
-            for (int dz = -1; dz <= 1; ++dz)
-                if (dx || dy || dz) // exclude (0,0,0)
-                    neighbors.emplace_back(dx, dy, dz);
-
-    // for each point, record neighbors that are also part of skeleton
-    for (const auto& [coord, idx] : coordToIndex) {
-        for (const auto& n : neighbors) {
-            Coord neighborCoord = coord + n;
-            auto it = coordToIndex.find(neighborCoord);
-            if (it != coordToIndex.end()) {
-                adjacency[idx].push_back(it->second);
-            }
+            out.write(reinterpret_cast<char*>(&_edges[ei].ipts[0]), sizeof(uint32_t));  // write the index array to disk
         }
+
+        // In the future we'll have to put the surface and volume writing code here
+
+        out.close();
     }
 
-    // identify graph nodes (i.e. voxels with degree ≠ 2) 
-    std::unordered_map<int, uint32_t> vertexToNodeID;
-    std::vector<int> nodeIndices;
-    uint32_t nextNodeID = 0;
+    /**
+     * Add a node to the vascular graph given the nodes medial axis position
+     * @param pt is a vec4 structure specifying the (x, y, z) coordinates of the medial axis and the radius at the node
+     * @return the internal ID of the added node in the graph
+     */
+    uint32_t vasc::add_node(glm::vec4 pt) {
+        _points.push_back(pt);                          // add the new node point to the list of medial axis points
+        node new_node;                                  // create a new node structure
+        new_node.ipt = _points.size() - 1;              // add the ID for the new medial point to the node structure
+        _nodes.push_back(new_node);                     // push the node structure to the nodes array
 
-    for (size_t i = 0; i < adjacency.size(); ++i) {
-        int deg = adjacency[i].size();
-        if (deg != 2) {
-            // this voxel is a node (endpoint, branch point, like this..)
-            vertexToNodeID[i] = nextNodeID++;
-            node n;
-            n.pt = i;
-            _nodes.push_back(n);
-            nodeIndices.push_back(i);
-        }
+        return _nodes.size() - 1;
     }
 
-    // trace edges between nodes 
-    std::unordered_set<std::pair<int, int>, std::function<size_t(const std::pair<int, int>&)>> visited(
-        0, [](const std::pair<int, int>& p) {
-            return std::hash<int>()(p.first) ^ std::hash<int>()(p.second);
-        });
+    /**
+     * Add an edge to the graph given its connected nodes and a set of points on the medial axis
+     * @param inode0 the first node in the graph (associated with the medial axis point nearest the first point in pts)
+     * @param inode1 the second node in the graph (associated with the medial axis point closest to the last point in pts)
+     * @param pts vector of vec4 medial axis points consisting of an (x, y, z) coordinate and radius
+     * @return the internal ID of the edge in the graph
+     */
+    uint32_t vasc::add_edge(uint32_t inode0, uint32_t inode1, std::vector<glm::vec4> pts) {
 
-    for (int node : nodeIndices) {
-        for (int nbr : adjacency[node]) {
-            auto key = std::minmax(node, nbr);
-            if (visited.count(key)) continue; // already processed this edge
+        edge new_edge;                                  // create a new edge structure
+        new_edge.inodes[0] = inode0;                    // set the two node IDs based on user input
+        new_edge.inodes[1] = inode1;
+        new_edge.ipts.resize(pts.size());               // resize the medial axis point index array to match the number of points in the edge
+        std::iota(new_edge.ipts.begin(), new_edge.ipts.end(), _points.size());  // create a sequential list of IDs starting with the last index in _points
+        _edges.push_back(new_edge);
 
-            edge e;
-            e.nodes[0] = vertexToNodeID[node]; // start node ID
+        _points.insert(_points.end(), pts.begin(), pts.end());      // insert all of the new points for this edge into the _points array
 
-            std::vector<uint32_t> path;
-            path.push_back(node);
-
-            int prev = node;
-            int curr = nbr;
-
-            // walk along the line until another node is found
-            while (vertexToNodeID.find(curr) == vertexToNodeID.end()) {
-                path.push_back(curr);
-                const auto& nbrs = adjacency[curr];
-                int next = (nbrs[0] == prev) ? nbrs[1] : nbrs[0];
-                prev = curr;
-                curr = next;
-            }
-
-            // reached the destination node
-            path.push_back(curr);
-            e.nodes[1] = vertexToNodeID[curr]; // end node ID
-            e.pts = path;
-
-            // store edge
-            uint32_t edgeID = static_cast<uint32_t>(_edges.size());
-            _edges.push_back(e);
-
-            // attach edge to both endpoint nodes
-            _nodes[e.nodes[0]].edges.push_back(edgeID);
-            _nodes[e.nodes[1]].edges.push_back(edgeID);
-
-            visited.insert(key); // mark as visited
-        }
+        return _edges.size() - 1;
     }
 
-    std::cout << "Loaded VDB skeleton into vasc structure.\n";
-}
 
 }
 
