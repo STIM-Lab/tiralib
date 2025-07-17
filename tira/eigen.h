@@ -146,9 +146,7 @@ namespace tira {
             U[1] = evec[2] * invLength;
             U[2] = - evec[1] * invLength;
         }
-        V[0] = evec[1] * U[2] - evec[2] * U[1];
-        V[1] = evec[2] * U[0] - evec[0] * U[2];
-	    V[2] = evec[0] * U[1] - evec[1] * U[0];
+		cross3(evec, U, V); // V = evec x U
     }
 
     template <typename T>
@@ -209,7 +207,7 @@ namespace tira {
 	    };
 	    T m00 = U[0] * AU[0] + U[1] * AU[1] + U[2] * AU[2] - eval1;
 	    T m01 = U[0] * AV[0] + U[1] * AV[1] + U[2] * AV[2];
-	    T m11 = V[0] * AU[0] + V[1] * AU[1] + V[2] * AU[2] - eval1;
+	    T m11 = V[0] * AV[0] + V[1] * AV[1] + V[2] * AV[2] - eval1;
 
         T absM00 = std::fabs(m00);
         T absM01 = std::fabs(m01);
@@ -236,7 +234,9 @@ namespace tira {
                 evec1[2] = m01 * U[2] - m00 * V[2];
 
             }
-            else evec1 = U;
+            else {
+				evec1[0] = U[0];    evec1[1] = U[1];    evec1[2] = U[2];
+            }
         }
         else {
             maxAbsComp = (absM11 >= absM01) ? absM11 : absM01;
@@ -257,11 +257,11 @@ namespace tira {
                 evec1[2] = m11 * U[2] - m01 * V[2];
 
             }
-            else evec1 = U;
+            else {
+                evec1[0] = U[0];    evec1[1] = U[1];    evec1[2] = U[2];
+            }
         }
     }
-
-
 
     /// Calculate the eigenvalues of a 3x3 matrix
     template<typename T>
@@ -330,16 +330,17 @@ namespace tira {
         // | b  c  e |
         // | d  e  f |
 
-	    T determinant = determinant3(a, b, c, d, e, f);
+        T q = (a + c + f) / 3.0;
+	    T determinant = determinant3(a - q, b, c - q, d, e, f - q);
         if (determinant >= 0.0) {
+		    evec3_symmetric_0(a, b, c, d, e, f, evals[2], evec2);
+		    evec3_symmetric_1(a, b, c, d, e, f, evals[1], evec2, evec1);
+		    cross3(evec2, evec1, evec0);        // evec0 = evec2 x evec1
+        }
+        else {
 		    evec3_symmetric_0(a, b, c, d, e, f, evals[0], evec0);
 		    evec3_symmetric_1(a, b, c, d, e, f, evals[1], evec0, evec1);
 		    cross3(evec0, evec1, evec2);        // evec2 = evec0 x evec1
-        }
-        else {
-		    evec3_symmetric_0(a, b, c, d, e, f, evals[2], evec2);
-		    evec3_symmetric_1(a, b, c, d, e, f, evals[1], evec2, evec0);
-		    cross3(evec2, evec1, evec0);        // evec0 = evec2 x evec1
         }
     }
 }
@@ -419,10 +420,21 @@ namespace tira::cpu {
 			double e = mats[i * 9 + 5];
 			double f = mats[i * 9 + 8];
 
+            // To guard agains floating-point overflow, we precondition the matrix
+            double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
+            double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
+            double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
+            double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
+            double invMaxElement = 1.0 / maxElement;
+            a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
+            c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+
             eval3_symmetric(a,b,c,d,e,f, eval0, eval1, eval2);
-            evals[i * 3 + 0] = eval0;
-            evals[i * 3 + 1] = eval1;
-            evals[i * 3 + 2] = eval2;
+
+			// The new eigenvalues are scaled. Revert the scaling
+            evals[i * 3 + 0] = eval0 * maxElement;
+            evals[i * 3 + 1] = eval1 * maxElement;
+            evals[i * 3 + 2] = eval2 * maxElement;
         }
         return evals;
     }
@@ -472,7 +484,7 @@ namespace tira::cpu {
         // | a  b  d |
         // | b  c  e |
         // | d  e  f |
-        //T* evecs = new T[4 * n];
+
         T* evecs = new T[6 * n];
         for (unsigned int i = 0; i < n; i++) {
             //size_t i = 13;
@@ -482,6 +494,17 @@ namespace tira::cpu {
             double c = mats[i * 9 + 4];
             double e = mats[i * 9 + 5];
             double f = mats[i * 9 + 8];
+
+			// To guard agains floating-point overflow, we precondition the matrix
+			double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
+			double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
+			double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
+			double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
+			double invMaxElement = 1.0 / maxElement;
+			a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
+			c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+
+			// Now we can safely calculate the eigenvectors
             double* evec0 = new double[3];
             double* evec1 = new double[3];
             double* evec2 = new double[3];
