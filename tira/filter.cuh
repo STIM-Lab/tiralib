@@ -54,7 +54,7 @@ namespace tira {
 		}
 
 		template<typename T>
-		__global__ void kernel_Convolve3DX(T* source, T* dest, unsigned int width, unsigned int out_width, unsigned int out_height,
+		__global__ void kernel_convolve3_x(const T* source, T* dest, unsigned int width, unsigned int out_width, unsigned int out_height,
 			unsigned int out_depth, float* kernel, unsigned int K) {
 			unsigned int xi = blockDim.x * blockIdx.x + threadIdx.x;
 			unsigned int yi = blockDim.y * blockIdx.y + threadIdx.y;
@@ -70,7 +70,7 @@ namespace tira {
 		}
 
 		template<typename T>
-		__global__ void kernel_Convolve3DY(T* source, T* dest, unsigned int width, unsigned int height, unsigned int out_height, 
+		__global__ void kernel_convolve3_y(const T* source, T* dest, unsigned int width, unsigned int height, unsigned int out_height, 
 			unsigned int out_depth, float* kernel, unsigned int K) {
 			unsigned int xi = blockDim.x * blockIdx.x + threadIdx.x;
 			unsigned int yi = blockDim.y * blockIdx.y + threadIdx.y;
@@ -86,7 +86,7 @@ namespace tira {
 		}
 
 		template<typename T>
-		__global__ void kernel_Convolve3DZ(T* source, T* dest, unsigned int width, unsigned int height,
+		__global__ void kernel_convolve3_z(const T* source, T* dest, unsigned int width, unsigned int height,
 			unsigned int out_depth, float* kernel, unsigned int K) {
 			unsigned int xi = blockDim.x * blockIdx.x + threadIdx.x;
 			unsigned int yi = blockDim.y * blockIdx.y + threadIdx.y;
@@ -236,7 +236,7 @@ namespace tira {
 		/// <param name="out_depth">depth of the output image after the convolution</param>
 		/// <returns></returns>
 		template<typename T>
-		T* GaussianFilter3D(T* source, unsigned int width, unsigned int height, unsigned int depth,
+		T* gaussian_filter3d(const T* source, unsigned int width, unsigned int height, unsigned int depth,
 			float sigma_w, float sigma_h, float sigma_d,
 			unsigned int& out_width, unsigned int& out_height, unsigned int& out_depth) {
 
@@ -249,7 +249,8 @@ namespace tira {
 
 			size_t bytes = sizeof(T) * width * height * depth;							// calculate the number of bytes in the image
 
-			T* gpu_source;														// create a pointer for the GPU source image
+			const T* gpu_source;														// create a pointer for the GPU source image
+			T* temp_source;
 
 			// determine if the source image is provided on the CPU or GPU
 			cudaPointerAttributes attribs;										// create a pointer attribute structure
@@ -259,8 +260,9 @@ namespace tira {
 				gpu_source = source;											// set the gpu_source pointer to source
 			}
 			else {																// otherwise copy the source image to the GPU
-				HANDLE_ERROR(cudaMalloc(&gpu_source, bytes));								// allocate space on the GPU for the source image
-				HANDLE_ERROR(cudaMemcpy(gpu_source, source, bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+				HANDLE_ERROR(cudaMalloc(&temp_source, bytes));								// allocate space on the GPU for the source image
+				HANDLE_ERROR(cudaMemcpy(temp_source, source, bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+				gpu_source = static_cast<const T*>(temp_source);
 			}
 
 			/////////////// Calculate Convolution Kernels for each axis
@@ -310,10 +312,10 @@ namespace tira {
 
 			// First pass - Z convolution
 			dim3 gridDim = { width / blockDim.x + 1, height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_Convolve3DZ << <gridDim, blockDim >> > (gpu_source, gpu_firstpass, width, height, out_depth, gpu_kernel_d, window_size_d);
+			kernel_convolve3_z << <gridDim, blockDim >> > (gpu_source, gpu_firstpass, width, height, out_depth, gpu_kernel_d, window_size_d);
 
 			if (attribs.type != cudaMemoryTypeDevice)
-				HANDLE_ERROR(cudaFree(gpu_source));
+				HANDLE_ERROR(cudaFree(temp_source));
 
 			T* gpu_secondpass;															// allocate space on the GPU for the second pass
 			size_t bytes_secondpass = sizeof(T) * width * out_height * out_depth;
@@ -321,7 +323,7 @@ namespace tira {
 
 			// Second pass - Y convolution
 			gridDim = { width / blockDim.x + 1, out_height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_Convolve3DY << <gridDim, blockDim >> > (gpu_firstpass, gpu_secondpass, width, height, out_height, out_depth, gpu_kernel_h, window_size_h);
+			kernel_convolve3_y << <gridDim, blockDim >> > (gpu_firstpass, gpu_secondpass, width, height, out_height, out_depth, gpu_kernel_h, window_size_h);
 			HANDLE_ERROR(cudaFree(gpu_firstpass));
 
 			T* gpu_out;																	// calculate the size of the final output image
@@ -330,7 +332,7 @@ namespace tira {
 
 			// Third/Last pass - X convolution
 			gridDim = { out_width / blockDim.x + 1, out_height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_Convolve3DX << <gridDim, blockDim >> > (gpu_secondpass, gpu_out, width, out_width, out_height, out_depth, gpu_kernel_w, window_size_w);
+			kernel_convolve3_x << <gridDim, blockDim >> > (gpu_secondpass, gpu_out, width, out_width, out_height, out_depth, gpu_kernel_w, window_size_w);
 
 			HANDLE_ERROR(cudaFree(gpu_secondpass));
 

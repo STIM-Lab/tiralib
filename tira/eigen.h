@@ -349,9 +349,6 @@ namespace tira {
 
 namespace tira::cpu {
 
-
-
-
     /// <summary>
     /// CPU code for calculating eigenvalues of a 2D matrix array
     /// </summary>
@@ -445,37 +442,49 @@ namespace tira::cpu {
         // | a  b  d |
         // | b  c  e |
         // | d  e  f |
-        //T* evecs = new T[4 * n];
-        T* evecs = new T[9 * n];
-        size_t i = 13;
-        double a = mats[i * 9 + 0];
-        double b = mats[i * 9 + 1];
-        double d = mats[i * 9 + 2];
-        double c = mats[i * 9 + 4];
-        double e = mats[i * 9 + 5];
-        double f = mats[i * 9 + 8];
-		double* evec0 = new double[3];
-		double* evec1 = new double[3];
-		double* evec2 = new double[3];
-		double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
-		double norm = b * b + d * d + e * e; // norm of the off-diagonal elements
-        if (norm > 0.0)
-			evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
-        else {
-            evec0[0] = 1.0; evec0[1] = 0.0; evec0[2] = 0.0;
-			evec1[0] = 0.0; evec1[1] = 1.0; evec1[2] = 0.0;
-			evec2[0] = 0.0; evec2[1] = 0.0; evec2[2] = 1.0; // the matrix is diagonal, returns the standard basis vectors
-        }
 
-		evecs[i * 9 + 0] = evec0[0];
-		evecs[i * 9 + 1] = evec0[1];
-		evecs[i * 9 + 2] = evec0[2];        // first eigenvector
-		evecs[i * 9 + 3] = evec1[0];
-		evecs[i * 9 + 4] = evec1[1];
-		evecs[i * 9 + 5] = evec1[2];        // second eigenvector
-		evecs[i * 9 + 6] = evec2[0];
-		evecs[i * 9 + 7] = evec2[1];
-		evecs[i * 9 + 8] = evec2[2];        // third eigenvector
+        T* evecs = new T[9 * n];
+        for (unsigned int i = 0; i < n; i++) {
+            double a = mats[i * 9 + 0];
+            double b = mats[i * 9 + 1];
+            double d = mats[i * 9 + 2];
+            double c = mats[i * 9 + 4];
+            double e = mats[i * 9 + 5];
+            double f = mats[i * 9 + 8];
+
+            // To guard agains floating-point overflow, we precondition the matrix
+            double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
+            double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
+            double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
+            double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
+            double invMaxElement = 1.0 / maxElement;
+            a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
+            c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+
+            // Now we can safely calculate the eigenvectors
+            double* evec0 = new double[3];
+            double* evec1 = new double[3];
+            double* evec2 = new double[3];
+            double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
+            double norm = b * b + d * d + e * e; // norm of the off-diagonal elements
+            if (norm > 0.0)
+                evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
+            else {
+                evec0[0] = 1.0; evec0[1] = 0.0; evec0[2] = 0.0;
+                evec1[0] = 0.0; evec1[1] = 1.0; evec1[2] = 0.0;
+                evec2[0] = 0.0; evec2[1] = 0.0; evec2[2] = 1.0; // the matrix is diagonal, returns the standard basis vectors
+            }
+
+            evecs[i * 9 + 0] = evec0[0];
+            evecs[i * 9 + 1] = evec0[1];
+            evecs[i * 9 + 2] = evec0[2];        // first eigenvector
+            evecs[i * 9 + 3] = evec1[0];
+            evecs[i * 9 + 4] = evec1[1];
+            evecs[i * 9 + 5] = evec1[2];        // second eigenvector
+            evecs[i * 9 + 6] = evec2[0];
+            evecs[i * 9 + 7] = evec2[1];
+            evecs[i * 9 + 8] = evec2[2];        // third eigenvector
+        }
         return evecs;
     }
 
@@ -487,7 +496,6 @@ namespace tira::cpu {
 
         T* evecs = new T[6 * n];
         for (unsigned int i = 0; i < n; i++) {
-            //size_t i = 13;
             double a = mats[i * 9 + 0];
             double b = mats[i * 9 + 1];
             double d = mats[i * 9 + 2];

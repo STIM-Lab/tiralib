@@ -8,9 +8,8 @@
 
 namespace tira::cuda {
 
-
     template<typename T>
-    __global__ void cuda_eval2_symmetric(const T* mats, const size_t n, T* evals) {
+    __global__ void kernel_eval2_symmetric(const T* mats, const size_t n, T* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
 
@@ -54,7 +53,7 @@ namespace tira::cuda {
 
         T* gpu_evals;
         HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
-        cuda_eval2_symmetric << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
+        kernel_eval2_symmetric << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
 
         T* evals;
         if (attribs.type == cudaMemoryTypeDevice) {
@@ -70,10 +69,8 @@ namespace tira::cuda {
         return evals;
     }
 
-    
-
     template<typename T>
-    __global__ void cuda_evec2polar_symmetric(const T* mats, const T* evals, const size_t n, T* evecs) {
+    __global__ void kernel_evec2polar_symmetric(const T* mats, const T* evals, const size_t n, T* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         T a = mats[i * 4 + 0];
@@ -81,8 +78,6 @@ namespace tira::cuda {
         T c = mats[i * 4 + 3];
         evec2polar_symmetric(a, b, c, &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
     }
-
-
 
     template<typename T>
     T* evecs2polar_symmetric(const T* mats, T* evals, size_t n, int device) {
@@ -121,7 +116,7 @@ namespace tira::cuda {
 
         T* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
-        cuda_evec2polar_symmetric << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
+        kernel_evec2polar_symmetric << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
 
         T* evecs;
         if (attribs.type == cudaMemoryTypeDevice) {
@@ -140,33 +135,44 @@ namespace tira::cuda {
 
     
 
-    
-
     template<typename T>
     __global__ void kernel_eval3_symmetric(const T* mats, const size_t n, T* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
+
+        // | a  b  d |
+        // | b  c  e |
+        // | d  e  f |
         double a = mats[i * 9 + 0];
         double b = mats[i * 9 + 1];
-        double c = mats[i * 9 + 2];
-        double e = mats[i * 9 + 4];
-        double f = mats[i * 9 + 5];
-        double j = mats[i * 9 + 8];
+        double d = mats[i * 9 + 2];
+        double c = mats[i * 9 + 4];
+        double e = mats[i * 9 + 5];
+        double f = mats[i * 9 + 8];
         double eval0, eval1, eval2;
-        eval3_symmetric(a,b,c,e,f,j, eval0, eval1, eval2);
-        evals[i * 3 + 0] = eval0;
-        evals[i * 3 + 1] = eval1;
-		evals[i * 3 + 2] = eval2;
+
+        // To guard agains floating-point overflow, we precondition the matrix
+        double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
+        double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
+        double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
+        double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
+        double invMaxElement = 1.0 / maxElement;
+        a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
+        c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+
+        eval3_symmetric(a, b, c, d, e, f, eval0, eval1, eval2);
+        
+        // The new eigenvalues are scaled. Revert the scaling
+        evals[i * 3 + 0] = eval0 * maxElement;
+        evals[i * 3 + 1] = eval1 * maxElement;
+        evals[i * 3 + 2] = eval2 * maxElement;
     }
 
-    
-
-    
-
     template<typename T>
-    T* evals3_symmetric(T* mats, size_t n) {
+    T* evals3_symmetric(const T* mats, const size_t n) {
 
-        T* gpu_mats;
+        const T* gpu_mats;
+        T* temp_gpu_mats;
         size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
         size_t evals_bytes = sizeof(T) * 3 * n;                             // required bytes for storing eigenvalues
 
@@ -178,8 +184,9 @@ namespace tira::cuda {
             gpu_mats = mats;									            // set the gpu_source pointer to source
         }
         else {																// otherwise copy the source image to the GPU
-            HANDLE_ERROR(cudaMalloc(&gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
-            HANDLE_ERROR(cudaMemcpy(gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));   // copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));   // copy the source image to the GPU
+			gpu_mats = static_cast<const T*>(temp_gpu_mats);
         }
 
         // get the active device properties to calculate the optimal the block size
@@ -202,63 +209,70 @@ namespace tira::cuda {
             T* evals = new T[3 * n];
             HANDLE_ERROR(cudaMemcpy(evals, gpu_evals, evals_bytes, cudaMemcpyDeviceToHost));
             HANDLE_ERROR(cudaFree(gpu_evals));
-            HANDLE_ERROR(cudaFree(gpu_mats));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
             return evals;
         }
     }
 
-    /*template<typename T>
-    __global__ void kernel_evec3polar(T* mats, T* lambda, size_t n, T* evecs) {
+    template<typename T>
+    __global__ void kernel_evec3spherical_symmetric(const T* mats, const T* lambda, const size_t n, T* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
 
-        double theta, phi;
-        double* evec0 = new double[3];
-        double* evec1 = new double[3];
-        double* evec2 = new double[3];
+        // | a  b  d |
+        // | b  c  e |
+        // | d  e  f |
         double a = mats[i * 9 + 0];
         double b = mats[i * 9 + 1];
         double d = mats[i * 9 + 2];
         double c = mats[i * 9 + 4];
         double e = mats[i * 9 + 5];
         double f = mats[i * 9 + 8];
-		double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
+
+        // To guard agains floating-point overflow, we precondition the matrix
+        double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
+        double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
+        double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
+        double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
+        double invMaxElement = 1.0 / maxElement;
+        a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
+        c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+
+        // Now we can safely calculate the eigenvectors
+        double* evec0 = new double[3];
+        double* evec1 = new double[3];
+        double* evec2 = new double[3];
+        double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
         double norm = b * b + d * d + e * e; // norm of the off-diagonal elements
-        if (norm > 0.0) {
+
+        if (norm > 0.0)
             evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
-
-			for (int j = 0; j < 3; j++) {
-				double* vector = (j == 0) ? evec0 : (j == 1) ? evec1 : evec2;
-                theta = acos(vector[2]);                        // angle from z-axis
-                phi = atan2(vector[1], vector[0]);              // angle in x�y plane
-                if (phi < 0) phi += 2 * PI;                     // map phi to [0, 2pi]
-                if (isnan(theta) || isnan(phi)) {
-                    evecs[i * 4 + j*2] = PI / 2.0;              // acos(0)
-                    evecs[i * 4 + j*2 + 1] = 0;                 // std::atan2(1, 0);
-                }
-                else {
-                    evecs[i * 4 + j*2] = theta;
-                    evecs[i * 4 + j*2 + 1] = phi;
-                }
-			}
-        }
         else {
-            // matrix is diagonal, eigenvectors are aligned with the axes
-            evecs[i * 4 + 0] = PI / 2.0;        // theta for x-axis
-            evecs[i * 4 + 1] = 0;               // phi for x-axis
-            evecs[i * 4 + 2] = PI / 2.0;        // theta for y-axis
-            evecs[i * 4 + 3] = PI / 2.0;        // phi for y-axis
+            evec0[0] = 1.0; evec0[1] = 0.0; evec0[2] = 0.0;
+            evec1[0] = 0.0; evec1[1] = 1.0; evec1[2] = 0.0;
+            evec2[0] = 0.0; evec2[1] = 0.0; evec2[2] = 1.0; // the matrix is diagonal, returns the standard basis vectors
         }
-    }
-    */
 
-    /*template<typename T>
-    T* evecs3_symmetric(T* mats, T* lambda, const size_t n) {
-        T* gpu_mats;
-        T* gpu_lambda;
+        evecs[i * 6 + 0] = std::atan2(evec0[1], evec0[0]);
+        evecs[i * 6 + 1] = std::acos(evec0[2]);
+
+        evecs[i * 6 + 2] = std::atan2(evec1[1], evec1[0]);
+        evecs[i * 6 + 3] = std::acos(evec1[2]);
+
+        evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
+        evecs[i * 6 + 5] = std::acos(evec2[2]);
+    }
+    
+    template<typename T>
+    T* evecs3spherical_symmetric(const T* mats, const T* lambda, const size_t n) {
+
+        const T* gpu_mats;
+        const T* gpu_lambda;
+        T* temp_gpu_mats;
+        T* temp_gpu_lambda;
         size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
         size_t evals_bytes = sizeof(T) * 3 * n;                             // required bytes for storing eigenvalues
-        size_t evecs_bytes = sizeof(T) * 4 * n;                             // required bytes for storing 2 3D eigenvectors (in polar coordinates)
+        size_t evecs_bytes = sizeof(T) * 6 * n;                             // required bytes for storing 2 3D eigenvectors (in polar coordinates)
 
         // determine if the source volume is provided on the CPU or GPU
         cudaPointerAttributes attribs;										// create a pointer attribute structure
@@ -269,10 +283,12 @@ namespace tira::cuda {
             gpu_lambda = lambda;
         }
         else {																// otherwise copy the source image to the GPU
-            HANDLE_ERROR(cudaMalloc(&gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
-            HANDLE_ERROR(cudaMemcpy(gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));   // copy the source image to the GPU
-            HANDLE_ERROR(cudaMalloc(&gpu_lambda, evals_bytes));
-            HANDLE_ERROR(cudaMemcpy(gpu_lambda, lambda, evals_bytes, cudaMemcpyHostToDevice));
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));   // copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_lambda, evals_bytes));
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_lambda, lambda, evals_bytes, cudaMemcpyHostToDevice));
+			gpu_mats = static_cast<const T*>(temp_gpu_mats);
+			gpu_lambda = static_cast<const T*>(temp_gpu_lambda);
         }
 
         // get the active device properties to calculate the optimal the block size
@@ -286,22 +302,21 @@ namespace tira::cuda {
 
         T* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, evecs_bytes));
-        kernel_evec3polar << <gridDim, blockDim >> > (gpu_mats, gpu_lambda, n, gpu_evecs);
+        kernel_evec3spherical_symmetric << <gridDim, blockDim >> > (gpu_mats, gpu_lambda, n, gpu_evecs);
 
         T* evecs;
         if (attribs.type == cudaMemoryTypeDevice) {
             evecs = gpu_evecs;
         }
         else {
-            evecs = new T[4 * n];
+            evecs = new T[6 * n];
             HANDLE_ERROR(cudaMemcpy(evecs, gpu_evecs, evecs_bytes, cudaMemcpyDeviceToHost));
             HANDLE_ERROR(cudaFree(gpu_evecs));
-            HANDLE_ERROR(cudaFree(gpu_lambda));
-            HANDLE_ERROR(cudaFree(gpu_mats));
+            HANDLE_ERROR(cudaFree(temp_gpu_lambda));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
         }
 
         return evecs;
        
     }
-    */
 }
