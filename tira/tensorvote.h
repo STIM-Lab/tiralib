@@ -120,6 +120,8 @@ CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2* L, const glm::vec2* V
     return Votee;
 }
 
+// the plate tensor field is symmetric and not impacted by the refinement term
+// thus -> p = 1
 CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, glm::vec2 sigma) {
 
     //float length = sqrt(u * u + v * v);                     // calculate the distance between voter and votee
@@ -163,9 +165,6 @@ CUDA_CALLABLE  static glm::mat2 platevote2_numerical(const glm::vec2 uv, const g
     return V * norm;
 }
 
-void hsa_tensorvote2(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
-    unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples);
-
 CUDA_CALLABLE static glm::mat2 platevote2(const glm::vec2* L, const glm::vec2 sigma,
     const int w, const int s0, const int s1, const glm::ivec2 x, const unsigned samples = 0) {
 
@@ -198,6 +197,100 @@ CUDA_CALLABLE static glm::mat2 platevote2(const glm::vec2* L, const glm::vec2 si
     return Receiver;
 }
 
+void hsa_tensorvote2(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
+    unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples);
+
+/// <summary>
+/// Calculate the 3D stick vote for the relative position (u, v) given the voter eigenvales and eigenvectors
+/// </summary>
+/// <param name="uv">position of the receiver relative to the voter</param>
+/// <param name="sigma">decay value (standard deviation)</param>
+/// <param name="theta">orientation of the voter</param>
+/// <param name="power">refinement term</param>
+/// <returns></returns>
+CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3 uvw, const glm::vec2 sigma, const float theta, 
+    const float phi, const unsigned power) {
+
+    const float cos_theta = cos(theta);
+    const float sin_theta = sin(theta);
+    const float cos_phi = cos(phi);
+    const float sin_phi = sin(phi);
+
+    const glm::vec3 q(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
+
+    glm::vec3 d = uvw;                                       // normalize the direction vector
+    const float l = glm::length(d);                               // calculate ell (distance between voter/votee)
+    if (l == 0) d = glm::vec3(0, 0, 0);                         // assumes that the voter DOES contribute to itself
+    else d = glm::normalize(d);
+
+    const float qTd = glm::dot(q, d);
+
+    float eta1 = 0;
+    float eta2 = 0;
+    if (sigma[0] > 0)
+        eta1 = decay(1 - qTd * qTd, l, sigma[0], power);                       // calculate the decay function
+    if (sigma[1] > 0)
+        eta2 = decay(qTd * qTd, l, sigma[1], power);
+
+    const glm::mat3 R = glm::mat3(1.0f) - 2.0f * glm::outerProduct(d, d);
+    const glm::vec3 Rq = R * q;
+    const glm::mat3 RqRq = glm::outerProduct(Rq, Rq);
+
+    return RqRq * (eta1 + eta2);
+}
+
+/// <summary>
+/// Calculate the receiver vote from an image of eigenvalues and eigenvectors.
+/// </summary>
+/// <param name="L">pointer to an image of eigenvalues</param>
+/// <param name="V">pointer to an image of eigenvectors</param>
+/// <param name="sigma">decay value (standard deviation)</param>
+/// <param name="power">refinement term</param>
+/// <param name="norm"></param>
+/// <param name="w">width of the vote region</param>
+/// <param name="s0">size of the L and V images along the first dimension</param>
+/// <param name="s1">size of the L and V images along the second dimension</param>
+/// <param name="x">position of the receiver</param>
+/// <returns></returns>
+CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3* L, const glm::mat3* V, const glm::vec2 sigma, const unsigned power, const float norm,
+    const int w, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
+
+    const int x0 = x[0];
+    const int x1 = x[1];
+    const int x2 = x[2];
+
+    glm::mat3 Votee(0.0f);
+
+    const int hw = w / 2;
+    for (int w = -hw; w < hw; w++) {                         // for each pixel in the window
+        const int r0 = static_cast<int>(x0) + w;
+        if (r0 >= 0 && r0 < s0) {
+            for (int v = -hw; v < hw; v++) {
+                const int r1 = static_cast<int>(x1) + v;
+                if (r1 >= 0 && r1 < s1) {
+                    for (int u = -hw; u < hw; u++) {
+                        const int r2 = static_cast<int>(x2) + u;
+                        if (r2 >= 0 && r2 < s2) {
+                            // calculate the contribution of (u,v,w) to (x,y,z)
+                            unsigned base = r0 * s1 * s2 + r1 * s2 + r2;
+                            glm::vec3 Vpolar = V[base];
+                            const float theta = Vpolar[4];
+                            const float phi = Vpolar[5];
+                            const glm::vec3 uvw(u, v, w);
+                            glm::mat3 vote = stickvote3(uvw, sigma, theta, phi, power);
+                            const float l0 = L[base][0];
+                            const float l1 = L[base][1];
+                            const float l2 = L[base][2]
+                            float scale = std::copysign(std::abs(l2) - std::abs(l1), l2);
+                            Votee = Votee + scale * vote * norm;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Votee;
+}
 namespace tira::cpu {
     static void tensorvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power,
         const unsigned w, const unsigned s0, const unsigned s1, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
@@ -211,6 +304,24 @@ namespace tira::cpu {
                 if(PLATE)
                     Vote = Vote + platevote2(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
                 VT[x0 * s1 + x1] = Vote;
+            }
+        }
+    }
+
+
+    static void tensorvote3(glm::mat3* VT, glm:vec3* L, glm::mat3* V, glm::vec2 sigma, unsigned int power,
+        const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
+        const float sticknorm = 1.0             // not implemented yet
+        for (int x0 = 0; x0 < s0; x0++) {
+            for (int x1 = 0; x1 < s1; x1++) {
+                for (int x2 = 0; x2 < s2; x2++) {
+                    glm::mat3 Vote(0.0f);
+                    if (STICK)
+                        Vote = Vote + stickvote3(L, V, sigma, power, sticknorm, w s0, s1, s0, glm::ivec2(x0, x1, x2));
+                    if (PLATE)
+                        Vote = Vote + platevote3(L, sigma, power, sticknorm, w s0, s1, s0, glm::ivec2(x0, x1, x2));
+                    
+                }
             }
         }
     }
