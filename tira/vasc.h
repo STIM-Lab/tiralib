@@ -100,7 +100,8 @@ public:
     inline size_t vasc::_skeleton_bytes() const {
         size_t s = sizeof(uint32_t) + _points.size() * 4 * sizeof(float);
         for (size_t ei = 0; ei < _edges.size(); ei++) {
-            s += sizeof(uint32_t) + _edges[ei].ipts.size();
+            //s += sizeof(uint32_t) + _edges[ei].ipts.size();
+            s += sizeof(uint32_t) + _edges[ei].ipts.size() * sizeof(uint32_t);
         }
         return s;
     }
@@ -262,7 +263,7 @@ public:
             uint32_t n_pts = _edges[ei].ipts.size();
             out.write(reinterpret_cast<char*>(&n_pts), sizeof(uint32_t));       // get the number of medial axis points in the current edge
 
-            out.write(reinterpret_cast<char*>(&_edges[ei].ipts[0]), sizeof(uint32_t));  // write the index array to disk
+            out.write(reinterpret_cast<char*>(&_edges[ei].ipts[0]), sizeof(uint32_t) * n_pts);  // write the index array to disk
         }
 
         // In the future we'll have to put the surface and volume writing code here
