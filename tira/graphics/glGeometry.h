@@ -42,8 +42,7 @@ namespace tira {
 			vb.SetBuffer(vertices, bytes);
 			ib.SetBuffer(indices, count);
 			va.AddBuffer(vb, layout, offset);
-			//va.Bind();
-			//ib.Bind();
+
 		}
 
 		void Draw() {
