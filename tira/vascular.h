@@ -6,10 +6,12 @@
 
 #include <glm/glm.hpp>
 
+#include "fibernet.h"
+
 
 namespace tira {
 
-class vasc {
+class vascular : public fibernet<float, int, int>{
 
 public:
     typedef glm::vec4 medial_pt;
@@ -19,21 +21,8 @@ protected:
     static constexpr uint8_t major = 1;
     static constexpr uint8_t minor = 0;
 
-
-
-    struct _Edge {
-        std::vector<uint32_t> ipts;      // stores the starting and ending IDs for the points representing the centerline for this edge
-        uint32_t inodes[2];              // node indices
-    };
-
-    struct _Node {
-        uint32_t ipt;                   // index to the point on the skeleton corresponding to the node
-        std::vector<uint32_t> iedges;    // indices of connected edges
-    };
-
     // data structure stores header information from a vasc file
     struct _Header {
-        //uint8_t version[2];            // major and minor version numbers
         uint8_t major;
         uint8_t minor;
         uint32_t num_nodes;             // number of nodes in the vascular network
@@ -42,9 +31,25 @@ protected:
         uint64_t surf_offset;           // number of bytes from the beginning of the file where the surface information starts
         uint64_t vol_offset;           // number of bytes from the beginning of the file where the volume information starts
 
-        void write(std::ofstream& fout);
-        void read(std::ifstream& fin);
+        void write(std::ofstream& fout) {
+            fout.write(reinterpret_cast<char*>(&major), sizeof(uint8_t));
+            fout.write(reinterpret_cast<char*>(&minor), sizeof(uint8_t));
+            fout.write(reinterpret_cast<char*>(&num_nodes), sizeof(uint32_t));
+            fout.write(reinterpret_cast<char*>(&num_edges), sizeof(uint32_t));
+            fout.write(reinterpret_cast<char*>(&skel_offset), sizeof(uint64_t));
+            fout.write(reinterpret_cast<char*>(&surf_offset), sizeof(uint64_t));
+            fout.write(reinterpret_cast<char*>(&vol_offset), sizeof(uint64_t));
+        }
 
+        void read(std::ifstream& fin) {
+            fin.read(reinterpret_cast<char*>(&major), sizeof(uint8_t));
+            fin.read(reinterpret_cast<char*>(&minor), sizeof(uint8_t));
+            fin.read(reinterpret_cast<char*>(&num_nodes), sizeof(uint32_t));
+            fin.read(reinterpret_cast<char*>(&num_edges), sizeof(uint32_t));
+            fin.read(reinterpret_cast<char*>(&skel_offset), sizeof(uint64_t));
+            fin.read(reinterpret_cast<char*>(&surf_offset), sizeof(uint64_t));
+            fin.read(reinterpret_cast<char*>(&vol_offset), sizeof(uint64_t));
+        }
     };
 
     struct _VascEdgeHeader {
@@ -52,15 +57,21 @@ protected:
         uint64_t skel_offset;
     };
 protected:
-    std::vector<medial_pt> _points;
-    std::vector<_Node> _nodes;
-    std::vector<_Edge> _edges;
-    std::pair<glm::vec3, glm::vec3> _medial_aabb; // bounding box around all medial axis points
 
-    size_t _graph_bytes() const;                  // returns the size (in bytes) for each sub-section of the vasc file
-    size_t _skeleton_bytes() const;
-    size_t _surface_bytes() const;
-    size_t _volume_bytes() const;
+    size_t _graph_bytes() const {                  // returns the size (in bytes) for each sub-section of the vasc file
+        return _nodes.size() * sizeof(uint32_t) + _edges.size() * (2 * sizeof(uint32_t) + 3 * sizeof(uint64_t));
+    }
+
+    inline size_t _skeleton_bytes() const {
+        size_t node_vertices = _nodes.size() * 4 * 4;       // each node vertex holds four floats (4*4 bytes)
+        size_t edge_vertices = _edges.size() * 8;           // each edge stores the number of points in a uint64
+        for (size_t ei = 0; ei < _edges.size(); ei++) {
+            edge_vertices += _edges[ei].size() * 4 * 4;     // each edge vertex holds four floats (4*4)
+        }
+        return node_vertices + edge_vertices;               // return the sum of both groups of points
+    }
+    size_t _surface_bytes() const { return 0; }
+    size_t _volume_bytes() const { return 0; }
 
     size_t _add_point(glm::vec3 p, float r);
 
@@ -70,9 +81,38 @@ public:
     void obj(const std::string& filename);
     void smooth_paths();
 
-    // functions used to edit the vasc structure
-    uint32_t add_node(glm::vec4 pt);
-    uint32_t add_edge(uint32_t inode0, uint32_t inode1, std::vector<glm::vec4> pts);
+    /**
+     * Add a node to the vascular graph given the nodes medial axis position
+     * @param pt is a vec4 structure specifying the (x, y, z) coordinates of the medial axis and the radius at the node
+     * @return the internal ID of the added node in the graph
+     */
+    inline size_t add_node(const glm::vec4 pt) {
+
+        glm::vec3 coord = pt;
+        float radius = pt[3];
+        vertex<float> new_vertex(coord, radius);
+
+        fibernet<float, int, int>::add_node(new_vertex, 0);
+        return fibernet<float, int, int>::_nodes.size() - 1;
+
+        //fibernet<float, int, int>::_Node new_node;                                 // create a new node structure
+        //new_node.ipt = _add_point(pt, pt.w);          // add a new point to the list of medial axis points
+        //new_node.ipt = _points.size() - 1;              // add the ID for the new medial point to the node structure
+        //_nodes.push_back(new_node);                     // push the node structure to the nodes array
+
+        //return _nodes.size() - 1;
+    }
+
+
+    size_t add_edge(size_t inode0, size_t inode1, std::vector<glm::vec4> pts) {
+
+        //create a new fiber to represent the edge
+        fiber<float> new_fiber;
+        for (size_t pi = 0; pi < pts.size(); pi++) {
+            new_fiber.push_back(pts[pi], pts[pi][3]);
+        }
+        fibernet<float, int, int>::add_edge(inode0, inode1, new_fiber, 0);
+    }
 
     // functions used to retrieve geometric data from the vasc structure
 
@@ -88,52 +128,44 @@ public:
      */
     size_t nodes() const { return _nodes.size(); }
 
+    void edge(const size_t id, vertex<float>& v0, vertex<float>& v1) const {
+        const size_t n0 = _edges[id].inodes[0];
+        const size_t n1 = _edges[id].inodes[1];
 
-    std::pair<glm::vec4, glm::vec4> graph_edge(const size_t id) const;      // retrieve the vertices and radii representing each end point of an edge
-    std::pair< std::vector<glm::vec3>, std::vector<float> > skeleton_edge(const size_t id) const;
+        v0 = _nodes[n0];
+        v1 = _nodes[n1];
+    }
+
+    fiber<float> centerline(const size_t id) const {
+
+        return _edges[id];
+        /*std::vector<glm::vec3> centerline;
+        std::vector<float> radii;
+
+        centerline.reserve(_edges[id].ipts.size() + 2);
+        radii.reserve(_edges[id].ipts.size() + 2);
+
+        centerline.emplace_back(_points[_edges[id].inodes[0]]);
+        radii.emplace_back(_points[_edges[id].inodes[0]][3]);
+        for (size_t pi = 0; pi < _edges[id].ipts.size(); pi++) {
+            size_t idx = _edges[id].ipts[pi];
+            centerline.emplace_back(_points[idx]);
+            radii.emplace_back(_points[idx][3]);
+        }
+        centerline.emplace_back(_points[_edges[id].inodes[1]]);
+        radii.emplace_back(_points[_edges[id].inodes[1]][3]);
+
+        return std::pair< std::vector<glm::vec3>, std::vector<float> >(centerline, radii);
+        */
+    }
 };
 
-    inline size_t vasc::_graph_bytes() const {
-        return _nodes.size() * sizeof(uint32_t) + _edges.size() * (2 * sizeof(uint32_t) + 3 * sizeof(uint64_t));
-    }
-
-    inline size_t vasc::_skeleton_bytes() const {
-        size_t s = sizeof(uint32_t) + _points.size() * 4 * sizeof(float);
-        for (size_t ei = 0; ei < _edges.size(); ei++) {
-            //s += sizeof(uint32_t) + _edges[ei].ipts.size();
-            s += sizeof(uint32_t) + _edges[ei].ipts.size() * sizeof(uint32_t);
-        }
-        return s;
-    }
-
-    inline void vasc::_Header::write(std::ofstream& fout) {
-        fout.write(reinterpret_cast<char*>(&major), sizeof(uint8_t));
-        fout.write(reinterpret_cast<char*>(&minor), sizeof(uint8_t));
-        fout.write(reinterpret_cast<char*>(&num_nodes), sizeof(uint32_t));
-        fout.write(reinterpret_cast<char*>(&num_edges), sizeof(uint32_t));
-        fout.write(reinterpret_cast<char*>(&skel_offset), sizeof(uint64_t));
-        fout.write(reinterpret_cast<char*>(&surf_offset), sizeof(uint64_t));
-        fout.write(reinterpret_cast<char*>(&vol_offset), sizeof(uint64_t));
-    }
-
-    inline void vasc::_Header::read(std::ifstream& fin) {
-        fin.read(reinterpret_cast<char*>(&major), sizeof(uint8_t));
-        fin.read(reinterpret_cast<char*>(&minor), sizeof(uint8_t));
-        fin.read(reinterpret_cast<char*>(&num_nodes), sizeof(uint32_t));
-        fin.read(reinterpret_cast<char*>(&num_edges), sizeof(uint32_t));
-        fin.read(reinterpret_cast<char*>(&skel_offset), sizeof(uint64_t));
-        fin.read(reinterpret_cast<char*>(&surf_offset), sizeof(uint64_t));
-        fin.read(reinterpret_cast<char*>(&vol_offset), sizeof(uint64_t));
-    }
-
-    inline size_t vasc::_surface_bytes() const { return 0; }        // Not implemented yet
-    inline size_t vasc::_volume_bytes() const { return 0; }         // Not implemented yet
 
     /**
      * This function loads a .vasc file into the current vasc object
      * @param filename is the name of the .vasc file to load
      */
-    inline void vasc::load(const std::string& filename) {
+    /*inline void vasc::load(const std::string& filename) {
         std::ifstream in(filename, std::ios::binary);                       // create an input file stream
         if (!in.is_open())                                                      // make sure that the file is loaded
             throw std::runtime_error("Could not open file " + filename);    // otherwise throw an exception
@@ -200,12 +232,12 @@ public:
 
         in.close();
     }
-
+    */
     /**
      * Saves a vasc file to disk using the .vasc binary file format
      * @param filename is the filename
      */
-    inline void vasc::save(const std::string& filename) {
+    /*inline void vasc::save(const std::string& filename) {
         std::ofstream out(filename, std::ios::binary);                       // create an input file stream
         if (!out.is_open())                                                      // make sure that the file is loaded
             throw std::runtime_error("Could not open file " + filename);    // otherwise throw an exception
@@ -270,8 +302,8 @@ public:
 
         out.close();
     }
-
-    inline size_t vasc::_add_point(glm::vec3 p, float r) {
+    */
+    /*inline size_t vasc::_add_point(glm::vec3 p, float r) {
         if (_points.empty()) {                           // if this is the first node added, initialize the aabb
             _medial_aabb.first = p;
             _medial_aabb.second = p;
@@ -287,22 +319,9 @@ public:
         }
         _points.push_back(medial_pt(p.x, p.y, p.z, r));
         return _points.size() - 1;
-    }
+    }*/
 
-    /**
-     * Add a node to the vascular graph given the nodes medial axis position
-     * @param pt is a vec4 structure specifying the (x, y, z) coordinates of the medial axis and the radius at the node
-     * @return the internal ID of the added node in the graph
-     */
-    inline uint32_t vasc::add_node(const glm::vec4 pt) {
-
-        _Node new_node;                                 // create a new node structure
-        new_node.ipt = _add_point(pt, pt.w);          // add a new point to the list of medial axis points
-        new_node.ipt = _points.size() - 1;              // add the ID for the new medial point to the node structure
-        _nodes.push_back(new_node);                     // push the node structure to the nodes array
-
-        return _nodes.size() - 1;
-    }
+    
 
     /**
      * Add an edge to the graph given its connected nodes and a set of points on the medial axis
@@ -311,7 +330,7 @@ public:
      * @param pts vector of vec4 medial axis points consisting of an (x, y, z) coordinate and radius
      * @return the internal ID of the edge in the graph
      */
-    inline uint32_t vasc::add_edge(uint32_t inode0, uint32_t inode1, std::vector<glm::vec4> pts) {
+    /*inline uint32_t vasc::add_edge(uint32_t inode0, uint32_t inode1, std::vector<glm::vec4> pts) {
 
         _Edge new_edge;                                  // create a new edge structure
         new_edge.inodes[0] = inode0;                    // set the two node IDs based on user input
@@ -323,44 +342,11 @@ public:
         _points.insert(_points.end(), pts.begin(), pts.end());      // insert all of the new points for this edge into the _points array
 
         return _edges.size() - 1;
-    }
+    }*/
 
-    /**
-     * Returns the 3D coordinates and radii associated with both nodes associated with an edge.
-     * @param id identifier for the edge that will be returned
-     * @return std::pair storing the coordinates and radii of both nodes connected by the edge
-     */
-    inline std::pair<glm::vec4, glm::vec4> vasc::graph_edge(const size_t id) const {
-        const size_t n0 = _edges[id].inodes[0];
-        const size_t n1 = _edges[id].inodes[1];
+    
 
-        std::pair<glm::vec4, glm::vec4> edge_pts;
-        edge_pts.first = _points[n0];
-        edge_pts.second = _points[n1];
-
-        return edge_pts;
-    }
-
-    inline std::pair< std::vector<glm::vec3>, std::vector<float> > vasc::skeleton_edge(const size_t id) const {
-
-        std::vector<glm::vec3> centerline;
-        std::vector<float> radii;
-
-        centerline.reserve(_edges[id].ipts.size() + 2);
-        radii.reserve(_edges[id].ipts.size() + 2);
-
-        centerline.emplace_back(_points[_edges[id].inodes[0]]);
-        radii.emplace_back(_points[_edges[id].inodes[0]][3]);
-        for (size_t pi = 0; pi < _edges[id].ipts.size(); pi++) {
-            size_t idx = _edges[id].ipts[pi];
-            centerline.emplace_back(_points[idx]);
-            radii.emplace_back(_points[idx][3]);
-        }
-        centerline.emplace_back(_points[_edges[id].inodes[1]]);
-        radii.emplace_back(_points[_edges[id].inodes[1]][3]);
-
-        return std::pair< std::vector<glm::vec3>, std::vector<float> >(centerline, radii);
-    }
+    
 
 
 

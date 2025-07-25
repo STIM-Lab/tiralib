@@ -8,14 +8,24 @@
 #include "glErrorHandler.h"
 #include <glm/glm.hpp>
 
+// include strings for basic shaders and functions as static components of this class
+#include "glShaderStrings.h"
+
 namespace tira {
-	/// This static class provides the STIM interface for loading, saving, and storing 2D images.
-	/// Data is stored in an interleaved (BIP) format (default for saving and loading is RGB).
+	/**
+	 * Structure that stores two strings representing a vertex and fragment shader. This is used by the glShader
+	 * class for loading and compiling shader source code.
+	 */
 	struct ShaderProgramSource {
 		std::string VertexSource;       // Public field so use Capital. 
 		std::string FragmentSource;
 	};
 
+	/**
+	 * Structure that provides a C++ interface for a GLSL shader uniform in a compiled shader program.
+	 * Accessing a shader uniform variable requires a name, data type, and location (id) within the shader. This
+	 * structure provides all of the necessary information, as well as helper functions for dealing with data types.
+	 */
 	struct glShaderUniform{
 
 		std::string name;
@@ -174,6 +184,8 @@ namespace tira {
 	};
 
 
+
+
 	class glShader {
 	protected:
 		std::string m_FilePath;
@@ -181,6 +193,11 @@ namespace tira {
 		mutable std::unordered_map<std::string, glShaderUniform> m_UniformCache;
 		// Caching for uniforms
 	public:
+
+
+
+
+
 		/// <summary>
 		/// Load a file containing both a fragment and vertex shader
 		/// The input file should have the shaders labeled with the following:
@@ -207,7 +224,9 @@ namespace tira {
 				glDeleteProgram(m_ShaderID);
 			m_ShaderID = glCreateProgram();
 			unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
+			if (!vs) throw std::runtime_error("glShader ERROR: could not compile vertex shader");
 			unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);
+			if (!fs) throw std::runtime_error("glShader ERROR: could not compile fragment shader");
 			GLERROR(glAttachShader(m_ShaderID, vs));
 			GLERROR(glAttachShader(m_ShaderID, fs));
 			GLERROR(glLinkProgram(m_ShaderID));
