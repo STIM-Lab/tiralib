@@ -6,47 +6,70 @@
 
 namespace tira {
 
+	/**
+	 * @brief      Class describes a vertex consisting of a 3D coordinate and other user-defined attributes.
+	 *
+	 * @tparam     VertexAttribute  Data type for user-defined attributes tstored with each vertex position
+	 */
 	template <typename VertexAttribute>
 	class vertex : public glm::vec3 {
+		/**
+		 * User-defined attribute stored at each vertex position (ex. radius, color, etc)
+		 */
+		VertexAttribute _va;
 	public:
-		VertexAttribute a;
 
-		vertex(glm::vec3 p, VertexAttribute r) : glm::vec3(p) {
-			a = r;
-		}
+		/**
+		 * @brief      Constructs a new vertex from a 3D coordinate and attribute
+		 *
+		 * @param[in]  p     { parameter_description }
+		 * @param[in]  r     { parameter_description }
+		 */
+		vertex(glm::vec3 p, VertexAttribute r) : glm::vec3(p) { _va = r; }
+
+		void va(VertexAttribute r) { _va = r; }
+		VertexAttribute va() { return _va; }
 	};
 
+	/**
+	 * @brief      Class defines a fiber as an array of sequential vertices.
+	 *
+	 * @tparam     VertexAttribute  Data type for additional attributes stored with each vertex position
+	 */
 	template <typename VertexAttribute = float>
 	class fiber : public std::vector< vertex<VertexAttribute> > {
 
 
 	protected:
 
-		//std::vector< vertex<VertexAttribute> > _vertices;
-		float _length;
-		bool _length_valid;
-
 	public:
 
-		fiber() : std::vector< vertex<VertexAttribute> >() {
-			_length = 0;
-			_length_valid = false;
-		}
+		fiber() : std::vector< vertex<VertexAttribute> >() {}
 
+		/**
+		 * @brief      Calculates the length of the fiber using linear interpolation between points.
+		 *
+		 * @return     Current fiber length
+		 */
 		float length() {
-			if (_length_valid) return _length;
 
-			_length = 0.0f;
+			float l = 0.0f;
 			for (size_t vi = 1; vi < this->size(); vi++) {
-				_length += glm::length(this->at(vi) - this->at(vi + 1));
+				l += glm::length(this->at(vi) - this->at(vi + 1));
 			}
 
-			_length_valid = true;
-			return _length;
+			return l;
 		}
 
+		/**
+		 * @brief      Creates a vertex from a position and attribute, and inserts it at the end of the fiber
+		 *
+		 * @param[in]  p     3D coordinate providing the spatial position of the vertex
+		 * @param[in]  r     user-defined attribute associated with this vertex (ex. radius)
+		 */
 		void push_back(glm::vec3 p, VertexAttribute r) {
-			push_back(p, r);
+			vertex<VertexAttribute> v(p, r);
+			std::vector< vertex<VertexAttribute> >::push_back(v);
 		}
 
 	};

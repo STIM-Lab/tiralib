@@ -4,42 +4,179 @@
 
 namespace tira {
 
+    /**
+     * @brief      Class provides functionality for an interconnected network of fibers.
+     *
+     * @tparam     VertexAttribute  The data type used to store user-defined attributes at each vertex
+     * @tparam     EdgeAttribute    The data type used to store user-defined attributes at each edge
+     * @tparam     NodeAttribute    The data type used to store user-defined attributes at each node
+     */
 	template <typename VertexAttribute = float, 
         typename EdgeAttribute = unsigned int,
         typename NodeAttribute = unsigned int>
 	class fibernet {
 
+    public:
+
+        /**
+         * @brief      This edge class extends a fiber to include a user-defined edge attribute 
+         * and a list of connected nodes
+         */
+        class edge : public fiber<VertexAttribute> {
+        protected:
+            EdgeAttribute _ea;
+            size_t _n[2];              // node indices
+
+        public:
+
+            /**
+             * @brief      Constructs a new edge given an existing fiber, two nodes, and an edge attribute
+             *
+             * @param[in]  f       existing fiber containing a series of geometric vertices and their attributes
+             * @param[in]  n0      first node connected by this edge (closest to the first vertex in the fiber)
+             * @param[in]  n1      second node connected to this edge (closest to the last vertex in the fiber)
+             * @param[in]  attrib  user-defined attribute to store information within each edge
+             */
+            edge(fiber<VertexAttribute> f, size_t n0, size_t n1, EdgeAttribute attrib) : fiber<VertexAttribute>(f) {
+                _n[0] = n0;
+                _n[1] = n1;
+                _ea = attrib;
+            }
+
+            /**
+             * @brief      Creates an empty edge linking two nodes
+             *
+             * @param[in]  n0      first node ID connected by this edge
+             * @param[in]  n1      second node ID connected by this edge
+             * @param[in]  attrib  user-defined attribute that stores information at this edge
+             */
+            edge(size_t n0, size_t n1, EdgeAttribute attrib) {
+                _n[0] = n0;
+                _n[1] = n1;
+                _ea = attrib;
+            }
+
+            /**
+             * @brief      Assigns or adjusts nodes connected by this edge.
+             *
+             * @param[in]  n0    sets the first node connected by this edge
+             * @param[in]  n1    sets the second node connected by this edge
+             */
+            void nodes(size_t n0, size_t n1) {
+                _n[0] = n0;
+                _n[1] = n1;
+            }
+
+            /**
+             * @brief      Retrieve the first node ID
+             *
+             * @return     index into the _nodes vector
+             */
+            size_t n0() { return _n[0]; }
+
+            /**
+             * @brief      Retrieve the first node ID
+             *
+             * @return     index into the _nodes vector
+             */
+            size_t n1() { return _n[1]; }
+
+            /**
+             * @brief      Returns the user-specified edge attribute
+             *
+             * @return     The edge attribute.
+             */
+            EdgeAttribute ea() { return _ea; }
+
+            /**
+             * @brief      Assigns an attribute to this edge
+             *
+             * @param[in]  attrib  The attribute
+             */
+            void ea(EdgeAttribute attrib) { _ea = attrib; }
+          
+
+        };
+
+        /**
+         * @brief      Defines a class for a node, which connects multiple fibers and consists of a geometric point and attributes
+         */
+        class node : public vertex<VertexAttribute> {
+        protected:
+            NodeAttribute _na;
+            std::vector<size_t> _ei;   // indices of connected edges
+
+        public:
+
+            /**
+             * @brief      Create a new node from an existing vertex and a node-specific attribute
+             *
+             * @param[in]  v       Existing vertex
+             * @param[in]  attrib  Node attribute
+             */
+            node(vertex<VertexAttribute> v, NodeAttribute attrib) : vertex<VertexAttribute>(v) {
+                _na = attrib;
+            }
+
+            /**
+             * @brief      Retrieves the indices of all edges connected to this node
+             *
+             * @return     vector of index values corresponding to each connected edge
+             */
+            std::vector<size_t> edges() { return _ei; }
+
+            /**
+             * @brief      Connects this node to an edge. This should be done in parity with connecting edges to nodes
+             *
+             * @param[in]  ei    ID of the edge connecting to this node
+             */
+            void add_edge(size_t ei) { _ei.push_back(ei); }
+
+            /**
+             * @brief      Retrieve the node-specific attribute
+             *
+             * @return     The node attribute.
+             */
+            NodeAttribute na() { return _na; }
+
+            /**
+             * @brief      Assign or update an attribute for this node
+             *
+             * @param[in]  na    The new value for the node attribute
+             */
+            void na(NodeAttribute na) { _na = na; }
+        };
+
     protected:
-        struct _Edge : public fiber<VertexAttribute> {
-            EdgeAttribute a;
-            size_t inodes[2];              // node indices
+        /**
+         * List of nodes in this network, essentially modeled as a graph
+         */
+        std::vector<node> _nodes;
 
-            _Edge(fiber<VertexAttribute> f, size_t n0, size_t n1, EdgeAttribute attrib) : fiber<VertexAttribute>(f) {
-                inodes[0] = n0;
-                inodes[1] = n1;
-                a = attrib;
-            }
-        };
+        /**
+         * List of edges in this network, modeled as a mathematical graph
+         */
+        std::vector<edge> _edges;
 
-        struct _Node : public vertex<VertexAttribute> {
-            NodeAttribute a;
-            std::vector<size_t> iedges;   // indices of connected edges
-
-            _Node(vertex<VertexAttribute> v, NodeAttribute attrib) : vertex<VertexAttribute>(v) {
-                a = attrib;
-            }
-        };
-
-        std::vector<_Node> _nodes;
-        std::vector<_Edge> _edges;
-
+        /**
+         * An axis-aligned bounding box containing all geometric positions in the network.
+         */
         std::pair<glm::vec3, glm::vec3> _aabb; // bounding box around all fiber points
 
     public:
 
+        /**
+         * @brief      Adds a node to the network using a geometric position and attribute
+         *
+         * @param[in]  v     vertex describing the geometric position of the node
+         * @param[in]  n     node-specific attributes
+         *
+         * @return     { description_of_the_return_value }
+         */
         size_t add_node(vertex<VertexAttribute> v, NodeAttribute n) {
-            _Node new_node(v, n);
+            node new_node(v, n);
             _nodes.push_back(new_node);
+            return _nodes.size() - 1;
         }
 
         /**
@@ -51,16 +188,12 @@ namespace tira {
          */
         size_t add_edge(size_t inode0, size_t inode1, fiber<VertexAttribute> f, EdgeAttribute a) {
 
-            _Edge new_edge(f, inode0, inode1, a);                                  // create a new edge structure
-            //new_edge = f;
-            //new_edge.inodes[0] = inode0;                    // set the two node IDs based on user input
-            //new_edge.inodes[1] = inode1;
-            
-            //new_edge.ipts.resize(pts.size());               // resize the medial axis point index array to match the number of points in the edge
-            //std::iota(new_edge.ipts.begin(), new_edge.ipts.end(), _points.size());  // create a sequential list of IDs starting with the last index in _points
+            edge new_edge(f, inode0, inode1, a);                                  // create a new edge structure
             _edges.push_back(new_edge);
-
-            //_points.insert(_points.end(), pts.begin(), pts.end());      // insert all of the new points for this edge into the _points array
+            
+            size_t idx = _edges.size() - 1;
+            _nodes[inode0].add_edge(idx);
+            _nodes[inode1].add_edge(idx);
 
             return _edges.size() - 1;
         }
@@ -74,9 +207,6 @@ namespace tira {
             const size_t n0 = _edges[id].inodes[0];
             const size_t n1 = _edges[id].inodes[1];
 
-            //std::pair<glm::vec4, glm::vec4> edge_pts;
-            //edge_pts.first = _points[n0];
-            //edge_pts.second = _points[n1];
             v0 = _nodes[n0].v;
             v1 = _nodes[n1].v;
         }
