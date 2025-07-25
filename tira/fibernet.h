@@ -57,6 +57,18 @@ namespace tira {
             }
 
             /**
+             * @brief       Creates a new edge using an existing edge and new fiber - Used to update the geometry of the edge.
+             *
+             * @param f     New fiber geometry
+             * @param e     Existing edge, where the graph and attribute parameters will be copied
+             */
+            edge(fiber<VertexAttribute> f, edge& e) : fiber<VertexAttribute>(f) {
+                _n[0] = e._n[0];
+                _n[1] = e._n[1];
+                _ea = e._ea;
+            }
+
+            /**
              * @brief      Assigns or adjusts nodes connected by this edge.
              *
              * @param[in]  n0    sets the first node connected by this edge
@@ -94,8 +106,6 @@ namespace tira {
              * @param[in]  attrib  The attribute
              */
             void ea(EdgeAttribute attrib) { _ea = attrib; }
-          
-
         };
 
         /**
@@ -158,11 +168,6 @@ namespace tira {
          */
         std::vector<edge> _edges;
 
-        /**
-         * An axis-aligned bounding box containing all geometric positions in the network.
-         */
-        std::pair<glm::vec3, glm::vec3> _aabb; // bounding box around all fiber points
-
     public:
 
         /**
@@ -211,8 +216,19 @@ namespace tira {
             v1 = _nodes[n1].v;
         }
 
-        inline fiber<VertexAttribute> fiber_edge(const size_t id) const {
+        fiber<VertexAttribute> fiber_edge(const size_t id) const {
             return _edges[id];
+        }
+
+	    fibernet smooth(float sigma) {
+            fibernet smoothed;
+            smoothed._nodes = _nodes;
+            for (size_t ei=0; ei<_edges.size(); ei++) {
+                fiber f = _edges[ei].smooth_gaussian(sigma);
+                edge new_edge(f, _edges[ei]);
+                smoothed._edges.push_back(new_edge);
+            }
+            return smoothed;
         }
 	};
 }

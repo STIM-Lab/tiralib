@@ -1,4 +1,6 @@
-﻿#include <vector>
+﻿#pragma once
+
+#include <vector>
 #include <numeric>
 #include <string>
 #include <fstream>
@@ -14,8 +16,6 @@ namespace tira {
 
 class vascular : public fibernet<float, unsigned int, unsigned int> {
 
-public:
-    typedef glm::vec4 medial_pt;
 
 protected:
 
@@ -57,7 +57,6 @@ protected:
         uint32_t node0, node1;
         uint64_t skel_offset;
     };
-protected:
 
     size_t _graph_bytes() const {                  // returns the size (in bytes) for each sub-section of the vasc file
         return _nodes.size() * sizeof(uint32_t) + _edges.size() * (2 * sizeof(uint32_t) + 3 * sizeof(uint64_t));
@@ -229,9 +228,14 @@ public:
         v1 = _nodes[n1];
     }
 
-    fiber<float> centerline(const size_t id) const {
-
+    fiber<> centerline(const size_t id) const {
         return _edges[id];
+    }
+
+    vascular smooth(float sigma) {
+        fibernet new_fibernet = fibernet::smooth(sigma);
+        vascular new_vascular(new_fibernet);
+        return new_vascular;
     }
 };
 

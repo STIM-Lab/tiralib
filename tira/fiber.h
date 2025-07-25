@@ -11,8 +11,9 @@ namespace tira {
 	 *
 	 * @tparam     VertexAttribute  Data type for user-defined attributes tstored with each vertex position
 	 */
-	template <typename VertexAttribute>
+	template <typename VertexAttribute = float>
 	class vertex : public glm::vec3 {
+
 		/**
 		 * User-defined attribute stored at each vertex position (ex. radius, color, etc)
 		 */
@@ -41,25 +42,17 @@ namespace tira {
 
 
 	protected:
+		std::vector< float > _lv;		// array storing the parameterized length values at each vertex
+
+		float _gaussian(float d, float sigma) {
+			float n = 1.0f / std::sqrt(2.0f * std::numbers::pi * sigma * sigma);
+			float y = -(d * d) / (2 * sigma * sigma);
+			return n * std::exp(y);
+		}
 
 	public:
 
 		fiber() : std::vector< vertex<VertexAttribute> >() {}
-
-		/**
-		 * @brief      Calculates the length of the fiber using linear interpolation between points.
-		 *
-		 * @return     Current fiber length
-		 */
-		float length() {
-
-			float l = 0.0f;
-			for (size_t vi = 1; vi < this->size(); vi++) {
-				l += glm::length(this->at(vi) - this->at(vi + 1));
-			}
-
-			return l;
-		}
 
 		/**
 		 * @brief      Creates a vertex from a position and attribute, and inserts it at the end of the fiber
@@ -68,8 +61,42 @@ namespace tira {
 		 * @param[in]  r     user-defined attribute associated with this vertex (ex. radius)
 		 */
 		void push_back(glm::vec3 p, VertexAttribute r) {
-			vertex<VertexAttribute> v(p, r);
-			std::vector< vertex<VertexAttribute> >::push_back(v);
+			vertex<VertexAttribute> v(p, r);						// generate a new vertex from the provided position and attribute
+
+			// update the LV vector to store the length at the new vertex
+			if (this->size() == 0) _lv.push_back(0);				// if the current fiber is empty, the first vertex is l(v) = 0
+			else {
+				float d = glm::length(p - this->back()) ;			// otherwise l(v) = l(v_{n-1}) + |v_{n} - v_{n-1}|
+				_lv.push_back(d + _lv.back());
+			}
+
+			std::vector< vertex<VertexAttribute> >::push_back(v);	// push the vertex into the fiber
+		}
+
+		void push_back(vertex<VertexAttribute> v) {
+			push_back(glm::vec3(v), v.va());
+		}
+
+		fiber smooth_gaussian(float sigma, bool anchor_endpoints = true) {
+
+			fiber smoothed;
+			for (size_t vi=0; vi<this->size(); vi++) {
+				if (anchor_endpoints && (vi == 0 || vi == this->size() - 1)) {
+					vertex v = this->at(vi);
+					smoothed.push_back(v);
+				}
+				else {
+					glm::vec3 p(0.0f);
+					float g_energy = 0.0f;
+					for (size_t pi=0; pi<this->size(); pi++) {
+						float d = _lv[vi] - _lv[pi];
+						p += _gaussian(d, sigma) * this->at(pi);
+						g_energy += _gaussian(d, sigma);
+					}
+					smoothed.push_back(p / g_energy, this->at(vi).va());
+				}
+			}
+			return smoothed;
 		}
 
 	};

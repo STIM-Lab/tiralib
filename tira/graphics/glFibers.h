@@ -76,7 +76,7 @@ namespace tira {
 
         std::vector<glVertexBuffer> _vbuffers;
 
-        glVertexArray _varray;
+        //glVertexArray _varray;
         glVertexBufferLayout _layout;
         bool _buffers_valid;                // flag specifies that the buffers are up to date and accurately represent the fiber data
 
@@ -141,11 +141,18 @@ namespace tira {
 
     public:
 
-        glFibers() {
-            _mode = RenderMode::LINES;                                          // default to rendering lines
-            _buffers_valid = false;                                             // OpenGL buffers have not been allocated or set
-            _aabb.first = glm::vec3(std::numeric_limits<float>::infinity());    // initialize the bounding box to infinity
+        void clear() {
+            _clear_buffers();
+            _buffers_valid = false;                                                     // OpenGL buffers have not been allocated or set
+            _aabb.first = glm::vec3(std::numeric_limits<float>::infinity());      // initialize the bounding box to infinity
             _aabb.second = glm::vec3(-std::numeric_limits<float>::infinity());
+            _fibers.clear();
+            _vbuffers.clear();
+        }
+
+        glFibers() {
+            clear();
+            _mode = RenderMode::LINES;                                          // default to rendering lines
             _shader.CreateShader(glShaderStrings::vf_brewer);
         }
 
