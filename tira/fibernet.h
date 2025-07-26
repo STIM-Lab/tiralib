@@ -28,6 +28,10 @@ namespace tira {
             size_t _n[2];              // node indices
 
         public:
+            //size_t size() const { return fiber<VertexAttribute>::size(); }
+            //vertex<VertexAttribute>& operator[](size_t idx) { return this->at(idx); }
+            //void push_back(glm::vec3 p, VertexAttribute r) { this->push_back(p, r); }
+
 
             /**
              * @brief      Constructs a new edge given an existing fiber, two nodes, and an edge attribute
@@ -37,7 +41,7 @@ namespace tira {
              * @param[in]  n1      second node connected to this edge (closest to the last vertex in the fiber)
              * @param[in]  attrib  user-defined attribute to store information within each edge
              */
-            edge(fiber<VertexAttribute> f, size_t n0, size_t n1, EdgeAttribute attrib) : fiber<VertexAttribute>(f) {
+            edge(fiber<VertexAttribute> f, size_t n0, size_t n1, EdgeAttribute attrib = {}) : fiber<VertexAttribute>(f) {
                 _n[0] = n0;
                 _n[1] = n1;
                 _ea = attrib;
@@ -50,7 +54,7 @@ namespace tira {
              * @param[in]  n1      second node ID connected by this edge
              * @param[in]  attrib  user-defined attribute that stores information at this edge
              */
-            edge(size_t n0, size_t n1, EdgeAttribute attrib) {
+            edge(size_t n0, size_t n1, EdgeAttribute attrib = {}) {
                 _n[0] = n0;
                 _n[1] = n1;
                 _ea = attrib;
@@ -98,7 +102,7 @@ namespace tira {
              *
              * @return     The edge attribute.
              */
-            EdgeAttribute ea() { return _ea; }
+            EdgeAttribute& ea() { return _ea; }
 
             /**
              * @brief      Assigns an attribute to this edge
@@ -191,7 +195,7 @@ namespace tira {
          * @param f is the fiber geometry
          * @return the internal ID of the edge in the graph
          */
-        size_t add_edge(size_t inode0, size_t inode1, fiber<VertexAttribute> f, EdgeAttribute a) {
+        size_t add_edge(size_t inode0, size_t inode1, fiber<VertexAttribute> f, EdgeAttribute a = {}) {
 
             edge new_edge(f, inode0, inode1, a);                                  // create a new edge structure
             _edges.push_back(new_edge);
@@ -218,6 +222,22 @@ namespace tira {
 
         fiber<VertexAttribute> fiber_edge(const size_t id) const {
             return _edges[id];
+        }
+
+	    float length(size_t ei) {
+            float l = _edges[ei].length();             // calculate the length of the primary fiber
+
+            // add the first and last fiber segments to the length
+            glm::vec3 p0 = _nodes[_edges[ei].n0()];     // get the first point in the vessel centerline (at the node)
+            glm::vec3 p1 = _edges[ei][0];               // get the second point in the centerline (first point in the fiber)
+
+            glm::vec3 pn_1 = _edges[ei].back();         // get the second-to-last point in the centerline (last point in the fiber)
+            glm::vec3 pn = _nodes[_edges[ei].n1()];     // get the last point in the centerline (second node)
+
+            float l0 = glm::length(p1 - p0);
+            float ln = glm::length(pn - pn_1);
+
+            return l + l0 + ln;
         }
 
 	    fibernet smooth(float sigma) {

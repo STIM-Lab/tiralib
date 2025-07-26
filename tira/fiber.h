@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <array>
 
 #include <glm/glm.hpp>
 
@@ -75,6 +76,14 @@ namespace tira {
 
 		void push_back(vertex<VertexAttribute> v) {
 			push_back(glm::vec3(v), v.va());
+		}
+
+		float length() {
+			float l = 0;
+			for (size_t vi=1; vi<this->size(); vi++) {
+				l+= glm::length(this->at(vi) - this->at(vi-1));
+			}
+			return l;
 		}
 
 		fiber smooth_gaussian(float sigma, bool anchor_endpoints = true) {

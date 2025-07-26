@@ -1,5 +1,6 @@
 #include <vector>
 #include <tira/graphics/camera.h>
+#include <tira/fiber.h>
 
 #include <tira/graphics/glVertexBuffer.h>
 #include <tira/graphics/glVertexBufferLayout.h>
@@ -23,35 +24,16 @@ namespace tira {
      * This can be a single attribute (ex. float for radii) or a structure containing multiple data types and variables. The
      * formatting for this structure is specified using a glVertexBufferLayout class.
      */
-    template <typename PointAttributeType = float, typename FiberAttributeType = float>
+    //template <typename VertexAttributeType = float, typename FiberAttributeType = float>
+    template<int VertexAttributeNumber = 1, int FiberAttributeNumber = 1>
     class glFibers {
-
-        // A single Point consists of (1) a 3D vertex and (2) user-specified per-point attributes.
-        // The point forms the basis for a fiber, and additional functions will allow the user to
-        // specify which attributes will be used for features (ex. radius, color) when rendering.
-        class _Point : public glm::vec3 {
-        public:
-            PointAttributeType r;                           // stores the attribute associated with this point
-
-            _Point& operator=(const glm::vec3& rhs) {       // use operator= to set coordinates from a vec3
-                x = rhs.x;
-                y = rhs.y;
-                z = rhs.z;
-                return *this;
-            }
-        };
-
-
-        // A Fiber consists of a vector of Points that are all connected from first to last
-        class _Fiber : public std::vector<_Point> {
-        public:
-            FiberAttributeType attribute;
-        };
 
     public:
 
         // The RenderMode enumeration allows the user to specify how the fibers will be rendered.
         enum RenderMode {LINES, TUBES, BILLBOARDS};
+        typedef std::array<float, VertexAttributeNumber> VertexAttributes;
+        typedef std::array<float, FiberAttributeNumber> FiberAttributes;
 
     protected:
         
@@ -65,7 +47,7 @@ namespace tira {
          * Vector that stores all fibers in the structure. This array will be used to build vertex arrays
          * and buffers to facilitate rendering.
          */
-        std::vector< _Fiber > _fibers;
+        std::vector< fiber< VertexAttributes > > _fibers;
 
         /**
          * Pair that stores an aligned bounding box that surrounds the entire set of fibers.
@@ -108,7 +90,7 @@ namespace tira {
                 std::vector<glm::vec3> varray;
 
 
-                glVertexBuffer new_buffer(&_fibers[fi][0], _fibers[fi].size() * sizeof(_Point));
+                glVertexBuffer new_buffer(&_fibers[fi][0], _fibers[fi].size() * sizeof(vertex<VertexAttributes>));
 
                 _vbuffers.push_back(new_buffer);
                 //_count.push_back(_fibers[fi].size());
@@ -131,7 +113,7 @@ namespace tira {
             if (!_buffers_valid)
                 _generate_buffers();
 
-            size_t point_bytes = sizeof(_Point);
+            size_t point_bytes = sizeof(vertex<VertexAttributes>);
             size_t layout_bytes = _layout.bytes();
 
             if (layout_bytes != point_bytes)
@@ -170,41 +152,24 @@ namespace tira {
          * @param attributes
          * @return
          */
-        size_t add_fiber(std::vector<glm::vec3> vertices, std::vector<PointAttributeType> attributes = {0}) {
+        size_t add_fiber(std::vector<glm::vec3> positions, std::vector<VertexAttributes> attributes) {
 
-            _Fiber new_fiber;                                       // generate a new internal fiber
+            if (positions.size() != attributes.size())
+                throw std::runtime_error("glFibers ERROR: the vectors of positions and attributes have different sizes");
 
-            for (size_t vi = 0; vi < vertices.size(); vi++) {       // for each vertex in the vertex list
-                _Point new_p;                                       // create a new point for the vertex
-                new_p = vertices[vi];                               // set the coordinates of the point to the vertex coordinates
-                if (vi >= attributes.size())                        // if there are more vertices than attributes
-                    new_p.r = attributes.back();                    // use the last radius in the attributes vector
-                else
-                    new_p.r = attributes[vi];                       // otherwise assign the supplied attribute
-                new_fiber.push_back(new_p);                         // push the new point into the new fiber
-                _update_aabb(new_p);                                // update the axis aligned bounding box to include the new point
+            fiber<VertexAttributes> new_fiber;                                            // generate a new internal fiber
+
+            for (size_t vi = 0; vi < positions.size(); vi++) {           // for each vertex in the vertex list
+                VertexAttributes va;
+                va = attributes[vi];                                    // assign the supplied attribute
+                vertex<VertexAttributes> new_v(positions[vi], va);    // create a new point for the vertex
+                new_fiber.push_back(new_v);                             // push the new point into the new fiber
+                _update_aabb(new_v);                                    // update the axis aligned bounding box to include the new point
             }
-            _fibers.push_back(new_fiber);                           // add the new fiber to the fiber list
+            _fibers.push_back(new_fiber);                               // add the new fiber to the fiber list
 
-            _buffers_valid = false;                                 // falsify the buffers (since we've added new data)
+            _buffers_valid = false;                                     // falsify the buffers (since we've added new data)
             return _fibers.size() - 1;
-        }
-
-        void render(glm::mat4 View, glm::mat4 Proj) {
-
-            _validate();            // validate that the data structure is ready for rendering
-
-            for (size_t bi = 0; bi < _vbuffers.size(); bi++) {
-                
-                _vbuffers[bi].Bind();
-                _shader.Bind();
-                _shader.SetUniformMat4f("V", View);
-                _shader.SetUniformMat4f("P", Proj);
-                GLERROR(glEnableVertexAttribArray(0));
-                GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(_Point), (const void*)0));
-                _layout.Bind();
-                glDrawArrays(GL_LINE_STRIP, 0, _fibers[bi].size());
-            }
         }
 
         void vertex_attributes(std::vector<GLenum> types) {
@@ -213,6 +178,23 @@ namespace tira {
 
             for (size_t i = 0; i < types.size(); i++)
                 _layout.Push(1, types[i]);            
+        }
+
+        void render(glm::mat4 View, glm::mat4 Proj) {
+
+            _validate();            // validate that the data structure is ready for rendering
+
+            for (size_t bi = 0; bi < _vbuffers.size(); bi++) {
+
+                _vbuffers[bi].Bind();
+                _shader.Bind();
+                _shader.SetUniformMat4f("V", View);
+                _shader.SetUniformMat4f("P", Proj);
+                GLERROR(glEnableVertexAttribArray(0));
+                GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
+                _layout.Bind();
+                glDrawArrays(GL_LINE_STRIP, 0, _fibers[bi].size());
+            }
         }
 
 

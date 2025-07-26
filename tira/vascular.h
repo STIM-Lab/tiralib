@@ -5,6 +5,7 @@
 #include <string>
 #include <fstream>
 #include <cstdint>
+#include <limits>
 
 #include <glm/glm.hpp>
 
@@ -13,11 +14,21 @@
 
 namespace tira {
 
+    struct VesselAttributes {
+        float length ;
+        float tortuosity;
+        float avg_radius;
+    };
 
-class vascular : public fibernet<float, unsigned int, unsigned int> {
+    typedef fibernet<float, VesselAttributes, unsigned int> vesselnet;
+    typedef fiber<float> vessel;
+
+class vascular : public vesselnet {
 
 
 protected:
+
+    float _length_range[2];
 
     static constexpr uint8_t major = 1;
     static constexpr uint8_t minor = 0;
@@ -62,7 +73,7 @@ protected:
         return _nodes.size() * sizeof(uint32_t) + _edges.size() * (2 * sizeof(uint32_t) + 3 * sizeof(uint64_t));
     }
 
-    inline size_t _skeleton_bytes() const {
+    size_t _skeleton_bytes() const {
         size_t node_vertices = _nodes.size() * 4 * 4;       // each node vertex holds four floats (4*4 bytes)
         size_t edge_vertices = _edges.size() * 8;           // each edge stores the number of points in a uint64
         for (size_t ei = 0; ei < _edges.size(); ei++) {
@@ -73,9 +84,46 @@ protected:
     size_t _surface_bytes() const { return 0; }
     size_t _volume_bytes() const { return 0; }
 
-    size_t _add_point(glm::vec3 p, float r);
+    void _update_length_range(float length) {
+        if (length < _length_range[0])
+            _length_range[0] = length;
+        if (length > _length_range[1])
+            _length_range[1] = length;
+    }
+
+    void _calculate_length_range() {
+        _length_range[0] = std::numeric_limits<float>::infinity();
+        _length_range[1] = 0;
+        for (size_t ei=0; ei<_edges.size(); ei++) {
+            _update_length_range(_edges[ei].ea().length);
+        }
+    }
+
+    void _calculate_edge_attributes(size_t ei) {
+        _edges[ei].ea().length = length(ei);            // calculate and store the length of the vessel
+        _update_length_range(_edges[ei].ea().length);
+    }
+
+    void _calculate_attributes() {
+        for (size_t ei=0; ei<_edges.size(); ei++) {
+            _calculate_edge_attributes(ei);
+        }
+    }
 
 public:
+
+    void init() {
+        _length_range[0] = std::numeric_limits<float>::infinity();
+        _length_range[1] = 0;
+    }
+
+    vascular(fibernet f) : fibernet(f) {
+        init();
+        _calculate_attributes();
+    }
+
+    vascular() : fibernet() {}
+
     void save(std::string filename) {
         std::ofstream out(filename, std::ios::binary);                       // create an input file stream
         if (!out.is_open())                                                      // make sure that the file is loaded
@@ -144,7 +192,7 @@ public:
             size_t n0, n1;
             in.read((char*)&n0, 8);
             in.read((char*)&n1, 8);
-            fibernet::edge new_edge(n0, n1, 0);
+            fibernet::edge new_edge(n0, n1);
             _edges.push_back(new_edge);
 
             size_t skel_offset;
@@ -177,6 +225,7 @@ public:
                 _edges[ei].push_back(p, r);
             }
         }
+        _calculate_attributes();                        // calculate attributes for the vascular network
         in.close();
     }
 
@@ -191,8 +240,8 @@ public:
         float radius = pt[3];
         vertex<float> new_vertex(coord, radius);
 
-        fibernet<>::add_node(new_vertex, 0);
-        return fibernet<>::_nodes.size() - 1;
+        vesselnet::add_node(new_vertex, 0);
+        return vesselnet::_nodes.size() - 1;
     }
 
 
@@ -203,7 +252,9 @@ public:
         for (size_t pi = 0; pi < pts.size(); pi++) {
             new_fiber.push_back(pts[pi], pts[pi][3]);
         }
-        return fibernet<>::add_edge(inode0, inode1, new_fiber, 0);
+        size_t ei = vesselnet::add_edge(inode0, inode1, new_fiber);
+        _calculate_edge_attributes(ei);
+        return ei;
     }
 
     /**
@@ -218,9 +269,14 @@ public:
      */
     size_t nodes() const { return _nodes.size(); }
 
+    /**
+     * @brief Retrieve the vertices representing the nodes of an edge
+     *
+     * @param id index for the edge that will be retrieved
+     * @param v0 first vertex (will be filled with the vertex stored at the first edge node)
+     * @param v1 second vertex (will be filled with the vertex stored at the second edge node)
+     */
     void edge(size_t id, vertex<float>& v0, vertex<float>& v1) {
-        //const size_t n0 = fibernet<float, int, int>::_edges[id].n0();
-        //const size_t n1 = _edges[id].n1();
         size_t n0 = _edges[id].n0();
         size_t n1 = _edges[id].n1();
 
