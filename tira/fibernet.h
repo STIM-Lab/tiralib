@@ -28,6 +28,7 @@ namespace tira {
             size_t _n[2];              // node indices
 
         public:
+            friend class node;
             //size_t size() const { return fiber<VertexAttribute>::size(); }
             //vertex<VertexAttribute>& operator[](size_t idx) { return this->at(idx); }
             //void push_back(glm::vec3 p, VertexAttribute r) { this->push_back(p, r); }
@@ -110,6 +111,38 @@ namespace tira {
              * @param[in]  attrib  The attribute
              */
             void ea(EdgeAttribute attrib) { _ea = attrib; }
+
+            /**
+             * Smoothing an edge is a little more complicated than smoothing a fiber: we have to account for the node positions,
+             * which are not included in the "fiber" component of the edge. We do that by:
+             * 1) Create a new fiber that duplicates the current edge fiber
+             * 2) Insert both node points at either end of the fiber
+             * 3) Smooth the new fiber (while anchoring the end points)
+             * 4) Removing the node points from the fiber
+             * 5) Creating a new edge from the internal nodes of the smoothed fiber
+             *
+             * @param sigma the standard deviation of the smoothing kernel (in the position units of the vertices)
+             * @return a new edge with a smoothed fiber component
+             */
+            edge smooth_gaussian(float sigma, vertex<VertexAttribute> node_v0, vertex<VertexAttribute> node_v1) {
+                fiber<VertexAttribute> original_fiber = *this;
+
+                original_fiber.insert(original_fiber.begin(), node_v0);
+                original_fiber.push_back(node_v1);
+                fiber<VertexAttribute> smoothed_fiber = original_fiber.smooth_gaussian(sigma);
+                smoothed_fiber.erase(smoothed_fiber.begin());
+                smoothed_fiber.pop_back();
+
+                edge smoothed_edge(smoothed_fiber, _n[0], _n[1]);
+                return smoothed_edge;
+            }
+
+            float length(vertex<VertexAttribute> v0, vertex<VertexAttribute> v1) {
+                fiber<VertexAttribute> original_fiber = *this;
+                original_fiber.insert(original_fiber.begin(), v0);
+                original_fiber.push_back(v1);
+                return original_fiber.length();
+            }
         };
 
         /**
@@ -159,6 +192,7 @@ namespace tira {
              * @param[in]  na    The new value for the node attribute
              */
             void na(NodeAttribute na) { _na = na; }
+
         };
 
     protected:
@@ -215,12 +249,12 @@ namespace tira {
      * @param id identifier for the edge that will be returned
      * @return std::pair storing the coordinates and radii of both nodes connected by the edge
      */
-        void graph_edge(const size_t id, vertex<VertexAttribute>& v0, vertex<VertexAttribute>& v1) const {
-            const size_t n0 = _edges[id].inodes[0];
-            const size_t n1 = _edges[id].inodes[1];
+        void graph_edge(const size_t id, vertex<VertexAttribute>& v0, vertex<VertexAttribute>& v1) {
+            const size_t n0 = _edges[id].n0();
+            const size_t n1 = _edges[id].n1();
 
-            v0 = _nodes[n0].v;
-            v1 = _nodes[n1].v;
+            v0 = _nodes[n0];
+            v1 = _nodes[n1];
         }
 
         fiber<VertexAttribute> fiber_edge(const size_t id, bool include_node_points = true) const {
@@ -233,10 +267,14 @@ namespace tira {
         }
 
 	    float length(size_t ei) {
-            float l = _edges[ei].length();             // calculate the length of the primary fiber
+            vertex<float> v0;
+            vertex<float> v1;
+            graph_edge(ei, v0, v1);
+            float l = _edges[ei].length(v0, v1);             // calculate the length of the primary fiber
+            return l;
 
             // add the first and last fiber segments to the length
-            glm::vec3 p0 = _nodes[_edges[ei].n0()];     // get the first point in the vessel centerline (at the node)
+            /*glm::vec3 p0 = _nodes[_edges[ei].n0()];     // get the first point in the vessel centerline (at the node)
             glm::vec3 p1 = _edges[ei][0];               // get the second point in the centerline (first point in the fiber)
 
             glm::vec3 pn_1 = _edges[ei].back();         // get the second-to-last point in the centerline (last point in the fiber)
@@ -246,15 +284,15 @@ namespace tira {
             float ln = glm::length(pn - pn_1);
 
             return l + l0 + ln;
+            */
         }
 
-	    fibernet smooth(float sigma) {
-            fibernet smoothed;
-            smoothed._nodes = _nodes;
+	    fibernet smooth_gaussian(float sigma) {
+            fibernet smoothed;                                  // create a new fiber network to store the smoothed fibers
+            smoothed._nodes = _nodes;                           // store all nodes (their positions will be unchanged)
             for (size_t ei=0; ei<_edges.size(); ei++) {
-                fiber f = _edges[ei].smooth_gaussian(sigma);
-                edge new_edge(f, _edges[ei]);
-                smoothed._edges.push_back(new_edge);
+                edge smoothed_edge = _edges[ei].smooth_gaussian(sigma, _nodes[_edges[ei].n0()], _nodes[_edges[ei].n1()]);
+                smoothed._edges.push_back(smoothed_edge);
             }
             return smoothed;
         }

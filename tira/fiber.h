@@ -29,7 +29,8 @@ namespace tira {
 		 * @param[in]  p     { parameter_description }
 		 * @param[in]  r     { parameter_description }
 		 */
-		vertex(glm::vec3 p, VertexAttribute r) : glm::vec3(p) { _va = r; }
+		vertex(glm::vec3 p = glm::vec3(0.0f), VertexAttribute r = {}) : glm::vec3(p) { _va = r; }
+
 
 		void va(VertexAttribute r) { _va = r; }
 		VertexAttribute va() { return _va; }

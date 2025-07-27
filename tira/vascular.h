@@ -109,11 +109,27 @@ protected:
         }
     }
 
-    void _remove_duplicate_points(float epsilon = 0) {
+    /**
+     * Removes duplicated vertices within fibers and between fibers and nodes. These shouldn't occur, so a warning
+     * is output whenever it happens.
+     */
+    void _remove_duplicate_points() {
         for (size_t ei=0; ei<_edges.size(); ei++) {
             size_t removed = _edges[ei].remove_duplicates();
             if (removed != 0) {
-                std::cout<<"tira::vascular WARNING: "<<removed<<" duplicate points detected in edge "<<ei<<std::endl;
+                std::cout<<"tira::vascular WARNING: "<<removed<<" duplicate points detected in the fiber associated with edge "<<ei<<std::endl;
+            }
+
+            // test for duplicates between the edge fiber and its nodes
+            vertex<float> v0 = _nodes[_edges[ei].n0()];
+            if (v0 == _edges[ei][0]) {
+                _edges[ei].erase(_edges[ei].begin());
+                std::cout<<"tira::vascular WARNING: node 0 is duplicated with the fiber in edge "<<ei<<std::endl;
+            }
+            vertex<float> v1 = _nodes[_edges[ei].n1()];
+            if (v1 == _edges[ei].back()) {
+                _edges[ei].pop_back();
+                std::cout<<"tira::vascular WARNING: node 1 is duplicated with the fiber in edge "<<ei<<std::endl;
             }
         }
     }
@@ -184,7 +200,7 @@ public:
         out.close();
     }
 
-    void load(std::string filename, float epsilon = 0) {
+    void load(std::string filename) {
         std::ifstream in(filename, std::ios::binary);                       // create an input file stream
         if (!in.is_open())                                                      // make sure that the file is loaded
             throw std::runtime_error("Could not open file " + filename);    // otherwise throw an exception
@@ -233,8 +249,7 @@ public:
                 _edges[ei].push_back(p, r);
             }
         }
-        if (epsilon >= 0)
-            _remove_duplicate_points();
+        _remove_duplicate_points();
         _calculate_attributes();                        // calculate attributes for the vascular network
         in.close();
     }
@@ -294,12 +309,19 @@ public:
         v1 = _nodes[n1];
     }
 
-    fiber<> centerline(const size_t id) const {
-        return _edges[id];
+    fiber<> centerline(size_t id, bool include_nodes = true) {
+        fiber<float> c = _edges[id];
+        if (include_nodes) {
+            vertex<float> v0 = _nodes[vesselnet::_edges[id].n0()];
+            c.insert(c.begin(), v0);
+            vertex<float> v1 = _nodes[vesselnet::_edges[id].n1()];
+            c.push_back(v1);
+        }
+        return c;
     }
 
     vascular smooth(float sigma) {
-        fibernet new_fibernet = fibernet::smooth(sigma);
+        fibernet new_fibernet = fibernet::smooth_gaussian(sigma);
         vascular new_vascular(new_fibernet);
         return new_vascular;
     }
