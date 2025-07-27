@@ -5,6 +5,26 @@
 namespace tira {
 
     /**
+     * A fibernet object is an undirected spatial graph with the following characteristics:
+     * - Spatial locations in the graph are represented by a vertex consisting of a 3D position and
+     *    a set of user-specified attributes (indicated by the VertexAttribute template parameter).
+     * - Edges are represented by a geometric path between nodes represented by an array of vertex data
+     * - Nodes are represented by a single vertex
+     * - Edges and Nodes can contain additional independent attributes specified by the EdgeAttribute
+     *   and NodeAttribute template parameters
+     *
+     * IMPORTANT: The graph is designed to be undirected, however the nodes for each edge must be specified
+     *   in the correct order so that they align with the path geometry for each edge. Calculations performed
+     *   in member functions consider the graph undirected. However, those calculations require the correct
+     *   alignment between nodes and path vertices.
+     *
+     *   For example, consider the following sequence of spatial positions:
+     *   [n0] p0---p1---p2---...---pn [n1].
+     *   Calculating the length() of this edge requires that n0 be adjacent to p0. In short, Nodes cannot
+     *   be trivially swapped within an edge and care should be taken to specify node positions in the
+     *   correct order when adding fibers.
+     *
+     *
      * @brief      Class provides functionality for an interconnected network of fibers.
      *
      * @tparam     VertexAttribute  The data type used to store user-defined attributes at each vertex
@@ -20,7 +40,7 @@ namespace tira {
 
         /**
          * @brief      This edge class extends a fiber to include a user-defined edge attribute 
-         * and a list of connected nodes
+         * and a list of connected edges
          */
         class edge : public fiber<VertexAttribute> {
         protected:
@@ -28,11 +48,6 @@ namespace tira {
             size_t _n[2];              // node indices
 
         public:
-            friend class node;
-            //size_t size() const { return fiber<VertexAttribute>::size(); }
-            //vertex<VertexAttribute>& operator[](size_t idx) { return this->at(idx); }
-            //void push_back(glm::vec3 p, VertexAttribute r) { this->push_back(p, r); }
-
 
             /**
              * @brief      Constructs a new edge given an existing fiber, two nodes, and an edge attribute
@@ -207,6 +222,19 @@ namespace tira {
         std::vector<edge> _edges;
 
     public:
+        /**
+         * @brief Returns the vertex representing the "first" node in an edge
+         * @param ei ID of the edge
+         * @return a vertex<VertexAttribute> providing the position and attributes for node n0 of edge ei
+         */
+        vertex<VertexAttribute> v0(size_t ei){ return _nodes[_edges[ei].n0()]; }
+
+	    /**
+         * @brief Returns the vertex representing the "second" node in an edge
+         * @param ei ID of the edge
+         * @return a vertex<VertexAttribute> providing the position and attributes for node n1 of edge ei
+         */
+        vertex<VertexAttribute> v1(size_t ei){ return _nodes[_edges[ei].n1()]; }
 
         /**
          * @brief      Adds a node to the network using a geometric position and attribute
@@ -257,37 +285,38 @@ namespace tira {
             v1 = _nodes[n1];
         }
 
-        fiber<VertexAttribute> fiber_edge(const size_t id, bool include_node_points = true) const {
-            fiber<VertexAttribute> f = _edges[id];
+        /**
+         * @brief Returns the path representing the edge as a fiber
+         * @param ei index of the edge path to be returned
+         * @param include_node_points flag indicating whether or not the nodes will be included in the path (default = true)
+         * @return a fiber representing the path of the edge connecting its nodes
+         */
+        fiber<VertexAttribute> fiber_edge(const size_t ei, bool include_node_points = true) const {
+            fiber<VertexAttribute> f = _edges[ei];
             if (include_node_points) {
-                f.insert(f.begin(), _nodes[_edges[id].inodes[0]]);
-                f.push_back(_nodes[_edges[id].inodes[1]]);
+                f.insert(f.begin(), _nodes[_edges[ei].inodes[0]]);
+                f.push_back(_nodes[_edges[ei].inodes[1]]);
             }
-            return _edges[id];
+            return _edges[ei];
         }
 
-	    float length(size_t ei) {
-            vertex<float> v0;
-            vertex<float> v1;
-            graph_edge(ei, v0, v1);
-            float l = _edges[ei].length(v0, v1);             // calculate the length of the primary fiber
+        /**
+         * @brief Returns the spatial length of an edge by following the fiber between both nodes
+         *
+         * @param ei id of the edge to be measured
+         * @return the length of the specified edge
+         */
+        float length(size_t ei) {
+            float l = _edges[ei].length(v0(ei), v1(ei));             // calculate the length of the primary fiber
             return l;
-
-            // add the first and last fiber segments to the length
-            /*glm::vec3 p0 = _nodes[_edges[ei].n0()];     // get the first point in the vessel centerline (at the node)
-            glm::vec3 p1 = _edges[ei][0];               // get the second point in the centerline (first point in the fiber)
-
-            glm::vec3 pn_1 = _edges[ei].back();         // get the second-to-last point in the centerline (last point in the fiber)
-            glm::vec3 pn = _nodes[_edges[ei].n1()];     // get the last point in the centerline (second node)
-
-            float l0 = glm::length(p1 - p0);
-            float ln = glm::length(pn - pn_1);
-
-            return l + l0 + ln;
-            */
         }
 
-	    fibernet smooth_gaussian(float sigma) {
+        /**
+         * @brief Applies a Gaussian smoothing operation to all edges in the network
+         * @param sigma standard deviation of the Gaussian kernel
+         * @return a new fibernet with all of the fibers smoothed by the kernel
+         */
+        fibernet smooth_gaussian(float sigma) {
             fibernet smoothed;                                  // create a new fiber network to store the smoothed fibers
             smoothed._nodes = _nodes;                           // store all nodes (their positions will be unchanged)
             for (size_t ei=0; ei<_edges.size(); ei++) {
