@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <vector>
 #include <array>
+#include <iostream>
 
 #include <glm/glm.hpp>
 
@@ -49,6 +51,52 @@ namespace tira {
 			float n = 1.0f / std::sqrt(2.0f * std::numbers::pi * sigma * sigma);
 			float y = -(d * d) / (2 * sigma * sigma);
 			return n * std::exp(y);
+		}
+
+		fiber<float> _d1() {
+			fiber<float> d_dt;
+
+			glm::vec3 p0 = this->at(0);
+			glm::vec3 p1 = this->at(1);
+			float l0_1 = glm::length(p1 - p0);
+
+			if (l0_1 != 0)
+				d_dt.push_back(vertex<float>((p1 - p0) / l0_1, l0_1));
+			else
+				d_dt.push_back(vertex<float>(glm::vec3(0.0f), 0));
+
+			float l1_2, l0_2;
+			glm::vec3 p2;
+			for (size_t pi=1; pi<this->size()-1; pi++) {
+				p0 = this->at(pi-1);
+				p1 = this->at(pi);
+				p2 = this->at(pi+1);
+
+				l0_1 = glm::length(p1 - p0);
+				l1_2 = glm::length(p2 - p1);
+				l0_2 = l0_1 + l1_2;
+				if (l0_2 != 0)
+					d_dt.push_back((p2 - p0) / l0_2, l0_2);
+				else
+					d_dt.push_back(vertex<float>(glm::vec3(0.0f), 0));
+
+			}
+
+			p1 = this->at(this->size()-2);
+			p2 = this->at(this->size()-1);
+			l1_2 = glm::length(p2 - p1);
+			if (l1_2 != 0)
+				d_dt.push_back(vertex<float>((p2 - p1) / l1_2, l1_2));
+			else
+				d_dt.push_back(vertex<float>(glm::vec3(0.0f), 0));
+
+			return d_dt;
+		}
+
+		bool _test_duplicates(vertex<VertexAttribute> a, vertex<VertexAttribute> b) {
+			if (a.x == b.x && a.y == b.y && a.z == b.z)
+				return true;
+			return false;
 		}
 
 	public:
@@ -107,6 +155,66 @@ namespace tira {
 			}
 			return smoothed;
 		}
+
+		size_t remove_duplicates() {
+			size_t size_before = this->size();
+
+			auto last = std::unique(this->begin(), this->end());
+			this->erase(last, this->end());
+
+			size_t size_after = this->size();
+
+			return size_before - size_after;
+		}
+
+		std::vector<glm::vec3> derivative() {
+			fiber<float> d_dt = _d1();
+
+			std::vector<glm::vec3> result;
+			for (size_t vi=0; vi<this->size(); vi++) {
+				result.push_back(d_dt[vi]);
+			}
+			return result;
+		}
+
+		/**
+		 * The curvature is calculated using partial derivatives:
+		 * \f[
+		 * \kappa = \frac{\sqrt{(z''y'-y''z')^2 + (x''z'-z''x')^2 + (y''x' - x''y')^2}}{\sqrt{(x'^2+y'^2+z'^2)^3}}
+		 * \f]
+		 * this is calculated by evaluating the following terms:
+		 * \f[
+		 * \kappa = \frac{\sqrt{ a^2 + b^2 + c^2 }}{\sqrt{d^3}}
+		 * \f]
+		 * @return
+		 */
+		std::vector<float> curvature() {
+			std::vector<float> kappa;
+			fiber<float> d_dt = _d1();
+			fiber<float> dd_dt = d_dt._d1();
+			for (size_t vi=0; vi<this->size(); vi++) {
+				float xp = d_dt[vi].x;
+				float yp = d_dt[vi].y;
+				float zp = d_dt[vi].z;
+
+				float xpp = dd_dt[vi].x;
+				float ypp = dd_dt[vi].y;
+				float zpp = dd_dt[vi].z;
+
+				float a = zpp * yp - ypp * zp;
+				float b = xpp * zp - zpp * xp;
+				float c = ypp * xp - xpp * yp;
+				float d = xp * xp + yp * yp + zp * zp;
+
+				float num = std::sqrt( a*a + b*b + c*c );
+				float denom = std::sqrt(d * d * d);
+
+				kappa.push_back( num / denom );
+			}
+			return kappa;
+		}
+
+
 
 	};
 }

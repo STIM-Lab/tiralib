@@ -195,8 +195,11 @@ namespace tira {
          * @param f is the fiber geometry
          * @return the internal ID of the edge in the graph
          */
-        size_t add_edge(size_t inode0, size_t inode1, fiber<VertexAttribute> f, EdgeAttribute a = {}) {
+        size_t add_edge(size_t inode0, size_t inode1, fiber<VertexAttribute> f, EdgeAttribute a = {}, float epsilon = 0) {
 
+            if (epsilon >= 0) {
+                f.remove_duplicates();
+            }
             edge new_edge(f, inode0, inode1, a);                                  // create a new edge structure
             _edges.push_back(new_edge);
             
@@ -220,7 +223,12 @@ namespace tira {
             v1 = _nodes[n1].v;
         }
 
-        fiber<VertexAttribute> fiber_edge(const size_t id) const {
+        fiber<VertexAttribute> fiber_edge(const size_t id, bool include_node_points = true) const {
+            fiber<VertexAttribute> f = _edges[id];
+            if (include_node_points) {
+                f.insert(f.begin(), _nodes[_edges[id].inodes[0]]);
+                f.push_back(_nodes[_edges[id].inodes[1]]);
+            }
             return _edges[id];
         }
 

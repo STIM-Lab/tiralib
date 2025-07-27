@@ -1,5 +1,4 @@
 ﻿#pragma once
-
 #include <vector>
 #include <numeric>
 #include <string>
@@ -110,6 +109,15 @@ protected:
         }
     }
 
+    void _remove_duplicate_points(float epsilon = 0) {
+        for (size_t ei=0; ei<_edges.size(); ei++) {
+            size_t removed = _edges[ei].remove_duplicates();
+            if (removed != 0) {
+                std::cout<<"tira::vascular WARNING: "<<removed<<" duplicate points detected in edge "<<ei<<std::endl;
+            }
+        }
+    }
+
 public:
 
     void init() {
@@ -176,7 +184,7 @@ public:
         out.close();
     }
 
-    void load(std::string filename) {
+    void load(std::string filename, float epsilon = 0) {
         std::ifstream in(filename, std::ios::binary);                       // create an input file stream
         if (!in.is_open())                                                      // make sure that the file is loaded
             throw std::runtime_error("Could not open file " + filename);    // otherwise throw an exception
@@ -220,11 +228,13 @@ public:
             for (size_t pi = 0; pi < n_pts; pi++) {
                 glm::vec3 p;                            // get the point position
                 float r;                                // get the radius (vertex attribute)
-                in.read((char*)&p[0], 12);              // write both to the file
+                in.read((char*)&p[0], 12);              // read both from the file
                 in.read((char*)&r, 4);
                 _edges[ei].push_back(p, r);
             }
         }
+        if (epsilon >= 0)
+            _remove_duplicate_points();
         _calculate_attributes();                        // calculate attributes for the vascular network
         in.close();
     }

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 #include <tira/graphics/camera.h>
 #include <tira/fiber.h>
@@ -8,6 +10,7 @@
 #include <tira/graphics/glIndexBuffer.h>
 #include <tira/graphics/glShader.h>
 
+#include "src/vascuvis/vascuvis.h"
 
 
 namespace tira {
@@ -56,15 +59,46 @@ namespace tira {
          */
         std::pair<glm::vec3, glm::vec3> _aabb;
 
+        std::array< std::pair<float, float>, VertexAttributeNumber> _extrema;
+
         std::vector<glVertexBuffer> _vbuffers;
 
         //glVertexArray _varray;
         glVertexBufferLayout _layout;
         bool _buffers_valid;                // flag specifies that the buffers are up to date and accurately represent the fiber data
 
+        inline static const std::string brewer_pts =
+        #include "src/vascuvis/brewer_pts.shader"
+        ;
+
+        inline static const std::string cmap_vertex_string =
+        #include "src/vascuvis/cmap_vertex.shader"
+        ;
+
+        inline static const std::string cmap_fragment_string =
+        #include "src/vascuvis/cmap_fragment.shader"
+        ;
+
         glShader _shader;
+        int _cmap_attribute;                // attribute to be colormapped
 
+        void _assemble_shader(std::string& vertex, std::string& fragment) {
 
+            vertex = "#version 330 core\n";    // shader header and required version
+            vertex += brewer_pts;                                           // set of Brewer colormap points
+            vertex += "layout(location = 0) in vec4 position;\n";           // layout location for the vertex positions
+            vertex += "layout(location = " + std::to_string(_cmap_attribute + 1) + ") in float value;\n";
+            vertex += cmap_vertex_string;
+
+            fragment = "#version 330 core\n";
+            fragment += cmap_fragment_string;
+        }
+
+        void _generate_shader() {
+            std::string vertex_shader_string, fragment_shader_string;
+            _assemble_shader(vertex_shader_string, fragment_shader_string);
+            _shader.CreateShader(vertex_shader_string, fragment_shader_string);
+        }
 
         void _update_aabb(glm::vec3 p) {
             if (_aabb.first.x > p.x) _aabb.first.x = p.x;
@@ -75,9 +109,25 @@ namespace tira {
             if (_aabb.second.z < p.z) _aabb.second.z = p.z;
         }
 
+        void _update_extrema(VertexAttributes a) {
+            for (size_t ai = 0; ai < VertexAttributeNumber; ai++) {
+                if (_extrema[ai].first > a[ai]) _extrema[ai].first = a[ai];
+                if (_extrema[ai].second < a[ai]) _extrema[ai].second = a[ai];
+            }
+        }
+
         void _clear_buffers() {
             for (size_t bi = 0; bi < _vbuffers.size(); bi++) {
                 _vbuffers[bi].Destroy();
+            }
+        }
+
+        void _clear_extrema() {
+            _aabb.first = glm::vec3(std::numeric_limits<float>::infinity());      // initialize the bounding box to infinity
+            _aabb.second = glm::vec3(-std::numeric_limits<float>::infinity());
+            for (size_t ai = 0; ai < VertexAttributeNumber; ai++) {
+                _extrema[ai].first = std::numeric_limits<float>::infinity();
+                _extrema[ai].second = -std::numeric_limits<float>::infinity();
             }
         }
 
@@ -126,8 +176,7 @@ namespace tira {
         void clear() {
             _clear_buffers();
             _buffers_valid = false;                                                     // OpenGL buffers have not been allocated or set
-            _aabb.first = glm::vec3(std::numeric_limits<float>::infinity());      // initialize the bounding box to infinity
-            _aabb.second = glm::vec3(-std::numeric_limits<float>::infinity());
+            _clear_extrema();
             _fibers.clear();
             _vbuffers.clear();
         }
@@ -135,7 +184,10 @@ namespace tira {
         glFibers() {
             clear();
             _mode = RenderMode::LINES;                                          // default to rendering lines
-            _shader.CreateShader(glShaderStrings::vf_brewer);
+            _layout.Push<float>(3);                                         // push the first attribute (vertex position) as 3xfloat32
+            for (size_t ai = 0; ai < VertexAttributeNumber; ai++)               // each additional attribute will be a single float32
+                _layout.Push<float>(1);
+            _generate_shader();
         }
 
         glm::vec3 center() {
@@ -165,6 +217,7 @@ namespace tira {
                 vertex<VertexAttributes> new_v(positions[vi], va);    // create a new point for the vertex
                 new_fiber.push_back(new_v);                             // push the new point into the new fiber
                 _update_aabb(new_v);                                    // update the axis aligned bounding box to include the new point
+                _update_extrema(va);
             }
             _fibers.push_back(new_fiber);                               // add the new fiber to the fiber list
 
@@ -172,15 +225,23 @@ namespace tira {
             return _fibers.size() - 1;
         }
 
-        void vertex_attributes(std::vector<GLenum> types) {
-            _layout = glVertexBufferLayout();
-            _layout.Push<float>(3);
-
-            for (size_t i = 0; i < types.size(); i++)
-                _layout.Push(1, types[i]);            
+        void cmap_attribute(int ai) {
+            if (ai < 0 || ai >= VertexAttributeNumber)
+                throw std::runtime_error("glFibers ERROR: vertex attribute index out of range");
+            _cmap_attribute = ai;
+            _generate_shader();                             // changing attributes requires regenerating the shader
         }
 
-        void render(glm::mat4 View, glm::mat4 Proj) {
+        int cmap_attribute() { return _cmap_attribute; }
+
+        float min(size_t attribute) {
+            return _extrema[attribute].first;
+        }
+        float max(size_t attribute) {
+            return _extrema[attribute].second;
+        }
+
+        void render(glm::mat4 View, glm::mat4 Proj, std::vector<float> cmap_override = {}) {
 
             _validate();            // validate that the data structure is ready for rendering
 
@@ -190,6 +251,15 @@ namespace tira {
                 _shader.Bind();
                 _shader.SetUniformMat4f("V", View);
                 _shader.SetUniformMat4f("P", Proj);
+                if (cmap_override.size() >= 1)
+                    _shader.SetUniform1f("vmin", cmap_override[0]);
+                else
+                    _shader.SetUniform1f("vmin", _extrema[_cmap_attribute].first);
+
+                if (cmap_override.size() >= 2)
+                    _shader.SetUniform1f("vmax", cmap_override[1]);
+                else
+                    _shader.SetUniform1f("vmax", _extrema[_cmap_attribute].second);
                 GLERROR(glEnableVertexAttribArray(0));
                 GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
                 _layout.Bind();
