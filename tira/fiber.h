@@ -4,6 +4,7 @@
 #include <vector>
 #include <array>
 #include <iostream>
+#include <numbers>
 
 #include <glm/glm.hpp>
 
@@ -14,13 +15,13 @@ namespace tira {
 	 *
 	 * @tparam     VertexAttribute  Data type for user-defined attributes tstored with each vertex position
 	 */
-	template <typename VertexAttribute = float>
+	template <typename VertexAttributeType = float>
 	class vertex : public glm::vec3 {
 
 		/**
 		 * User-defined attribute stored at each vertex position (ex. radius, color, etc)
 		 */
-		VertexAttribute _va;
+		VertexAttributeType m_va;
 	public:
 
 		/**
@@ -29,11 +30,11 @@ namespace tira {
 		 * @param[in]  p     { parameter_description }
 		 * @param[in]  r     { parameter_description }
 		 */
-		vertex(glm::vec3 p = glm::vec3(0.0f), VertexAttribute r = {}) : glm::vec3(p) { _va = r; }
+		vertex(glm::vec3 p = glm::vec3(0.0f), VertexAttributeType r = {}) : glm::vec3(p) { m_va = r; }
 
 
-		void va(VertexAttribute r) { _va = r; }
-		VertexAttribute va() { return _va; }
+		void Attribute(VertexAttributeType r) { m_va = r; }
+		VertexAttributeType Attribute() { return m_va; }
 	};
 
 	/**
@@ -41,20 +42,20 @@ namespace tira {
 	 *
 	 * @tparam     VertexAttribute  Data type for additional attributes stored with each vertex position
 	 */
-	template <typename VertexAttribute = float>
-	class fiber : public std::vector< vertex<VertexAttribute> > {
+	template <typename VertexAttributeType = float>
+	class fiber : public std::vector< vertex<VertexAttributeType> > {
 
 
 	protected:
-		std::vector< float > _lv;		// array storing the parameterized length values at each vertex
+		std::vector< float > m_lparam;		// array storing the parameterized length values at each vertex
 
-		float _gaussian(float d, float sigma) {
+		float m_Gaussian(float d, float sigma) {
 			float n = 1.0f / std::sqrt(2.0f * std::numbers::pi * sigma * sigma);
 			float y = -(d * d) / (2 * sigma * sigma);
 			return n * std::exp(y);
 		}
 
-		fiber<float> _d1() {
+		fiber<float> m_Derivative() {
 			fiber<float> d_dt;
 
 			glm::vec3 p0 = this->at(0);
@@ -62,9 +63,9 @@ namespace tira {
 			float l0_1 = glm::length(p1 - p0);
 
 			if (l0_1 != 0)
-				d_dt.push_back(vertex<float>((p1 - p0) / l0_1, l0_1));
+				d_dt.AddLastVertex(vertex<float>((p1 - p0) / l0_1, l0_1));
 			else
-				d_dt.push_back(vertex<float>(glm::vec3(0.0f), 0));
+				d_dt.AddLastVertex(vertex<float>(glm::vec3(0.0f), 0));
 
 			float l1_2, l0_2;
 			glm::vec3 p2;
@@ -77,9 +78,9 @@ namespace tira {
 				l1_2 = glm::length(p2 - p1);
 				l0_2 = l0_1 + l1_2;
 				if (l0_2 != 0)
-					d_dt.push_back((p2 - p0) / l0_2, l0_2);
+					d_dt.AddLastVertex((p2 - p0) / l0_2, l0_2);
 				else
-					d_dt.push_back(vertex<float>(glm::vec3(0.0f), 0));
+					d_dt.AddLastVertex(vertex<float>(glm::vec3(0.0f), 0));
 
 			}
 
@@ -87,22 +88,22 @@ namespace tira {
 			p2 = this->at(this->size()-1);
 			l1_2 = glm::length(p2 - p1);
 			if (l1_2 != 0)
-				d_dt.push_back(vertex<float>((p2 - p1) / l1_2, l1_2));
+				d_dt.AddLastVertex(vertex<float>((p2 - p1) / l1_2, l1_2));
 			else
-				d_dt.push_back(vertex<float>(glm::vec3(0.0f), 0));
+				d_dt.AddLastVertex(vertex<float>(glm::vec3(0.0f), 0));
 
 			return d_dt;
 		}
 
-		bool _test_duplicates(vertex<VertexAttribute> a, vertex<VertexAttribute> b) {
+		/*bool m_TestDuplicates(vertex<VertexAttribute> a, vertex<VertexAttribute> b) {
 			if (a.x == b.x && a.y == b.y && a.z == b.z)
 				return true;
 			return false;
-		}
+		}*/
 
 	public:
 
-		fiber() : std::vector< vertex<VertexAttribute> >() {}
+		fiber() : std::vector< vertex<VertexAttributeType> >() {}
 
 		/**
 		 * @brief      Creates a vertex from a position and attribute, and inserts it at the end of the fiber
@@ -110,24 +111,24 @@ namespace tira {
 		 * @param[in]  p     3D coordinate providing the spatial position of the vertex
 		 * @param[in]  r     user-defined attribute associated with this vertex (ex. radius)
 		 */
-		void push_back(glm::vec3 p, VertexAttribute r) {
-			vertex<VertexAttribute> v(p, r);						// generate a new vertex from the provided position and attribute
+		void AddLastVertex(glm::vec3 p, VertexAttributeType r) {
+			vertex<VertexAttributeType> v(p, r);						// generate a new vertex from the provided position and attribute
 
 			// update the LV vector to store the length at the new vertex
-			if (this->size() == 0) _lv.push_back(0);				// if the current fiber is empty, the first vertex is l(v) = 0
+			if (this->size() == 0) m_lparam.push_back(0);				// if the current fiber is empty, the first vertex is l(v) = 0
 			else {
 				float d = glm::length(p - this->back()) ;			// otherwise l(v) = l(v_{n-1}) + |v_{n} - v_{n-1}|
-				_lv.push_back(d + _lv.back());
+				m_lparam.push_back(d + m_lparam.back());
 			}
 
-			std::vector< vertex<VertexAttribute> >::push_back(v);	// push the vertex into the fiber
+			std::vector< vertex<VertexAttributeType> >::push_back(v);	// push the vertex into the fiber
 		}
 
-		void push_back(vertex<VertexAttribute> v) {
-			push_back(glm::vec3(v), v.va());
+		void AddLastVertex(vertex<VertexAttributeType> v) {
+			AddLastVertex(glm::vec3(v), v.Attribute());
 		}
 
-		float length() {
+		float Length() {
 			float l = 0;
 			for (size_t vi=1; vi<this->size(); vi++) {
 				l+= glm::length(this->at(vi) - this->at(vi-1));
@@ -135,29 +136,29 @@ namespace tira {
 			return l;
 		}
 
-		fiber smooth_gaussian(float sigma, bool anchor_endpoints = true) {
+		fiber Smooth(float sigma, bool anchor_endpoints = true) {
 
 			fiber smoothed;
 			for (size_t vi=0; vi<this->size(); vi++) {
 				if (anchor_endpoints && (vi == 0 || vi == this->size() - 1)) {
 					vertex v = this->at(vi);
-					smoothed.push_back(v);
+					smoothed.AddLastVertex(v);
 				}
 				else {
 					glm::vec3 p(0.0f);
 					float g_energy = 0.0f;
 					for (size_t pi=0; pi<this->size(); pi++) {
-						float d = _lv[vi] - _lv[pi];
-						p += _gaussian(d, sigma) * this->at(pi);
-						g_energy += _gaussian(d, sigma);
+						float d = m_lparam[vi] - m_lparam[pi];
+						p += m_Gaussian(d, sigma) * this->at(pi);
+						g_energy += m_Gaussian(d, sigma);
 					}
-					smoothed.push_back(p / g_energy, this->at(vi).va());
+					smoothed.AddLastVertex(p / g_energy, this->at(vi).Attribute());
 				}
 			}
 			return smoothed;
 		}
 
-		size_t remove_duplicates() {
+		size_t RemoveDuplicates() {
 			size_t size_before = this->size();
 
 			auto last = std::unique(this->begin(), this->end());
@@ -168,8 +169,8 @@ namespace tira {
 			return size_before - size_after;
 		}
 
-		std::vector<glm::vec3> derivative() {
-			fiber<float> d_dt = _d1();
+		std::vector<glm::vec3> Derivative() {
+			fiber<float> d_dt = m_Derivative();
 
 			std::vector<glm::vec3> result;
 			for (size_t vi=0; vi<this->size(); vi++) {
@@ -189,10 +190,10 @@ namespace tira {
 		 * \f]
 		 * @return
 		 */
-		std::vector<float> curvature() {
+		std::vector<float> Curvature() {
 			std::vector<float> kappa;
-			fiber<float> d_dt = _d1();
-			fiber<float> dd_dt = d_dt._d1();
+			fiber<float> d_dt = m_Derivative();
+			fiber<float> dd_dt = d_dt.m_Derivative();
 			for (size_t vi=0; vi<this->size(); vi++) {
 				float xp = d_dt[vi].x;
 				float yp = d_dt[vi].y;
