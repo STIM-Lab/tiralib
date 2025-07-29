@@ -216,7 +216,7 @@ public:
             size_t n0, n1;
             in.read((char*)&n0, 8);
             in.read((char*)&n1, 8);
-            fibernet::edge new_edge(n0, n1);
+            fibernet::fedge new_edge(n0, n1);
             m_edges.push_back(new_edge);
 
             size_t skel_offset;
@@ -233,8 +233,8 @@ public:
             float r;                                            // get the vertex attribute (radius)
             in.read((char*)&p[0], 12);
             in.read((char*)&r, 4);
-            vertex<float> v(p, r);
-            fibernet::node new_node(v, 0);
+            vertex v(p, r);
+            fnode new_node(v, 0);
             m_nodes.push_back(new_node);
         }
 

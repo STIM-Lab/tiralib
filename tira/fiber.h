@@ -24,13 +24,24 @@ namespace tira {
 		VertexAttributeType m_va;
 	public:
 
+		vertex() {}
+
+		/**
+		 * @brief      Constructs a new vertex from a 3D coordinate and attribute
+		 *
+		 * @param[in]  p     { parameter_description }
+		 */
+		vertex(const glm::vec3& p) : glm::vec3(p) { m_va = 0; }
+
 		/**
 		 * @brief      Constructs a new vertex from a 3D coordinate and attribute
 		 *
 		 * @param[in]  p     { parameter_description }
 		 * @param[in]  r     { parameter_description }
 		 */
-		vertex(glm::vec3 p = glm::vec3(0.0f), VertexAttributeType r = {}) : glm::vec3(p) { m_va = r; }
+		vertex(glm::vec3 p, VertexAttributeType r) : glm::vec3(p) { m_va = r; }
+
+		vertex(const vertex& v) : glm::vec3(v) { m_va = v.m_va; }
 
 
 		void Attribute(VertexAttributeType r) { m_va = r; }
