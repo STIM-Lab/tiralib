@@ -104,14 +104,14 @@ namespace tira {
              *
              * @return     index into the _nodes vector
              */
-            size_t NodeIndex0() { return m_node_indices[0]; }
+            size_t NodeIndex0() const { return m_node_indices[0]; }
 
             /**
              * @brief      Retrieve the first node ID
              *
              * @return     index into the _nodes vector
              */
-            size_t NodeIndex1() { return m_node_indices[1]; }
+            size_t NodeIndex1() const { return m_node_indices[1]; }
 
             /**
              * @brief      Returns the user-specified edge attribute
@@ -152,7 +152,7 @@ namespace tira {
                 return smoothed_edge;
             }
 
-            float Length(vertex<VertexAttributeType> v0, vertex<VertexAttributeType> v1) {
+            float Length(vertex<VertexAttributeType> v0, vertex<VertexAttributeType> v1) const {
                 fiber<VertexAttributeType> original_fiber = *this;
                 original_fiber.insert(original_fiber.begin(), v0);
                 original_fiber.push_back(v1);
@@ -200,6 +200,8 @@ namespace tira {
              * @param[in]  na    The new value for the node attribute
              */
             void NodeAttribute(NodeAttributeType na) { m_node_attribute = na; }
+
+            void ClearEdgeIndices() { m_edge_indices.clear(); }
 
         };
 
@@ -317,5 +319,54 @@ namespace tira {
             }
             return smoothed;
         }
+
+        /**
+         * @brief Selects all edges whose total fiber length falls within the given range [min, max].
+         * @param min The minimum allowed length for an edge (inclusive).
+         * @param max The maximum allowed length for an edge (inclusive).
+         * @return A vector of edge indices that satisfy the length criteria.
+         */
+        std::vector<size_t> SelectEdgeLength(float min, float max) const {
+            std::vector<size_t> result;
+            for (size_t ei = 0; ei < m_edges.size(); ++ei) {                     // Loop over all edges
+                float len = m_edges[ei].Length(
+                    m_nodes[m_edges[ei].NodeIndex0()],                           // Get the fiber length with nodes
+                    m_nodes[m_edges[ei].NodeIndex1()]);
+                if (len >= min && len <= max) {                                  // Check if in range
+                    result.push_back(ei);                                        // Save index if yes
+                }
+            }
+            return result;                                                       // Return all found
+        }
+
+        /**
+         * @brief Deletes edges from the network based on a list of edge indices, and updates all node connectivity.
+         *
+         * @param edge_indices A vector of edge indices to be deleted from the network.
+         */
+        void DeleteEdges(const std::vector<size_t>& edge_indices) {
+            std::vector<bool> to_delete(m_edges.size(), false);                  // Mark edges to delete
+            for (size_t ei : edge_indices) {
+                if (ei < m_edges.size())
+                    to_delete[ei] = true;                                        // Mark as true if index is valid
+            }
+
+            std::vector<edge> new_edges;
+            for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+                if (!to_delete[ei]) {                                            // Copy over only edges we keep
+                    new_edges.push_back(m_edges[ei]);
+                }
+            }
+            m_edges = std::move(new_edges);                                      // Replace edge list
+
+            // Now, for each node, clear and rebuild the edge index list
+            for (auto& node : m_nodes) node.ClearEdgeIndices();
+
+            for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+                m_nodes[m_edges[ei].NodeIndex0()].AddEdgeIndex(ei);              // Relink edges to nodes
+                m_nodes[m_edges[ei].NodeIndex1()].AddEdgeIndex(ei);
+            }
+        }
+
 	};
 }

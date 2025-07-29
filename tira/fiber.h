@@ -34,7 +34,7 @@ namespace tira {
 
 
 		void Attribute(VertexAttributeType r) { m_va = r; }
-		VertexAttributeType Attribute() { return m_va; }
+		VertexAttributeType Attribute() const { return m_va; }
 	};
 
 	/**
