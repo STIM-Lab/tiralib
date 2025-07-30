@@ -294,6 +294,146 @@ public:
      */
     size_t NumNodes() const { return m_nodes.size(); }
 
+    /**
+     * @brief returns a new fibernet with the edges in edge_indices removed,
+     * preserving the original network.
+     * @param edge_indices list of edge indices to delete.
+     * @return a new fibernet with the specified edges removed.
+     */
+    vascular DeleteEdges(const std::vector<size_t>& edge_indices) const {
+        std::vector<bool> to_delete(m_edges.size(), false);
+        for (size_t ei : edge_indices) {
+            if (ei < m_edges.size()) to_delete[ei] = true;
+        }
+        vascular new_net;
+        new_net.m_nodes = m_nodes; // copy all nodes
+
+        // copy only edges that are not marked for deletion
+        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+            if (!to_delete[ei]) {
+                new_net.m_edges.push_back(m_edges[ei]);
+            }
+        }
+
+        // rebuild node edge indices
+        for (auto& node : new_net.m_nodes)
+            node.ClearEdgeIndices();
+
+        for (size_t ei = 0; ei < new_net.m_edges.size(); ++ei) {
+            new_net.m_nodes[new_net.m_edges[ei].NodeIndex0()].AddEdgeIndex(ei);
+            new_net.m_nodes[new_net.m_edges[ei].NodeIndex1()].AddEdgeIndex(ei);
+        }
+        return new_net;
+    }
+
+    /**
+     * @brief Selects all edges whose total fiber length falls within the given range [low, high].
+     *        Can be chained with previous results using AND (intersection) or OR (union).
+     * @param low The minimum allowed length for an edge .
+     * @param high The maximum allowed length for an edge .
+     * @param current Optional vector of previously selected edge indices.
+     * @param op      If true: AND (restrict to edges in 'current' AND in range);
+     *                If false: OR (include any edge in 'current' OR in range).
+     * @return        A vector of edge indices that satisfy the length criteria.
+    */
+    std::vector<size_t> SelectEdgeLength( float low, float high, const std::vector<size_t>& current = {}, bool op = false
+    ) const {
+        std::vector<size_t> result;
+        std::vector<bool> already_in(m_edges.size(), false);
+
+        if (op && !current.empty()) {
+            // AND: only look at the current selection
+            for (size_t i : current) {
+                if (i < m_edges.size()) {
+                    float len = m_edges[i].Length(
+                        m_nodes[m_edges[i].NodeIndex0()],
+                        m_nodes[m_edges[i].NodeIndex1()]);
+                    if (len >= low && len <= high)
+                        result.push_back(i);
+                }
+            }
+        }
+        else {
+            // OR: go over all edges, add anything that matches or is already in current
+            for (size_t i : current)
+                if (i < m_edges.size())
+                    already_in[i] = true;
+
+            for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+                float len = m_edges[ei].Length(
+                    m_nodes[m_edges[ei].NodeIndex0()],
+                    m_nodes[m_edges[ei].NodeIndex1()]);
+                if ((len >= low && len <= high) && !already_in[ei]) {
+                    result.push_back(ei);
+                }
+                else if (already_in[ei]) {
+                    result.push_back(ei);
+                }
+
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief selects all edges whose mean radius falls within the given range [rmin, rmax].
+     *        can be chained with previous results using AND (intersection) or OR (union).
+     * @param rmin    The minimum allowed mean radius for an edge.
+     * @param rmax    The maximum allowed mean radius for an edge.
+     * @param current Optional vector of previously selected edge indices.
+     * @param op      If true: AND (restrict to edges in 'current' AND in range);
+     *                If false: OR (include any edge in 'current' OR in range).
+     * @return        A vector of edge indices that satisfy the radius criteria.
+    */
+    std::vector<size_t> SelectEdgeRadius( float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false
+    ) const {
+        std::vector<size_t> result;
+        std::vector<bool> already_in(m_edges.size(), false);
+
+        if (op && !current.empty()) {
+            // AND: only look at the current selection
+            for (size_t i : current) {
+                if (i < m_edges.size()) {
+                    const auto& edge = m_edges[i];
+                    float sum = 0;
+                    for (const auto& pt : edge) sum += pt.Attribute();
+                    float mean = edge.empty() ? 0.0f : sum / edge.size();
+                    if (mean >= rmin && mean <= rmax)
+                        result.push_back(i);
+                }
+            }
+        }
+        else {
+            // OR: go over all edges, add anything that matches or is already in current
+            for (size_t i : current)
+                if (i < m_edges.size())
+                    already_in[i] = true;
+
+            for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+                const auto& edge = m_edges[ei];
+                float sum = 0.0f;
+                for (const auto& pt : edge)
+                    sum += pt.Attribute();
+
+                float mean = 0.0f;
+                if (!edge.empty()) {
+                    mean = sum / static_cast<float>(edge.size());
+                }
+
+                if ((mean >= rmin && mean <= rmax) && !already_in[ei]) {
+                    result.push_back(ei);
+                }
+                else if (already_in[ei]) {
+                    result.push_back(ei);
+                }
+
+
+            }
+        }
+        return result;
+    }
+
+
     fiber<> Centerline(size_t id, bool include_nodes = true) {
         fiber<float> c = m_edges[id];
         if (include_nodes) {
