@@ -395,13 +395,25 @@ public:
             for (size_t i : current) {
                 if (i < m_edges.size()) {
                     const auto& edge = m_edges[i];
-                    float sum = 0;
-                    for (const auto& pt : edge) sum += pt.Attribute();
-                    float mean = edge.empty() ? 0.0f : sum / edge.size();
-                    if (mean >= rmin && mean <= rmax)
+                    float sum = 0.0f;
+                    size_t count = 0;
+
+                    for (const auto& pt : edge) {
+                        sum += pt.Attribute();
+                        ++count;
+                    }
+
+                    float mean = 0.0f;
+                    if (count > 0) {
+                        mean = sum / static_cast<float>(count);
+                    }
+
+                    if (mean >= rmin && mean <= rmax) {
                         result.push_back(i);
+                    }
                 }
             }
+
         }
         else {
             // OR: go over all edges, add anything that matches or is already in current
