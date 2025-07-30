@@ -347,6 +347,7 @@ namespace tira {
             return result;                                                       // Return all found
         }
 
+
         /**
          * @brief Deletes edges from the network based on a list of edge indices, and updates all node connectivity.
          *
@@ -375,6 +376,9 @@ namespace tira {
                 m_nodes[m_edges[ei].NodeIndex1()].AddEdgeIndex(ei);
             }
         }
+
+
+
 
 	};
 }
