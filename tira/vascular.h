@@ -376,6 +376,59 @@ public:
     }
 
     /**
+     * @brief Calculate the average radius of an edge (including node points)
+     * @param edge_idx index of the edge to be analyzed
+     * @return average radius of the edge
+     */
+    float AverageRadius_david(size_t edge_idx) {
+
+        float sum_radii = m_nodes[m_edges[edge_idx].NodeIndex0()].Attribute();      // initialize a running sum with the radius of the first node vertex
+
+        size_t num_pts = m_edges[edge_idx].size();                                  // get the number of vertices in the fiber
+        for (size_t pi = 0; pi < num_pts; pi++)                                     // for each vertex
+            sum_radii += m_edges[edge_idx][pi].Attribute();                         // add the corresponding radius into the running sum
+
+        sum_radii += m_nodes[m_edges[edge_idx].NodeIndex1()].Attribute();           // add the radius of the second node vertex
+
+        float radius = sum_radii / (num_pts + 2);                                   // calculate the average from the running sum
+        return radius;                                                              // return the radius
+    }
+
+    std::vector<size_t> SelectEdgeRadius_david(float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false) {
+
+        std::vector<size_t> result;                                 // initialize a vector to store the result
+
+        // AND operation
+        if (op) {                                                   // an AND operation just requires looking at the edges in the "current" vector
+            for (size_t ci = 0; ci < current.size(); ci++) {        // for each edge in the current vector
+                float c_radius = AverageRadius_david(current[ci]);  // calculate the radius
+                if (c_radius >= rmin && c_radius <= rmax) {         // check to see if it's within the specified range
+                    result.push_back(current[ci]);                  // if so, push it into the result vector
+                }
+            }
+            return result;                                          // return the result vector - we're done
+        }
+
+        // OR operation
+        for (size_t ei = 0; ei < m_edges.size(); ei++) {            // an OR operation requires looking at every edge in the network
+            float e_radius = AverageRadius_david(ei);               // calculate the average radius of the edge
+            if (e_radius >= rmin && e_radius <= rmax) {             // if it's within the specified range
+                result.push_back(ei);                               // add it to the result vector
+            }
+        }
+
+        // combine the result vector with the input vector
+        result.insert(result.end(), current.begin(), current.end());
+
+        // remove duplicates
+        std::sort(result.begin(), result.end());
+        std::unique(result.begin(), result.end());
+
+        
+        return result;
+    }
+
+    /**
      * @brief selects all edges whose mean radius falls within the given range [rmin, rmax].
      *        can be chained with previous results using AND (intersection) or OR (union).
      * @param rmin    The minimum allowed mean radius for an edge.
