@@ -15,8 +15,11 @@ namespace tira {
 
     struct VesselAttributesType {
         float length ;
-        float tortuosity;
+        float avg_curvature;
         float avg_radius;
+        float arc_cord_ratio;
+        float volume;
+        float surface_area;
     };
 
     typedef fibernet<float, VesselAttributesType, unsigned int> vesselnet;
@@ -380,7 +383,7 @@ public:
      * @param edge_idx index of the edge to be analyzed
      * @return average radius of the edge
      */
-    float AverageRadius_david(size_t edge_idx) {
+    float AverageRadius(size_t edge_idx) {
 
         float sum_radii = m_nodes[m_edges[edge_idx].NodeIndex0()].Attribute();      // initialize a running sum with the radius of the first node vertex
 
@@ -394,14 +397,24 @@ public:
         return radius;                                                              // return the radius
     }
 
-    std::vector<size_t> SelectEdgeRadius_david(float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false) {
+    /**
+     * @brief selects all edges whose mean radius falls within the given range [rmin, rmax].
+     *        can be chained with previous results using AND (intersection) or OR (union).
+     * @param rmin    The minimum allowed mean radius for an edge.
+     * @param rmax    The maximum allowed mean radius for an edge.
+     * @param current Optional vector of previously selected edge indices.
+     * @param op      If true: AND (restrict to edges in 'current' AND in range);
+     *                If false: OR (include any edge in 'current' OR in range).
+     * @return        A vector of edge indices that satisfy the radius criteria.
+    */
+    std::vector<size_t> SelectEdgeRadius(float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false) {
 
         std::vector<size_t> result;                                 // initialize a vector to store the result
 
         // AND operation
         if (op) {                                                   // an AND operation just requires looking at the edges in the "current" vector
             for (size_t ci = 0; ci < current.size(); ci++) {        // for each edge in the current vector
-                float c_radius = AverageRadius_david(current[ci]);  // calculate the radius
+                float c_radius = AverageRadius(current[ci]);  // calculate the radius
                 if (c_radius >= rmin && c_radius <= rmax) {         // check to see if it's within the specified range
                     result.push_back(current[ci]);                  // if so, push it into the result vector
                 }
@@ -411,7 +424,7 @@ public:
 
         // OR operation
         for (size_t ei = 0; ei < m_edges.size(); ei++) {            // an OR operation requires looking at every edge in the network
-            float e_radius = AverageRadius_david(ei);               // calculate the average radius of the edge
+            float e_radius = AverageRadius(ei);               // calculate the average radius of the edge
             if (e_radius >= rmin && e_radius <= rmax) {             // if it's within the specified range
                 result.push_back(ei);                               // add it to the result vector
             }
@@ -424,79 +437,10 @@ public:
         std::sort(result.begin(), result.end());
         std::unique(result.begin(), result.end());
 
-        
+
         return result;
     }
 
-    /**
-     * @brief selects all edges whose mean radius falls within the given range [rmin, rmax].
-     *        can be chained with previous results using AND (intersection) or OR (union).
-     * @param rmin    The minimum allowed mean radius for an edge.
-     * @param rmax    The maximum allowed mean radius for an edge.
-     * @param current Optional vector of previously selected edge indices.
-     * @param op      If true: AND (restrict to edges in 'current' AND in range);
-     *                If false: OR (include any edge in 'current' OR in range).
-     * @return        A vector of edge indices that satisfy the radius criteria.
-    */
-    std::vector<size_t> SelectEdgeRadius( float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false
-    ) const {
-        std::vector<size_t> result;
-        std::vector<bool> already_in(m_edges.size(), false);
-
-        if (op && !current.empty()) {
-            // AND: only look at the current selection
-            for (size_t i : current) {
-                if (i < m_edges.size()) {
-                    const auto& edge = m_edges[i];
-                    float sum = 0.0f;
-                    size_t count = 0;
-
-                    for (const auto& pt : edge) {
-                        sum += pt.Attribute();
-                        ++count;
-                    }
-
-                    float mean = 0.0f;
-                    if (count > 0) {
-                        mean = sum / static_cast<float>(count);
-                    }
-
-                    if (mean >= rmin && mean <= rmax) {
-                        result.push_back(i);
-                    }
-                }
-            }
-
-        }
-        else {
-            // OR: go over all edges, add anything that matches or is already in current
-            for (size_t i : current)
-                if (i < m_edges.size())
-                    already_in[i] = true;
-
-            for (size_t ei = 0; ei < m_edges.size(); ++ei) {
-                const auto& edge = m_edges[ei];
-                float sum = 0.0f;
-                for (const auto& pt : edge)
-                    sum += pt.Attribute();
-
-                float mean = 0.0f;
-                if (!edge.empty()) {
-                    mean = sum / static_cast<float>(edge.size());
-                }
-
-                if ((mean >= rmin && mean <= rmax) && !already_in[ei]) {
-                    result.push_back(ei);
-                }
-                else if (already_in[ei]) {
-                    result.push_back(ei);
-                }
-
-
-            }
-        }
-        return result;
-    }
 
 
     fiber<> Centerline(size_t id, bool include_nodes = true) {
