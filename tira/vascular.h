@@ -298,38 +298,6 @@ public:
     size_t NumNodes() const { return m_nodes.size(); }
 
     /**
-     * @brief returns a new fibernet with the edges in edge_indices removed,
-     * preserving the original network.
-     * @param edge_indices list of edge indices to delete.
-     * @return a new fibernet with the specified edges removed.
-     */
-    vascular DeleteEdges(const std::vector<size_t>& edge_indices) const {
-        std::vector<bool> to_delete(m_edges.size(), false);
-        for (size_t ei : edge_indices) {
-            if (ei < m_edges.size()) to_delete[ei] = true;
-        }
-        vascular new_net;
-        new_net.m_nodes = m_nodes; // copy all nodes
-
-        // copy only edges that are not marked for deletion
-        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
-            if (!to_delete[ei]) {
-                new_net.m_edges.push_back(m_edges[ei]);
-            }
-        }
-
-        // rebuild node edge indices
-        for (auto& node : new_net.m_nodes)
-            node.ClearEdgeIndices();
-
-        for (size_t ei = 0; ei < new_net.m_edges.size(); ++ei) {
-            new_net.m_nodes[new_net.m_edges[ei].NodeIndex0()].AddEdgeIndex(ei);
-            new_net.m_nodes[new_net.m_edges[ei].NodeIndex1()].AddEdgeIndex(ei);
-        }
-        return new_net;
-    }
-
-    /**
      * @brief Selects all edges whose total fiber length falls within the given range [low, high].
      *        Can be chained with previous results using AND (intersection) or OR (union).
      * @param low The minimum allowed length for an edge .
