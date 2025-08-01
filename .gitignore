@@ -26,6 +26,10 @@ dist/
 # JetBrains IDE
 .idea/
 
+# compiled Doxygen documentation
+docs/html
+docs/latex
+
 # Unit test reports
 TEST*.xml
 
