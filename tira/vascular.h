@@ -307,7 +307,7 @@ public:
      *                If false: OR (include any edge in 'current' OR in range).
      * @return        A vector of edge indices that satisfy the length criteria.
     */
-    std::vector<size_t> SelectEdgeLength( float low, float high, const std::vector<size_t>& current = {}, bool op = false
+    std::vector<size_t> QueryVesselLength( float low, float high, const std::vector<size_t>& current = {}, bool op = false
     ) const {
         std::vector<size_t> result;
         std::vector<bool> already_in(m_edges.size(), false);
@@ -375,7 +375,7 @@ public:
      *                If false: OR (include any edge in 'current' OR in range).
      * @return        A vector of edge indices that satisfy the radius criteria.
     */
-    std::vector<size_t> SelectEdgeRadius(float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false) {
+    std::vector<size_t> QueryVesselRadius(float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false) {
 
         std::vector<size_t> result;                                 // initialize a vector to store the result
 
