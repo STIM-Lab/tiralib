@@ -410,8 +410,8 @@ public:
     }
 
     /**
-     * @brief Calculate the precise vessel volume of an edge using a segment-wise integration approach.
-     *        The volume is estimated by summing the cylindrical volume of each segment (π·r²·Δs),
+     * @brief Calculate the vessel volume of an edge using a segment-wise integration approach.
+     *        The volume is estimated by summing the cylindrical volume of each segment ,
      *        where the radius is averaged between adjacent points (including node endpoints).
      * @param edge_idx index of the edge to be analyzed
      * @return estimated vessel volume of the edge
@@ -455,7 +455,7 @@ public:
 
     /**
      * @brief selects all edges whose vessel volume falls within the given range [vmin, vmax].
-     *        can be chained with previous results using AND (intersection) or OR (union).
+     *         with previous results using AND (intersection) or OR (union).
      * @param vmin    The minimum allowed vessel volume for an edge.
      * @param vmax    The maximum allowed vessel volume for an edge.
      * @param current Optional vector of previously selected edge indices.
@@ -499,9 +499,9 @@ public:
 
 
     /**
-     * @brief Calculate the lateral surface area of a vessel edge using a segment-wise integration approach.
+     * @brief Calculate the surface area of a vessel edge using a segment-wise integration approach.
      *        The surface area is estimated by summing 2π·r·Δs for each segment, where the radius is averaged
-     *        between adjacent points (including node endpoints). Caps are ignored.
+     *        between adjacent points (including node endpoints). 
      * @param edge_idx index of the edge to be analyzed
      * @return estimated lateral surface area of the edge
     */
@@ -545,7 +545,7 @@ public:
 
 
     /**
-     * @brief selects all edges whose lateral surface area falls within the given range [amin, amax].
+     * @brief selects all edges whose surface area falls within the given range [amin, amax].
      *        can be chained with previous results using AND (intersection) or OR (union).
      * @param amin    The minimum allowed surface area for an edge.
      * @param amax    The maximum allowed surface area for an edge.
@@ -593,7 +593,7 @@ public:
      * @brief Calculate the tortuosity of a vessel edge as the ratio of path length to straight-line distance.
      *        Tortuosity = path_length / straight_line_length, where path includes all fiber segments and endpoints.
      * @param edge_idx index of the edge to be analyzed
-     * @return tortuosity value of the edge (always ≥ 1.0)
+     * @return tortuosity value of the edge 
     */
     float Tortuosity_Arc_Chord(size_t edge_idx) {
 
@@ -618,7 +618,7 @@ public:
 
     /**
      * @brief selects all edges whose tortuosity falls within the given range [tmin, tmax].
-     *        can be chained with previous results using AND (intersection) or OR (union).
+     *        with previous results using AND (intersection) or OR (union).
      * @param tmin    The minimum allowed tortuosity for an edge.
      * @param tmax    The maximum allowed tortuosity for an edge.
      * @param current Optional vector of previously selected edge indices.
@@ -660,7 +660,7 @@ public:
     }
 
     /**
-     * @brief Calculate the mean absolute curvature of an edge (a tortuosity metric)
+     * @brief Calculate the mean absolute curvature of an edge 
      * @param edge_idx index of the edge to be analyzed
      * @return mean absolute curvature of the edge
     */
@@ -680,7 +680,7 @@ public:
 
     /**
      * @brief selects all edges whose mean absolute curvature (tortuosity) falls within the range [kmin, kmax].
-     *        can be chained with previous results using AND (intersection) or OR (union).
+     *         with previous results using AND (intersection) or OR (union).
      * @param kmin    The minimum allowed tortuosity value.
      * @param kmax    The maximum allowed tortuosity value.
      * @param current Optional vector of previously selected edge indices.
@@ -718,8 +718,6 @@ public:
         std::sort(result.begin(), result.end());
         std::unique(result.begin(), result.end());
 
-
-       // result.insert(result.end(), current.begin(), current.end())
 
         return result;
     }
