@@ -125,6 +125,11 @@ namespace tira {
             original_fiber.push_back(v1);
             return original_fiber.Length();
         }
+
+        float Length() const {
+            return fiber<VertexAttributeType>::Length();
+        }
+
     };
 
     /**
