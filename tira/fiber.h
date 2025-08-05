@@ -147,6 +147,12 @@ namespace tira {
 			return l;
 		}
 
+		float ChordLength() {
+			if (this->size() < 2) return 0.0f;  // not enough points to compute a chord
+			return glm::length(this->back() - this->front());
+		}
+
+
 		fiber Smooth(float sigma, bool anchor_endpoints = true) {
 
 			fiber smoothed;
