@@ -298,38 +298,6 @@ public:
     size_t NumNodes() const { return m_nodes.size(); }
 
     /**
-     * @brief returns a new fibernet with the edges in edge_indices removed,
-     * preserving the original network.
-     * @param edge_indices list of edge indices to delete.
-     * @return a new fibernet with the specified edges removed.
-     */
-    vascular DeleteEdges(const std::vector<size_t>& edge_indices) const {
-        std::vector<bool> to_delete(m_edges.size(), false);
-        for (size_t ei : edge_indices) {
-            if (ei < m_edges.size()) to_delete[ei] = true;
-        }
-        vascular new_net;
-        new_net.m_nodes = m_nodes; // copy all nodes
-
-        // copy only edges that are not marked for deletion
-        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
-            if (!to_delete[ei]) {
-                new_net.m_edges.push_back(m_edges[ei]);
-            }
-        }
-
-        // rebuild node edge indices
-        for (auto& node : new_net.m_nodes)
-            node.ClearEdgeIndices();
-
-        for (size_t ei = 0; ei < new_net.m_edges.size(); ++ei) {
-            new_net.m_nodes[new_net.m_edges[ei].NodeIndex0()].AddEdgeIndex(ei);
-            new_net.m_nodes[new_net.m_edges[ei].NodeIndex1()].AddEdgeIndex(ei);
-        }
-        return new_net;
-    }
-
-    /**
      * @brief Selects all edges whose total fiber length falls within the given range [low, high].
      *        Can be chained with previous results using AND (intersection) or OR (union).
      * @param low The minimum allowed length for an edge .
@@ -339,7 +307,7 @@ public:
      *                If false: OR (include any edge in 'current' OR in range).
      * @return        A vector of edge indices that satisfy the length criteria.
     */
-    std::vector<size_t> SelectEdgeLength( float low, float high, const std::vector<size_t>& current = {}, bool op = false
+    std::vector<size_t> QueryVesselLength( float low, float high, const std::vector<size_t>& current = {}, bool op = false
     ) const {
         std::vector<size_t> result;
         std::vector<bool> already_in(m_edges.size(), false);
@@ -407,7 +375,7 @@ public:
      *                If false: OR (include any edge in 'current' OR in range).
      * @return        A vector of edge indices that satisfy the radius criteria.
     */
-    std::vector<size_t> SelectEdgeRadius(float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false) {
+    std::vector<size_t> QueryVesselRadius(float rmin, float rmax, const std::vector<size_t>& current = {}, bool op = false) {
 
         std::vector<size_t> result;                                 // initialize a vector to store the result
 
@@ -434,6 +402,319 @@ public:
         result.insert(result.end(), current.begin(), current.end());
 
         // remove duplicates
+        std::sort(result.begin(), result.end());
+        std::unique(result.begin(), result.end());
+
+
+        return result;
+    }
+
+    /**
+     * @brief Calculate the vessel volume of an edge using a segment-wise integration approach.
+     *        The volume is estimated by summing the cylindrical volume of each segment ,
+     *        where the radius is averaged between adjacent points (including node endpoints).
+     * @param edge_idx index of the edge to be analyzed
+     * @return estimated vessel volume of the edge
+    */
+    float VesselVolume(size_t edge_idx) {
+
+        float volume = 0.0f;                                                         // initialize running volume
+        const auto& edge = m_edges[edge_idx];                                        // reference the edge fiber
+        const size_t num_pts = edge.size();                                          // get number of intermediate points
+
+        // initialize the first point (node0)
+        glm::vec3 p0 = m_nodes[edge.NodeIndex0()];                                   // get the position of the first node
+        float r0 = m_nodes[edge.NodeIndex0()].Attribute();                           // get the radius of the first node
+
+        // loop over all fiber points and node1
+        for (size_t pi = 0; pi <= num_pts; ++pi) {
+
+            glm::vec3 p1;                                                             // coordinates of the next point
+            float r1;                                                                 // radius of the next point
+
+            if (pi < num_pts) {
+                p1 = edge[pi];                                                        // fiber point
+                r1 = edge[pi].Attribute();                                            // radius at the fiber point
+            }
+            else {
+                p1 = m_nodes[edge.NodeIndex1()];                                      // final node
+                r1 = m_nodes[edge.NodeIndex1()].Attribute();                          // final node radius
+            }
+
+            float seg_len = glm::length(p1 - p0);                                     // segment length
+            float r_avg = 0.5f * (r0 + r1);                                           // average radius of the segment
+
+            volume += static_cast<float>(M_PI) * r_avg * r_avg * seg_len;            // add the cylindrical segment volume
+
+            p0 = p1;                                                                  // update current point
+            r0 = r1;                                                                  // update current radius
+        }
+
+        return volume;                                                                // return the final accumulated volume
+    }
+
+    /**
+     * @brief selects all edges whose vessel volume falls within the given range [vmin, vmax].
+     *         with previous results using AND (intersection) or OR (union).
+     * @param vmin    The minimum allowed vessel volume for an edge.
+     * @param vmax    The maximum allowed vessel volume for an edge.
+     * @param current Optional vector of previously selected edge indices.
+     * @param op      If true: AND (restrict to edges in 'current' AND in range);
+     *                If false: OR (include any edge in 'current' OR in range).
+     * @return        A vector of edge indices that satisfy the volume criteria.
+    */
+
+    std::vector<size_t> QueryVesselVolume(float vmin, float vmax, const std::vector<size_t>& current = {}, bool op = false) {
+
+        std::vector<size_t> result;                                     // initialize a vector to store the result
+
+        // AND operation
+        if (op) {                                                       // an AND operation just requires looking at the edges in the "current" vector
+            for (size_t ci = 0; ci < current.size(); ci++) {            // for each edge in the current vector
+                float c_volume = VesselVolume(current[ci]);             // calculate the volume
+                if (c_volume >= vmin && c_volume <= vmax) {             // check to see if it's within the specified range
+                    result.push_back(current[ci]);                      // if so, push it into the result vector
+                }
+            }
+            return result;                                              // return the result vector - we're done
+        }
+
+        // OR operation
+        for (size_t ei = 0; ei < m_edges.size(); ei++) {                // an OR operation requires looking at every edge in the network
+            float e_volume = VesselVolume(ei);                          // calculate the volume of the edge
+            if (e_volume >= vmin && e_volume <= vmax) {                 // if it's within the specified range
+                result.push_back(ei);                                   // add it to the result vector
+            }
+        }
+
+        // combine the result vector with the input vector
+        result.insert(result.end(), current.begin(), current.end());
+
+        // remove duplicates
+        std::sort(result.begin(), result.end());
+        std::unique(result.begin(), result.end());
+
+        return result;                                                  // return the list of matching edge indices
+    }
+
+
+    /**
+     * @brief Calculate the surface area of a vessel edge using a segment-wise integration approach.
+     *        The surface area is estimated by summing 2π·r·Δs for each segment, where the radius is averaged
+     *        between adjacent points (including node endpoints). 
+     * @param edge_idx index of the edge to be analyzed
+     * @return estimated lateral surface area of the edge
+    */
+
+    float VesselSurfaceArea(size_t edge_idx) {
+
+        float surface_area = 0.0f;                                                    // initialize running surface area
+        const auto& edge = m_edges[edge_idx];                                         // reference the edge fiber
+        const size_t num_pts = edge.size();                                           // get number of intermediate fiber points
+
+        // initialize the first point (node0)
+        glm::vec3 p0 = m_nodes[edge.NodeIndex0()];                                    // get the position of the first node
+        float r0 = m_nodes[edge.NodeIndex0()].Attribute();                            // get the radius of the first node
+
+        // loop over all fiber points and node1
+        for (size_t pi = 0; pi <= num_pts; ++pi) {
+
+            glm::vec3 p1;                                                              // coordinates of the next point
+            float r1;                                                                  // radius of the next point
+
+            if (pi < num_pts) {
+                p1 = edge[pi];                                                         // fiber point
+                r1 = edge[pi].Attribute();                                             // radius at the fiber point
+            }
+            else {
+                p1 = m_nodes[edge.NodeIndex1()];                                       // final node
+                r1 = m_nodes[edge.NodeIndex1()].Attribute();                           // final node radius
+            }
+
+            float seg_len = glm::length(p1 - p0);                                      // segment length
+            float r_avg = 0.5f * (r0 + r1);                                            // average radius of the segment
+
+            surface_area += 2.0f * static_cast<float>(M_PI) * r_avg * seg_len;        // accumulate lateral surface area
+
+            p0 = p1;                                                                   // update current point
+            r0 = r1;                                                                   // update current radius
+        }
+
+        return surface_area;                                                           // return the total surface area
+    }
+
+
+    /**
+     * @brief selects all edges whose surface area falls within the given range [amin, amax].
+     *        can be chained with previous results using AND (intersection) or OR (union).
+     * @param amin    The minimum allowed surface area for an edge.
+     * @param amax    The maximum allowed surface area for an edge.
+     * @param current Optional vector of previously selected edge indices.
+     * @param op      If true: AND (restrict to edges in 'current' AND in range);
+     *                If false: OR (include any edge in 'current' OR in range).
+     * @return        A vector of edge indices that satisfy the surface area criteria.
+     */
+
+    std::vector<size_t> QueryVesselSurfaceArea(float amin, float amax, const std::vector<size_t>& current = {}, bool op = false) {
+
+        std::vector<size_t> result;                                      // initialize a vector to store the result
+
+        // AND operation
+        if (op) {                                                        // an AND operation just requires looking at the edges in the "current" vector
+            for (size_t ci = 0; ci < current.size(); ci++) {             // for each edge in the current vector
+                float c_area = VesselSurfaceArea(current[ci]);           // calculate the surface area
+                if (c_area >= amin && c_area <= amax) {                  // check to see if it's within the specified range
+                    result.push_back(current[ci]);                       // if so, push it into the result vector
+                }
+            }
+            return result;                                               // return the result vector - we're done
+        }
+
+        // OR operation
+        for (size_t ei = 0; ei < m_edges.size(); ei++) {                 // an OR operation requires looking at every edge in the network
+            float e_area = VesselSurfaceArea(ei);                        // calculate the surface area of the edge
+            if (e_area >= amin && e_area <= amax) {                      // if it's within the specified range
+                result.push_back(ei);                                    // add it to the result vector
+            }
+        }
+
+        // combine the result vector with the input vector
+        result.insert(result.end(), current.begin(), current.end());
+
+        // remove duplicates
+        std::sort(result.begin(), result.end());
+        std::unique(result.begin(), result.end());
+
+        return result;                                                   // return the list of matching edge indices
+    }
+
+
+    /**
+     * @brief Calculate the tortuosity of a vessel edge as the ratio of path length to straight-line distance.
+     *        Tortuosity = path_length / straight_line_length, where path includes all fiber segments and endpoints.
+     * @param edge_idx index of the edge to be analyzed
+     * @return tortuosity value of the edge 
+    */
+    float Tortuosity_Arc_Chord(size_t edge_idx) {
+
+        float path_length = m_edges[edge_idx].Length(                                  // compute path length including node anchors
+            m_nodes[m_edges[edge_idx].NodeIndex0()],
+            m_nodes[m_edges[edge_idx].NodeIndex1()]
+        );
+
+        glm::vec3 p0 = m_nodes[m_edges[edge_idx].NodeIndex0()];                        // start point (node0)
+        glm::vec3 p1 = m_nodes[m_edges[edge_idx].NodeIndex1()];                        // end point (node1)
+
+        float chord_length = glm::length(p1 - p0);                                     // straight-line distance
+
+        if (chord_length <= 0.0f)                                                      // handle edge case for overlapping endpoints
+            return 1.0f;
+
+        float tortuosity = path_length / chord_length;                                 // compute tortuosity ratio
+
+        return tortuosity;                                                             // return the tortuosity
+    }
+
+
+    /**
+     * @brief selects all edges whose tortuosity falls within the given range [tmin, tmax].
+     *        with previous results using AND (intersection) or OR (union).
+     * @param tmin    The minimum allowed tortuosity for an edge.
+     * @param tmax    The maximum allowed tortuosity for an edge.
+     * @param current Optional vector of previously selected edge indices.
+     * @param op      If true: AND (restrict to edges in 'current' AND in range);
+     *                If false: OR (include any edge in 'current' OR in range).
+     * @return        A vector of edge indices that satisfy the tortuosity criteria.
+    */
+    std::vector<size_t> QueryVesselTortuosity_Arc_Chord(float tmin, float tmax, const std::vector<size_t>& current = {}, bool op = false) {
+
+        std::vector<size_t> result;                                     // initialize a vector to store the result
+
+        // AND operation
+        if (op) {                                                       // an AND operation just requires looking at the edges in the "current" vector
+            for (size_t ci = 0; ci < current.size(); ci++) {            // for each edge in the current vector
+                float c_tort = Tortuosity_Arc_Chord(current[ci]);                 // calculate the tortuosity
+                if (c_tort >= tmin && c_tort <= tmax) {                 // check to see if it's within the specified range
+                    result.push_back(current[ci]);                      // if so, push it into the result vector
+                }
+            }
+            return result;                                              // return the result vector - we're done
+        }
+
+        // OR operation
+        for (size_t ei = 0; ei < m_edges.size(); ei++) {                // an OR operation requires looking at every edge in the network
+            float e_tort = Tortuosity_Arc_Chord(ei);                              // calculate the tortuosity of the edge
+            if (e_tort >= tmin && e_tort <= tmax) {                     // if it's within the specified range
+                result.push_back(ei);                                   // add it to the result vector
+            }
+        }
+
+        // combine the result vector with the input vector
+        result.insert(result.end(), current.begin(), current.end());
+
+        // remove duplicates
+        std::sort(result.begin(), result.end());
+        std::unique(result.begin(), result.end());
+
+        return result;                                                  // return the list of matching edge indices
+    }
+
+    /**
+     * @brief Calculate the mean absolute curvature of an edge 
+     * @param edge_idx index of the edge to be analyzed
+     * @return mean absolute curvature of the edge
+    */
+    float CurvatureTortuosity(size_t edge_idx) {
+
+        vessel& edge = m_edges[edge_idx];                                // get the fiber (fiber<float>)
+        if (edge.size() < 3) return 0.0f;                                 // need at least 3 points for second derivative
+
+        std::vector<float> kappa = edge.Curvature();                     // call the curvature function
+
+        float sum_abs_curvature = 0.0f;
+        for (float k : kappa)
+            sum_abs_curvature += std::abs(k);                            // accumulate absolute curvature
+
+        return sum_abs_curvature / static_cast<float>(kappa.size());     // compute mean
+    }
+
+    /**
+     * @brief selects all edges whose mean absolute curvature (tortuosity) falls within the range [kmin, kmax].
+     *         with previous results using AND (intersection) or OR (union).
+     * @param kmin    The minimum allowed tortuosity value.
+     * @param kmax    The maximum allowed tortuosity value.
+     * @param current Optional vector of previously selected edge indices.
+     * @param op      If true: AND (restrict to edges in 'current' AND in range);
+     *                If false: OR (include any edge in 'current' OR in range).
+     * @return        A vector of edge indices that satisfy the tortuosity criteria.
+    */
+    std::vector<size_t> QueryVesselCurvatureTortuosity(float kmin, float kmax, const std::vector<size_t>& current = {}, bool op = false) {
+
+        std::vector<size_t> result;
+
+        // AND operation
+        if (op) {
+            for (size_t ci = 0; ci < current.size(); ci++) {
+                float tort = CurvatureTortuosity(current[ci]);
+                if (tort >= kmin && tort <= kmax) {
+                    result.push_back(current[ci]);
+                }
+            }
+            return result;
+        }
+
+        // OR operation
+        for (size_t ei = 0; ei < m_edges.size(); ei++) {
+            float tort = CurvatureTortuosity(ei);
+            if (tort >= kmin && tort <= kmax) {
+                result.push_back(ei);
+            }
+        }
+
+        // combine the result vector with the input vector
+        result.insert(result.end(), current.begin(), current.end());
+
+        //remove duplicates
         std::sort(result.begin(), result.end());
         std::unique(result.begin(), result.end());
 
