@@ -177,6 +177,31 @@ namespace tira {
 
         void ClearEdgeIndices() { m_edge_indices.clear(); }
 
+        ///////////////////////////////////////////////
+
+        /**
+         * @brief returns the number of edges connected to this node (which is  the degree).
+        */
+        size_t Degree() const {
+            return m_edge_indices.size(); // where degegree = number of connected edges
+        }
+
+
+        /**
+         * @brief removes an edge index from the node’s list of connected edges.
+         *        this is called when an edge is deleted from the graph.
+        */
+
+        void RemoveEdge(size_t ei) {
+            // remove all occurrences of edge index ei from the edge list
+            m_edge_indices.erase(
+                std::remove(m_edge_indices.begin(), m_edge_indices.end(), ei),
+                m_edge_indices.end()
+            );
+        }
+
+        /////////////////////////////////
+
     };
 
     /**
@@ -335,6 +360,126 @@ namespace tira {
             }
             return smoothed;
         }
+
+        ////////////////////////////////////////////////////
+        /**
+         * @brief Removes an edge from the edge list and updates connected node indices accordingly.
+         *
+         * @param edge_index Index of the edge to remove.
+        */
+
+        void RemoveEdge(size_t edge_index) {
+            if (edge_index >= m_edges.size()) return;
+
+            const auto& edge = m_edges[edge_index];
+
+            // decrease the degree of the connected nodes
+            m_nodes[edge.NodeIndex0()].RemoveEdge(edge_index);
+            m_nodes[edge.NodeIndex1()].RemoveEdge(edge_index);
+
+            // erase the edge from the list.......
+            m_edges.erase(m_edges.begin() + edge_index);
+
+        }
+
+        /**
+         * @brief Prints the number of nodes with the specified degree.
+         *
+         * @param degree the target node degree to search for.
+        */
+
+        void QueryDegree(int degree) const {
+            size_t count = 0;
+
+            for (const auto& node : m_nodes) {
+                if (node.Degree() == degree) {
+                    count++;
+                }
+            }
+
+            if (count == 0) {
+                std::cout << "no nodes with degree " << degree << "." << std::endl;
+            }
+            else {
+                std::cout << count << " nodes with degree " << degree << "." << std::endl;
+            }
+        }
+
+        /**
+         * @brief check if the edge at index `edge_idx` is a spine
+         * @param edge_idx Index of the edge
+         * @param min_len minimum length threshold
+         * @param max_len maximum length threshold
+         * @return True if the edge is a spine, false otherwise
+        */
+
+        bool IsSpine(size_t edge_idx, float min_len, float max_len) const {
+
+            const auto& edge = m_edges[edge_idx];
+
+            float len = edge.Length(m_nodes[edge.NodeIndex0()], m_nodes[edge.NodeIndex1()]);
+
+            if (len < min_len || len > max_len)
+                return false;                                                             // reject if length is outside allowed range
+
+            // get the two endpoint nodes
+            const auto& n0 = m_nodes[edge.NodeIndex0()];
+            const auto& n1 = m_nodes[edge.NodeIndex1()];
+
+            return (n0.Degree() == 1 || n1.Degree() == 1);                                // check if either node has degree 1
+        }
+
+
+        /**
+         * @brief Selects edges that are "spines" based on length and degree.
+         *        Supports AND/OR logic with previous selection and optional removal.
+         *
+         * @param min_len   minimum length of spine edge
+         * @param max_len   maximum length of spine edge
+         * @param current   Optional vector of already selected edge indices
+         * @param op        If true, perform AND (intersection); else OR (union)
+         * @param remove    If true, remove the selected edges from the network
+         * @return          vector of edge indices that match the spine criteria
+        */
+
+        std::vector<size_t> QuerySpines( float min_len, float max_len, const std::vector<size_t>& current = {}, bool op = false, bool remove = true)
+        {
+            std::vector<size_t> result;
+
+            if (op) {
+                for (size_t ei : current) {
+                    if (IsSpine(ei, min_len, max_len)) {
+                        result.push_back(ei);
+                    }
+                }
+            }
+            else {
+                for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+                    if (IsSpine(ei, min_len, max_len)) {
+                        result.push_back(ei);
+                    }
+                }
+
+                // OR: add original current
+                result.insert(result.end(), current.begin(), current.end());
+
+                // Remove duplicates
+                std::sort(result.begin(), result.end());
+                result.erase(std::unique(result.begin(), result.end()), result.end());
+            }
+
+            if (remove) {
+                std::sort(result.begin(), result.end(), std::greater<size_t>());
+                for (size_t ei : result) {
+                    this->RemoveEdge(ei);
+                }
+            }
+
+            return result;
+        }
+
+
+        ///////////////////////////////////////////////////
 
         /**
          * @brief returns a new fibernet with the edges in edge_indices removed,
