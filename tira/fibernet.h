@@ -485,12 +485,12 @@ namespace tira {
                 result.erase(std::unique(result.begin(), result.end()), result.end());
             }
 
-            if (remove) {
+            /*if (remove) {
                 std::sort(result.begin(), result.end(), std::greater<size_t>());
                 for (size_t ei : result) {
                     this->RemoveEdge(ei);
                 }
-            }
+            }*/
 
             return result;
         }
