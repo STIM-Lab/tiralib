@@ -188,7 +188,7 @@ namespace tira {
 
 
         /**
-         * @brief removes an edge index from the node’s list of connected edges.
+         * @brief removes an edge index from the nodeï¿½s list of connected edges.
          *        this is called when an edge is deleted from the graph.
         */
 
@@ -249,6 +249,23 @@ namespace tira {
          * List of edges in this network, modeled as a mathematical graph
          */
         std::vector<fedge> m_edges;
+
+
+        /**
+         * Assign connected edges to each node
+         */
+        void m_UpdateNodeEdgeList() {
+
+            for (size_t ni = 0; ni < m_nodes.size(); ni++)                 // clear the edge indices from all nodes
+                m_nodes[ni].ClearEdgeIndices();
+
+            for (size_t ei = 0; ei < m_edges.size(); ei++) {        // add edge indices to each associated node
+                size_t ni0 = m_edges[ei].NodeIndex0();
+                size_t ni1 = m_edges[ei].NodeIndex1();
+                m_nodes[ni0].AddEdgeIndex(ei);
+                m_nodes[ni1].AddEdgeIndex(ei);
+            }
+	    }
 
     public:
         /**
@@ -413,15 +430,15 @@ namespace tira {
          * @return True if the edge is a spine, false otherwise
         */
 
-        bool IsSpine(size_t edge_idx, float min_len, float max_len) const {
+        bool IsSpine(size_t edge_idx) const {
 
             const auto& edge = m_edges[edge_idx];
 
-            float len = edge.Length(m_nodes[edge.NodeIndex0()], m_nodes[edge.NodeIndex1()]);
+            /*float len = edge.Length(m_nodes[edge.NodeIndex0()], m_nodes[edge.NodeIndex1()]);
 
             if (len < min_len || len > max_len)
                 return false;                                                             // reject if length is outside allowed range
-
+            */
             // get the two endpoint nodes
             const auto& n0 = m_nodes[edge.NodeIndex0()];
             const auto& n1 = m_nodes[edge.NodeIndex1()];
@@ -442,20 +459,20 @@ namespace tira {
          * @return          vector of edge indices that match the spine criteria
         */
 
-        std::vector<size_t> QuerySpines( float min_len, float max_len, const std::vector<size_t>& current = {}, bool op = false, bool remove = true)
+        std::vector<size_t> QuerySpines(const std::vector<size_t>& current = {}, bool and_op = false)
         {
             std::vector<size_t> result;
 
-            if (op) {
+            if (and_op) {
                 for (size_t ei : current) {
-                    if (IsSpine(ei, min_len, max_len)) {
+                    if (IsSpine(ei)) {
                         result.push_back(ei);
                     }
                 }
             }
             else {
                 for (size_t ei = 0; ei < m_edges.size(); ++ei) {
-                    if (IsSpine(ei, min_len, max_len)) {
+                    if (IsSpine(ei)) {
                         result.push_back(ei);
                     }
                 }
@@ -514,118 +531,135 @@ namespace tira {
         }
 
 
-    /**
-     * @brief Selects all edges whose total fiber length falls within the given range [low, high].
-     *        Can be chained with previous results using AND (intersection) or OR (union).
-     * @param low The minimum allowed length for an edge .
-     * @param high The maximum allowed length for an edge .
-     * @param current Optional vector of previously selected edge indices.
-     * @param op      If true: AND (restrict to edges in 'current' AND in range);
-     *                If false: OR (include any edge in 'current' OR in range).
-     * @return        A vector of edge indices that satisfy the length criteria.
-    */
-    std::vector<size_t> QueryLength( float low, float high, const std::vector<size_t>& current = {}, bool op = false) const {
-        std::vector<size_t> result;
-        std::vector<bool> already_in(m_edges.size(), false);
+        /**
+         * @brief Selects all edges whose total fiber length falls within the given range [low, high].
+         *        Can be chained with previous results using AND (intersection) or OR (union).
+         * @param low The minimum allowed length for an edge .
+         * @param high The maximum allowed length for an edge .
+         * @param current Optional vector of previously selected edge indices.
+         * @param op      If true: AND (restrict to edges in 'current' AND in range);
+         *                If false: OR (include any edge in 'current' OR in range).
+         * @return        A vector of edge indices that satisfy the length criteria.
+        */
+        std::vector<size_t> QueryLength( float low, float high, const std::vector<size_t>& current = {}, bool op = false) const {
+            std::vector<size_t> result;
+            std::vector<bool> already_in(m_edges.size(), false);
 
-        if (op && !current.empty()) {
-            // AND: only look at the current selection
-            for (size_t i : current) {
-                if (i < m_edges.size()) {
-                    float len = m_edges[i].Length(
-                        m_nodes[m_edges[i].NodeIndex0()],
-                        m_nodes[m_edges[i].NodeIndex1()]);
-                    if (len >= low && len <= high)
-                        result.push_back(i);
+            if (op && !current.empty()) {
+                // AND: only look at the current selection
+                for (size_t i : current) {
+                    if (i < m_edges.size()) {
+                        float len = m_edges[i].Length(
+                            m_nodes[m_edges[i].NodeIndex0()],
+                            m_nodes[m_edges[i].NodeIndex1()]);
+                        if (len >= low && len <= high)
+                            result.push_back(i);
+                    }
                 }
             }
-        }
-        else {
-            // OR: go over all edges, add anything that matches or is already in current
-            for (size_t i : current)
-                if (i < m_edges.size())
-                    already_in[i] = true;
+            else {
+                // OR: go over all edges, add anything that matches or is already in current
+                for (size_t i : current)
+                    if (i < m_edges.size())
+                        already_in[i] = true;
 
-            for (size_t ei = 0; ei < m_edges.size(); ++ei) {
-                float len = m_edges[ei].Length(
-                    m_nodes[m_edges[ei].NodeIndex0()],
-                    m_nodes[m_edges[ei].NodeIndex1()]);
-                if ((len >= low && len <= high) && !already_in[ei]) {
-                    result.push_back(ei);
-                }
-                else if (already_in[ei]) {
-                    result.push_back(ei);
-                }
+                for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+                    float len = m_edges[ei].Length(
+                        m_nodes[m_edges[ei].NodeIndex0()],
+                        m_nodes[m_edges[ei].NodeIndex1()]);
+                    if ((len >= low && len <= high) && !already_in[ei]) {
+                        result.push_back(ei);
+                    }
+                    else if (already_in[ei]) {
+                        result.push_back(ei);
+                    }
 
-            }
-        }
-        return result;
-    }
-
-
-	/**
-     * @brief Calculate the mean absolute curvature of an edge
-     * @param edge_idx index of the edge to be analyzed
-     * @return mean absolute curvature of the edge
-    */
-	float MeanCurvature(size_t edge_idx) {
-
-        edge<VertexAttributeType, EdgeAttributeType>& current_edge = m_edges[edge_idx];                                // get the fiber (fiber<float>)
-        if (current_edge.size() < 3) return 0.0f;                                 // need at least 3 points for second derivative
-
-        std::vector<float> kappa = current_edge.Curvature();                     // call the curvature function
-
-        float sum_abs_curvature = 0.0f;
-        for (float k : kappa)
-            sum_abs_curvature += std::abs(k);                            // accumulate absolute curvature
-
-        return sum_abs_curvature / static_cast<float>(kappa.size());     // compute mean
-    }
-
-
-    /**
-     * @brief selects all edges whose mean absolute curvature (tortuosity) falls within the range [kmin, kmax].
-     *         with previous results using AND (intersection) or OR (union).
-     * @param kmin    The minimum allowed tortuosity value.
-     * @param kmax    The maximum allowed tortuosity value.
-     * @param current Optional vector of previously selected edge indices.
-     * @param op      If true: AND (restrict to edges in 'current' AND in range);
-     *                If false: OR (include any edge in 'current' OR in range).
-     * @return        A vector of edge indices that satisfy the tortuosity criteria.
-    */
-    std::vector<size_t> QueryMeanCurvature(float kmin, float kmax, const std::vector<size_t>& current = {}, bool op = false) {
-
-        std::vector<size_t> result;
-
-        // AND operation
-        if (op) {
-            for (size_t ci = 0; ci < current.size(); ci++) {
-                float tort = MeanCurvature(current[ci]);
-                if (tort >= kmin && tort <= kmax) {
-                    result.push_back(current[ci]);
                 }
             }
             return result;
         }
 
-        // OR operation
-        for (size_t ei = 0; ei < m_edges.size(); ei++) {
-            float tort = MeanCurvature(ei);
-            if (tort >= kmin && tort <= kmax) {
-                result.push_back(ei);
-            }
+
+	    /**
+         * @brief Calculate the mean absolute curvature of an edge
+         * @param edge_idx index of the edge to be analyzed
+         * @return mean absolute curvature of the edge
+        */
+	    float MeanCurvature(size_t edge_idx) {
+
+            edge<VertexAttributeType, EdgeAttributeType>& current_edge = m_edges[edge_idx];                                // get the fiber (fiber<float>)
+            if (current_edge.size() < 3) return 0.0f;                                 // need at least 3 points for second derivative
+
+            std::vector<float> kappa = current_edge.Curvature();                     // call the curvature function
+
+            float sum_abs_curvature = 0.0f;
+            for (float k : kappa)
+                sum_abs_curvature += std::abs(k);                            // accumulate absolute curvature
+
+            return sum_abs_curvature / static_cast<float>(kappa.size());     // compute mean
         }
 
-        // combine the result vector with the input vector
-        result.insert(result.end(), current.begin(), current.end());
 
-        //remove duplicates
-        std::sort(result.begin(), result.end());
-        std::unique(result.begin(), result.end());
+        /**
+         * @brief selects all edges whose mean absolute curvature (tortuosity) falls within the range [kmin, kmax].
+         *         with previous results using AND (intersection) or OR (union).
+         * @param kmin    The minimum allowed tortuosity value.
+         * @param kmax    The maximum allowed tortuosity value.
+         * @param current Optional vector of previously selected edge indices.
+         * @param op      If true: AND (restrict to edges in 'current' AND in range);
+         *                If false: OR (include any edge in 'current' OR in range).
+         * @return        A vector of edge indices that satisfy the tortuosity criteria.
+        */
+        std::vector<size_t> QueryMeanCurvature(float kmin, float kmax, const std::vector<size_t>& current = {}, bool op = false) {
+
+            std::vector<size_t> result;
+
+            // AND operation
+            if (op) {
+                for (size_t ci = 0; ci < current.size(); ci++) {
+                    float tort = MeanCurvature(current[ci]);
+                    if (tort >= kmin && tort <= kmax) {
+                        result.push_back(current[ci]);
+                    }
+                }
+                return result;
+            }
+
+            // OR operation
+            for (size_t ei = 0; ei < m_edges.size(); ei++) {
+                float tort = MeanCurvature(ei);
+                if (tort >= kmin && tort <= kmax) {
+                    result.push_back(ei);
+                }
+            }
+
+            // combine the result vector with the input vector
+            result.insert(result.end(), current.begin(), current.end());
+
+            //remove duplicates
+            std::sort(result.begin(), result.end());
+            std::unique(result.begin(), result.end());
 
 
-        return result;
-    }
+            return result;
+        }
+
+        /**
+         * Returns a histogram of the degrees of all nodes
+         * @return
+         */
+        std::vector<size_t> CountDegrees() {
+
+            std::vector<size_t> histogram;
+
+            for (size_t ni = 0; ni < m_nodes.size(); ni++) {
+                size_t degree = m_nodes[ni].Degree();
+                if (degree >= histogram.size())
+                    histogram.resize(degree + 1);
+                histogram[degree]++;
+            }
+            return histogram;
+        }
 
 	};
 }

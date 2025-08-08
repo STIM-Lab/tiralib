@@ -309,7 +309,7 @@ public:
             in.read((char*)&vol_offset, 8);
         }
 
-        // read skeleton
+        // read all node positions
         for (size_t ni = 0; ni < h.num_nodes; ni++) {           // iterate through each node
             glm::vec3 p;
             float r;                                            // get the vertex attribute (radius)
@@ -331,6 +331,7 @@ public:
                 m_edges[ei].AddLastVertex(p, r);
             }
         }
+        m_UpdateNodeEdgeList();
         _remove_duplicate_points();
         _calculate_attributes();                        // calculate attributes for the vascular network
         in.close();
