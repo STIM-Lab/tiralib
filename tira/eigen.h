@@ -330,6 +330,15 @@ namespace tira {
         // | b  c  e |
         // | d  e  f |
 
+        // test to see if this matrix is diagonal
+        T upper_diagonal_norm = b * b + d * d + e * e;
+        if (upper_diagonal_norm == 0.0) {
+            evec0[0] = (T)1.0;    evec0[1] = (T)0.0;    evec0[2] = (T)0.0;
+            evec1[0] = (T)0.0;    evec1[1] = (T)1.0;    evec1[2] = (T)0.0;
+            evec2[0] = (T)0.0;    evec2[1] = (T)0.0;    evec2[2] = (T)1.0;
+            return;
+        }
+
         T q = (a + c + f) / 3.0;
 	    T determinant = determinant3(a - q, b, c - q, d, e, f - q);
         if (determinant >= 0.0) {
@@ -503,12 +512,12 @@ namespace tira::cpu {
             double e = mats[i * 9 + 5];
             double f = mats[i * 9 + 8];
 
-			// To guard agains floating-point overflow, we precondition the matrix
-			double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
+			// To guard against floating-point overflow, we precondition the matrix by normalizing by the largest value
+			double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);              // calculate the largest absolute value in the matrix
 			double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
 			double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
 			double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
-			double invMaxElement = 1.0 / maxElement;
+			double invMaxElement = 1.0 / maxElement;                            // normalize the matrix
 			a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
 			c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
 
