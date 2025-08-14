@@ -263,10 +263,92 @@ namespace tira {
         }
     }
 
-    /// Calculate the eigenvalues of a 3x3 matrix
+    /**
+     * This calculation is based on a description in:
+     * Smith, "Eigenvalues of a symmetric 3 x 3 matrix," Communications of the ACM 4(4) 168 (April 1961)     *
+     * https://doi.org/10.1145/355578.366316
+     *
+     * @tparam T
+     * @param a
+     * @param b
+     * @param c
+     * @param d
+     * @param e
+     * @param f
+     * @param eval0
+     * @param eval1
+     * @param eval2
+     */
     template<typename T>
     CUDA_CALLABLE void eval3_symmetric(T a, T b, T c, T d, T e, T f,
         T& eval0, T& eval1, T& eval2) {
+        // | a   b   d |
+        // | b   c   e |
+        // | d   e   f |
+
+        // determine if the matrix is diagonal
+        T p1 = b * b + d * d + e * e;
+        if (p1 == 0) {
+            eval0 = a;  eval1 = c;  eval2 = f;
+            return;
+        }
+
+        T q = (a + c + f) / 3.0;
+        T p2 = pow(a-q, 2) + pow(c-q, 2) + pow(f-q, 2) + 2 * p1;
+        T p = sqrt(p2 / 6.0);
+        // The matrix C = A - q*I is represented by the following, where
+        // b00, b11 and b22 are computed after these comments,
+        //       +-           -+         +-               -+
+        //       | Ba  Bb  Bd  |      1  | a-q   b     d   |
+        // B =   | Bb  Bc  Be  |    = _  | b     c-q   e   |
+        //       | Bd  Be  Bf  |      p  | d     e     f-q |
+        //       +-           -+         +-               -+
+        T p_inv = 1.0 / p;
+        T Ba = p_inv * (a - q);
+        T Bb = p_inv * b;
+        T Bc = p_inv * (c - q);
+        T Bd = p_inv * d;
+        T Be = p_inv * e;
+        T Bf = p_inv * (f - q);
+
+        // calculate the determinant of B
+        T det_B = Ba * (Bc * Bf - Be * Be) - Bb * (Bb * Bf - Bd * Be) + Bd * (Bb * Be - Bd * Bc);
+        T r = det_B / 2.0;
+
+        T phi;
+        if (r <= -1) phi = std::numbers::pi / 3.0;
+        else if (r >= 1) phi = 0.0;
+        else phi = acos(r) / 3.0;
+
+        eval2 = q + 2 * p * cos(phi);
+        eval0 = q + 2 * p * cos(phi + (2 * std::numbers::pi / 3.0));
+        eval1 = 3 * q - eval0 - eval2;
+    }
+
+    /**
+     * Calculate the eigenvalues of a 3x3 symmetric matrix. This code is adapted from a paper by David Eberly
+     * available here:
+     * https://www.geometrictools.com/Documentation/RobustEigenSymmetric3x3.pdf
+     *
+     * Links to the adopted code are provided and Eberly's comments are appended in the adopted code for the function.
+     *
+     * @tparam T
+     * @param a
+     * @param b
+     * @param c
+     * @param d
+     * @param e
+     * @param f
+     * @param eval0
+     * @param eval1
+     * @param eval2
+     */
+    /*template<typename T>
+    CUDA_CALLABLE void eval3_symmetric(T a, T b, T c, T d, T e, T f,
+        T& eval0, T& eval1, T& eval2) {
+
+        eval3_symmetric_wikipedia(a, b, c, d, e, f, eval0, eval1, eval2);
+        return;
 	    // | a   b   d |
 	    // | b   c   e |
 	    // | d   e   f |
@@ -297,7 +379,21 @@ namespace tira {
             return;
         }
 
-        T q = (a + c + f) / 3.0;
+        // The PDF defines the matrix B = (A - q*I)/p, where:
+        // q = tr(A)/3
+        // p = sqrt(tr((A - q*I)^2)/6)
+
+        T q = (a + c + f) / 3.0;            // calculate q = tr(A) / 3
+
+        // The matrix C = A - q*I is represented by the following, where
+        // b00, b11 and b22 are computed after these comments,
+        //   +-           -+        +-               -+
+        //   | b00 a01 a02 |        | a-q   b     d   |
+        //   | a01 b11 a12 |    =   | b     c-q   e   |
+        //   | a02 a12 b22 |        | d     b     f-q |
+        //   +-           -+        +-               -+
+        //T tr_C = (a - q) + (c - q) + (f - q);
+        //T tr_C2 = pow(a - q, 2) + pow(c - q, 2) + pow(f - q, 2);            // calculate the tr(C^2)
         T p2 = (a - q) * (a - q) + (c - q) * (c - q) + (f - q) * (f - q) + 2.0 * p1;
         T p = sqrt(p2 / 6.0);
         T pinv = 1.0 / p;
@@ -332,6 +428,7 @@ namespace tira {
         eval0 = (q + 2.0 * p * cos(phi + (2.0 * PI / 3.0))) * maxElement;
         eval1 = (3.0 * q - eval2 - eval0)                   * maxElement;                // since trace(A) = eig1 + eig2 + eig3
     }
+    */
 
     /// Calculate the eigenvector of a 3x3 matrix associated with the eigenvalue lambda.
     /// The result is returned in polar coordinates (theta, phi).
