@@ -529,8 +529,45 @@ public:
 
         return result;                                                  // return the list of matching edge indices
     }
+    
+
+    void m_CalculateAvgRadii() {
+        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+            m_edges[ei].EdgeAttribute().avg_radius = AverageRadius(ei);
+        }
+    }
+
+    void m_CalculateVolumes() {
+        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+            m_edges[ei].EdgeAttribute().volume = VesselVolume(ei);
+        }
+    }
+
+    void m_CalculateMeanCurvature() {
+        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+            m_edges[ei].EdgeAttribute().avg_curvature = MeanCurvature(ei);
+        }
+    }
 
 
+
+    void ExportCSVReport(const std::string& filename) {
+        std::ofstream out(filename);
+        out << "EdgeID, Length, AvgRadius, MeanCurvature, ArcChordRatio, Volume, SurfaceArea\n";
+
+        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+            const auto& attr = m_edges[ei].EdgeAttribute();
+            out << ei << ","
+                << attr.length << ","
+                << attr.avg_radius << ","
+                << attr.avg_curvature << ","
+                << attr.arc_cord_ratio << ","
+                << attr.volume << ","
+                << attr.surface_area << "\n";
+        }
+
+        out.close();
+    }
 
 
     /**
@@ -579,49 +616,6 @@ public:
     }
 
 
-    /**
-     * @brief selects all edges whose tortuosity falls within the given range [tmin, tmax].
-     *        with previous results using AND (intersection) or OR (union).
-     * @param tmin    The minimum allowed tortuosity for an edge.
-     * @param tmax    The maximum allowed tortuosity for an edge.
-     * @param current Optional vector of previously selected edge indices.
-     * @param op      If true: AND (restrict to edges in 'current' AND in range);
-     *                If false: OR (include any edge in 'current' OR in range).
-     * @return        A vector of edge indices that satisfy the tortuosity criteria.
-    */
-    std::vector<size_t> QueryVesselArcChord(float tmin, float tmax, const std::vector<size_t>& current = {}, bool op = false) {
-
-        std::vector<size_t> result;                                     // initialize a vector to store the result
-
-        // AND operation
-        if (op) {                                                       // an AND operation just requires looking at the edges in the "current" vector
-            for (size_t ci = 0; ci < current.size(); ci++) {            // for each edge in the current vector
-                float c_tort = m_edges[current[ci]].EdgeAttribute().arc_cord_ratio;                 // calculate the tortuosity
-                if (c_tort >= tmin && c_tort <= tmax) {                 // check to see if it's within the specified range
-                    result.push_back(current[ci]);                      // if so, push it into the result vector
-                }
-            }
-            return result;                                              // return the result vector - we're done
-        }
-
-        // OR operation
-        for (size_t ei = 0; ei < m_edges.size(); ei++) {                // an OR operation requires looking at every edge in the network
-            float e_tort = m_edges[current[ei]].EdgeAttribute().arc_cord_ratio;                              // calculate the tortuosity of the edge
-            if (e_tort >= tmin && e_tort <= tmax) {                     // if it's within the specified range
-                result.push_back(ei);                                   // add it to the result vector
-            }
-        }
-
-        // combine the result vector with the input vector
-        result.insert(result.end(), current.begin(), current.end());
-
-        // remove duplicates
-        std::sort(result.begin(), result.end());
-        std::unique(result.begin(), result.end());
-
-        return result;                                                  // return the list of matching edge indices
-    }
-
 
     fiber<> Centerline(size_t id, bool include_nodes = true) {
         fiber<float> c = m_edges[id];
@@ -638,9 +632,14 @@ public:
      * Calculate all of the network attributes and store them for fast access
      */
     void CalculateAttributes() {
-        m_CalculateSurfaceAreas();                  // calculate the surface area for each vessel
-        m_CalculateLengths();                       // calculate the length of each vessel
+        m_CalculateLengths();          
+        m_CalculateSurfaceAreas();
+        m_CalculateAvgRadii();
+        m_CalculateVolumes();
+        m_CalculateArcChords();
+        m_CalculateMeanCurvature();      
     }
+
 
     vascular Smooth(float sigma) {
         fibernet new_fibernet = fibernet::Smooth(sigma);

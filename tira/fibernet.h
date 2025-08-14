@@ -645,6 +645,65 @@ namespace tira {
         }
 
         /**
+         * @brief Arc/Chord ratio for an edge . Uses polyline length (arc) over straight-line (chord).
+        */
+        float ArcChordRatio(size_t edge_idx) const {
+
+            const auto& e = m_edges[edge_idx];
+            const auto& v0 = m_nodes[e.NodeIndex0()];
+            const auto& v1 = m_nodes[e.NodeIndex1()];
+
+            float arc = e.Length(v0, v1);                                // polyline length including interior points
+            float chord = glm::length(glm::vec3(v1) - glm::vec3(v0));      // straight line
+
+            if (chord <= 1e-6f) return std::numeric_limits<float>::infinity(); // avoid divide-by-zero
+            return arc / chord;
+        }
+
+        /**
+         * @brief selects all edges whose tortuosity falls within the given range [tmin, tmax].
+         *        with previous results using AND (intersection) or OR (union).
+         * @param tmin    The minimum allowed tortuosity for an edge.
+         * @param tmax    The maximum allowed tortuosity for an edge.
+         * @param current Optional vector of previously selected edge indices.
+         * @param op      If true: AND (restrict to edges in 'current' AND in range);
+         *                If false: OR (include any edge in 'current' OR in range).
+         * @return        A vector of edge indices that satisfy the tortuosity criteria.
+        */
+
+        std::vector<size_t> QueryVesselArcChord( float tmin, float tmax, const std::vector<size_t>& current = {}, bool op = false)
+        {
+            std::vector<size_t> result;
+
+            // AND: restrict to 'current'
+            if (op) {
+                for (size_t ei : current) {
+                    float r = ArcChordRatio(ei);
+                    if (r >= tmin && r <= tmax)
+                        result.push_back(ei);
+                }
+                return result;
+            }
+
+            // OR: scan all edges
+            for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+                float r = ArcChordRatio(ei);
+                if (r >= tmin && r <= tmax)
+                    result.push_back(ei);
+            }
+
+            // combine the result vector with the input vector
+            result.insert(result.end(), current.begin(), current.end());
+
+            //remove duplicates
+            std::sort(result.begin(), result.end());
+            result.erase(std::unique(result.begin(), result.end()), result.end());
+
+            return result;
+        }
+
+
+        /**
          * Returns a histogram of the degrees of all nodes
          * @return
          */
