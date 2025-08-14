@@ -265,18 +265,32 @@ namespace tira {
 
     /// Calculate the eigenvalues of a 3x3 matrix
     template<typename T>
-    CUDA_CALLABLE void eval3_symmetric(const T a, const T b, const T c, const T d, const T e, const T f,
+    CUDA_CALLABLE void eval3_symmetric(T a, T b, T c, T d, T e, T f,
         T& eval0, T& eval1, T& eval2) {
 	    // | a   b   d |
 	    // | b   c   e |
 	    // | d   e   f |
 
+        // To guard against floating-point overflow, we precondition the matrix by normalizing by the largest value
+        T max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);              // calculate the largest absolute value in the matrix
+        T max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
+        T max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
+        T maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
+        if (maxElement == 0.0) {
+            eval0 = 0.0; eval1 = 0.0; eval2 = 0.0; // if the matrix is zero, return zero eigenvalues
+            return;
+        }
+
+        T invMaxElement = 1.0 / maxElement;                            // normalize the matrix
+        a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
+        c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+
         // Case: matrix is diagonal
         T p1 = b * b + d * d + e * e;
         if (p1 == 0.0) {
-            eval0 = a;
-            eval1 = c;
-            eval2 = f;
+            eval0 = a * maxElement;
+            eval1 = c * maxElement;
+            eval2 = f * maxElement;
             if (eval0 > eval2) swap(eval0, eval2);
             if (eval0 > eval1) swap(eval0, eval1);
             if (eval1 > eval2) swap(eval1, eval2);
@@ -314,23 +328,39 @@ namespace tira {
             phi = acos(r) / 3.0;
 
         // The eigenvalues satisfy l[0] <= l[1] <= l[2]
-        eval2 = q + 2.0 * p * cos(phi);
-        eval0 = q + 2.0 * p * cos(phi + (2.0 * PI / 3.0));
-        eval1 = 3.0 * q - eval2 - eval0;                // since trace(A) = eig1 + eig2 + eig3
+        eval2 = (q + 2.0 * p * cos(phi))                    * maxElement;
+        eval0 = (q + 2.0 * p * cos(phi + (2.0 * PI / 3.0))) * maxElement;
+        eval1 = (3.0 * q - eval2 - eval0)                   * maxElement;                // since trace(A) = eig1 + eig2 + eig3
     }
 
     /// Calculate the eigenvector of a 3x3 matrix associated with the eigenvalue lambda.
     /// The result is returned in polar coordinates (theta, phi).
     /// Avoiding the fragile cross-product method.
     template<typename T>
-    CUDA_CALLABLE void evec3_symmetric(const T a, const T b, const T c, const T d, const T e, const T f,
+    CUDA_CALLABLE void evec3_symmetric(T a, T b, T c, T d, T e, T f,
         const T* evals, T* evec0, T* evec1, T* evec2) {
         // Newer version (column-major)
         // | a  b  d |
         // | b  c  e |
         // | d  e  f |
 
-        // test to see if this matrix is diagonal
+        // To guard against floating-point overflow, we precondition the matrix by normalizing by the largest value
+        T max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);              // calculate the largest absolute value in the matrix
+        T max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
+        T max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
+        T maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
+        if (maxElement == 0.0) {
+			evec0[0] = 1.0;    evec0[1] = 0.0;    evec0[2] = 0.0;
+			evec1[0] = 0.0;    evec1[1] = 1.0;    evec1[2] = 0.0;
+			evec2[0] = 0.0;    evec2[1] = 0.0;    evec2[2] = 1.0;
+            return;
+        }
+
+        T invMaxElement = 1.0 / maxElement;                            // normalize the matrix
+        a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
+        c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+
+		// test to see if this matrix is diagonal, return basis vectors if it is
         T upper_diagonal_norm = b * b + d * d + e * e;
         if (upper_diagonal_norm == 0.0) {
             evec0[0] = (T)1.0;    evec0[1] = (T)0.0;    evec0[2] = (T)0.0;
@@ -417,34 +447,24 @@ namespace tira::cpu {
     T* evals3_symmetric(const T* mats, const size_t n) {
 
         T* evals = new T[3 * n];
-        double eval0, eval1, eval2;
+        T eval0, eval1, eval2;
         for (size_t i = 0; i < n; i++) {
-			double a = mats[i * 9 + 0];
-			double b = mats[i * 9 + 1];
-			double d = mats[i * 9 + 2];
-			double c = mats[i * 9 + 4];
-			double e = mats[i * 9 + 5];
-			double f = mats[i * 9 + 8];
-
-            // To guard agains floating-point overflow, we precondition the matrix
-            double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
-            double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
-            double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
-            double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
-            double invMaxElement = 1.0 / maxElement;
-            a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
-            c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+			T a = mats[i * 9 + 0];
+			T b = mats[i * 9 + 1];
+			T d = mats[i * 9 + 2];
+			T c = mats[i * 9 + 4];
+			T e = mats[i * 9 + 5];
+			T f = mats[i * 9 + 8];
 
             eval3_symmetric(a,b,c,d,e,f, eval0, eval1, eval2);
 
 			// The new eigenvalues are scaled. Revert the scaling
-            evals[i * 3 + 0] = eval0 * maxElement;
-            evals[i * 3 + 1] = eval1 * maxElement;
-            evals[i * 3 + 2] = eval2 * maxElement;
+            evals[i * 3 + 0] = eval0;
+            evals[i * 3 + 1] = eval1;
+            evals[i * 3 + 2] = eval2;
         }
         return evals;
     }
-
 
     template<typename T>
     T* evecs3_symmetric(const T* mats, const T* lambda, const size_t n) {
@@ -454,36 +474,20 @@ namespace tira::cpu {
 
         T* evecs = new T[9 * n];
         for (unsigned int i = 0; i < n; i++) {
-            double a = mats[i * 9 + 0];
-            double b = mats[i * 9 + 1];
-            double d = mats[i * 9 + 2];
-            double c = mats[i * 9 + 4];
-            double e = mats[i * 9 + 5];
-            double f = mats[i * 9 + 8];
-
-            // To guard agains floating-point overflow, we precondition the matrix
-            double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);
-            double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
-            double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
-            double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
-            double invMaxElement = 1.0 / maxElement;
-            a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
-            c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+            T a = mats[i * 9 + 0];
+            T b = mats[i * 9 + 1];
+            T d = mats[i * 9 + 2];
+            T c = mats[i * 9 + 4];
+            T e = mats[i * 9 + 5];
+            T f = mats[i * 9 + 8];
 
             // Now we can safely calculate the eigenvectors
-            double* evec0 = new double[3];
-            double* evec1 = new double[3];
-            double* evec2 = new double[3];
-            double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
-            double norm = b * b + d * d + e * e; // norm of the off-diagonal elements
-            if (norm > 0.0)
-                evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
-            else {
-                evec0[0] = 1.0; evec0[1] = 0.0; evec0[2] = 0.0;
-                evec1[0] = 0.0; evec1[1] = 1.0; evec1[2] = 0.0;
-                evec2[0] = 0.0; evec2[1] = 0.0; evec2[2] = 1.0; // the matrix is diagonal, returns the standard basis vectors
-            }
-
+            T* evec0 = new T[3];
+            T* evec1 = new T[3];
+            T* evec2 = new T[3];
+            T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
+            evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
+            
             evecs[i * 9 + 0] = evec0[0];
             evecs[i * 9 + 1] = evec0[1];
             evecs[i * 9 + 2] = evec0[2];        // first eigenvector
@@ -503,46 +507,30 @@ namespace tira::cpu {
         // | b  c  e |
         // | d  e  f |
 
-        T* evecs = new T[6 * n];
+        T* evecs = new T[4 * n];
         for (unsigned int i = 0; i < n; i++) {
-            double a = mats[i * 9 + 0];
-            double b = mats[i * 9 + 1];
-            double d = mats[i * 9 + 2];
-            double c = mats[i * 9 + 4];
-            double e = mats[i * 9 + 5];
-            double f = mats[i * 9 + 8];
-
-			// To guard against floating-point overflow, we precondition the matrix by normalizing by the largest value
-			double max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);              // calculate the largest absolute value in the matrix
-			double max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
-			double max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
-			double maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
-			double invMaxElement = 1.0 / maxElement;                            // normalize the matrix
-			a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
-			c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
+            T a = mats[i * 9 + 0];
+            T b = mats[i * 9 + 1];
+            T d = mats[i * 9 + 2];
+            T c = mats[i * 9 + 4];
+            T e = mats[i * 9 + 5];
+            T f = mats[i * 9 + 8];
 
 			// Now we can safely calculate the eigenvectors
-            double* evec0 = new double[3];
-            double* evec1 = new double[3];
-            double* evec2 = new double[3];
-            double evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
-            double norm = b * b + d * d + e * e; // norm of the off-diagonal elements
-            if (norm > 0.0)
-                evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
-            else {
-                evec0[0] = 1.0; evec0[1] = 0.0; evec0[2] = 0.0;
-                evec1[0] = 0.0; evec1[1] = 1.0; evec1[2] = 0.0;
-                evec2[0] = 0.0; evec2[1] = 0.0; evec2[2] = 1.0; // the matrix is diagonal, returns the standard basis vectors
-            }
+            T* evec0 = new T[3];
+            T* evec1 = new T[3];
+            T* evec2 = new T[3];
+            T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
+            evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
 
-            evecs[i * 6 + 0] = std::atan2(evec0[1], evec0[0]);
-            evecs[i * 6 + 1] = std::acos(evec0[2]);
+            evecs[i * 4 + 0] = std::atan2(evec1[1], evec1[0]);
+            evecs[i * 4 + 1] = std::acos(evec2[2]);
 
-            evecs[i * 6 + 2] = std::atan2(evec1[1], evec1[0]);
-            evecs[i * 6 + 3] = std::acos(evec1[2]);
+            evecs[i * 4 + 2] = std::atan2(evec2[1], evec2[0]);
+            evecs[i * 4 + 3] = std::acos(evec2[2]);
 
-            evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
-            evecs[i * 6 + 5] = std::acos(evec2[2]);
+            //evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
+            //evecs[i * 6 + 5] = std::acos(evec2[2]);
         }
 
         return evecs;
