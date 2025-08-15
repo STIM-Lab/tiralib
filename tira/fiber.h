@@ -139,6 +139,25 @@ namespace tira {
 			AddLastVertex(glm::vec3(v), v.Attribute());
 		}
 
+		bool BoundingBox(glm::vec3& aabb_min, glm::vec3& aabb_max) {
+			if (this->size() == 0) return false;						// if the fiber is empty, return false (AABB is invalid)
+
+			aabb_min = this->at(0);									// initialize the corners with the first point
+			aabb_max = aabb_min;
+			for (size_t pi = 1; pi < this->size(); pi++) {				// for each of the remaining points in the fiber
+				glm::vec3 p = this->at(pi);
+				if (p.x < aabb_min.x) aabb_min.x = p.x;
+				else if (p.x > aabb_max.x) aabb_max.x = p.x;
+
+				if (p.y < aabb_min.y) aabb_min.y = p.y;
+				else if (p.y > aabb_max.y) aabb_max.y = p.y;
+
+				if (p.z < aabb_min.z) aabb_min.z = p.z;
+				else if (p.z > aabb_max.z) aabb_max.z = p.z;
+			}
+			return true;
+		}
+
 		float Length() {
 			float l = 0;
 			for (size_t vi = 1; vi < this->size(); vi++) {

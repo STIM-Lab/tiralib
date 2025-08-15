@@ -296,6 +296,23 @@ namespace tira {
             return m_nodes.size() - 1;
         }
 
+	    void BoundingBox(size_t edge_id, glm::vec3& aabb_min, glm::vec3& aabb_max) {
+
+            size_t n0i = m_edges[edge_id].NodeIndex0();
+            size_t n1i = m_edges[edge_id].NodeIndex1();
+
+            bool result = m_edges[edge_id].BoundingBox(aabb_min, aabb_max);
+
+            if (!result) aabb_min = m_nodes[n0i];
+
+            aabb_min = glm::min(m_nodes[n0i], aabb_min);
+            aabb_max = glm::max(m_nodes[n0i], aabb_max);
+
+            aabb_min = glm::min(m_nodes[n1i], aabb_min);
+            aabb_max = glm::max(m_nodes[n1i], aabb_max);
+
+        }
+
         /**
          * Add an edge to the graph given its connected nodes and fiber geometry
          * @param inode0 the first node in the graph (associated with the medial axis point nearest the first point in pts)
@@ -702,9 +719,19 @@ namespace tira {
             return result;
         }
 
+	    size_t Degree(size_t node_id) {
+            return m_nodes[node_id].Degree();
+        }
 
-        /**
-         * Returns a histogram of the degrees of all nodes
+	    size_t Node0(size_t edge_id) {
+            return m_edges[edge_id].NodeIndex0();
+        }
+	    size_t Node1(size_t edge_id) {
+            return m_edges[edge_id].NodeIndex1();
+        }
+
+	    /**
+	     * Returns a histogram of the degrees of all nodes
          * @return
          */
         std::vector<size_t> CountDegrees() {
