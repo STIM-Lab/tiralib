@@ -287,15 +287,20 @@ namespace tira {
         // | d   e   f |
 
         // determine if the matrix is diagonal
-        T p1 = b * b + d * d + e * e;
-        if (p1 == 0) {
+        const T p1 = b * b + d * d + e * e;
+        if (p1 == T(0)) {
             eval0 = a;  eval1 = c;  eval2 = f;
+            if (eval0 > eval1) std::swap(eval0, eval1);
+            if (eval1 > eval2) std::swap(eval1, eval2);
+            if (eval0 > eval1) std::swap(eval0, eval1);
             return;
         }
+        
+		const T tr = a + c + f; // trace of the matrix
+        const T q = tr / T(3);
+        const T p2 = pow(a-q, 2) + pow(c-q, 2) + pow(f-q, 2) + T(2) * p1;
+        T p = sqrt(p2 / T(6));
 
-        T q = (a + c + f) / 3.0;
-        T p2 = pow(a-q, 2) + pow(c-q, 2) + pow(f-q, 2) + 2 * p1;
-        T p = sqrt(p2 / 6.0);
         // The matrix C = A - q*I is represented by the following, where
         // b00, b11 and b22 are computed after these comments,
         //       +-           -+         +-               -+
@@ -303,26 +308,26 @@ namespace tira {
         // B =   | Bb  Bc  Be  |    = _  | b     c-q   e   |
         //       | Bd  Be  Bf  |      p  | d     e     f-q |
         //       +-           -+         +-               -+
-        T p_inv = 1.0 / p;
-        T Ba = p_inv * (a - q);
-        T Bb = p_inv * b;
-        T Bc = p_inv * (c - q);
-        T Bd = p_inv * d;
-        T Be = p_inv * e;
-        T Bf = p_inv * (f - q);
+        const T p_inv = T(1) / p;
+        const T Ba = p_inv * (a - q);
+        const T Bb = p_inv * b;
+        const T Bc = p_inv * (c - q);
+        const T Bd = p_inv * d;
+        const T Be = p_inv * e;
+        const T Bf = p_inv * (f - q);
 
         // calculate the determinant of B
-        T det_B = Ba * (Bc * Bf - Be * Be) - Bb * (Bb * Bf - Bd * Be) + Bd * (Bb * Be - Bd * Bc);
-        T r = det_B / 2.0;
+        const T det_B = Ba * (Bc * Bf - Be * Be) - Bb * (Bb * Bf - Bd * Be) + Bd * (Bb * Be - Bd * Bc);
+        T r = det_B / T(2);
 
         T phi;
-        if (r <= -1) phi = std::numbers::pi / 3.0;
-        else if (r >= 1) phi = 0.0;
-        else phi = acos(r) / 3.0;
+        if (r < T(-1)) phi = T(PI) / T(3);
+        else if (r >= T(1)) phi = T(0);
+        else phi = acos(r) / T(3);
 
-        eval2 = q + 2 * p * cos(phi);
-        eval0 = q + 2 * p * cos(phi + (2 * std::numbers::pi / 3.0));
-        eval1 = 3 * q - eval0 - eval2;
+        eval2 = q + T(2) * p * cos(phi);
+        eval0 = q + T(2) * p * cos(phi + (T(2) * T(PI) / T(3)));
+        eval1 = tr - eval0 - eval2;
     }
 
     /**
