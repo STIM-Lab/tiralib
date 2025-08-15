@@ -6,11 +6,8 @@
 
 #include <tira/graphics/glVertexBuffer.h>
 #include <tira/graphics/glVertexBufferLayout.h>
-#include <tira/graphics/glVertexArray.h>
-#include <tira/graphics/glIndexBuffer.h>
 #include <tira/graphics/glShader.h>
 
-#include "src/vascuvis/vascuvis.h"
 
 
 namespace tira {
@@ -79,7 +76,12 @@ namespace tira {
         #include "src/vascuvis/cmap_fragment.shader"
         ;
 
+        inline static const std::string fiber_id_string =
+        #include "src/vascuvis/fiber_id.shader"
+        ;
+
         glShader m_shader;
+        glShader m_fiberid_shader;
         int m_cmap_attribute;                // attribute to be colormapped
 
         void _assemble_shader(std::string& vertex, std::string& fragment) {
@@ -94,7 +96,7 @@ namespace tira {
             fragment += cmap_fragment_string;
         }
 
-        void _generate_shader() {
+        void _generate_cmap_shader() {
             std::string vertex_shader_string, fragment_shader_string;
             _assemble_shader(vertex_shader_string, fragment_shader_string);
             std::cout << vertex_shader_string << std::endl << std::endl << fragment_shader_string << std::endl;
@@ -189,7 +191,8 @@ namespace tira {
             m_layout.Push<float>(3);                                         // push the first attribute (vertex position) as 3xfloat32
             for (size_t ai = 0; ai < VertexAttributeNumber; ai++)               // each additional attribute will be a single float32
                 m_layout.Push<float>(1);
-            _generate_shader();
+            _generate_cmap_shader();
+            m_fiberid_shader.CreateShader(fiber_id_string);
         }
 
         glm::vec3 Center() {
@@ -231,7 +234,7 @@ namespace tira {
             if (ai < 0 || ai >= VertexAttributeNumber)
                 throw std::runtime_error("glFibers ERROR: vertex attribute index out of range");
             m_cmap_attribute = ai;
-            _generate_shader();                             // changing attributes requires regenerating the shader
+            _generate_cmap_shader();                             // changing attributes requires regenerating the shader
         }
 
         int CmapAttribute() { return m_cmap_attribute; }
@@ -268,6 +271,30 @@ namespace tira {
                 glDrawArrays(GL_LINE_STRIP, 0, m_fibers[bi].size());
             }
         }
+
+        void RenderFiberID(glm::mat4 View, glm::mat4 Proj) {
+            _validate();            // validate that the data structure is ready for rendering
+
+            for (size_t bi = 0; bi < m_vbuffers.size(); bi++) {
+
+                m_vbuffers[bi].Bind();
+                m_fiberid_shader.Bind();
+                m_fiberid_shader.SetUniformMat4f("V", View);
+                m_fiberid_shader.SetUniformMat4f("P", Proj);
+                m_fiberid_shader.SetUniform1i("id", bi);
+
+
+                GLERROR(glEnableVertexAttribArray(0));
+                GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
+                m_layout.Bind();
+                glDrawArrays(GL_LINE_STRIP, 0, m_fibers[bi].size());
+            }
+
+            // handle ID here:
+            size_t hit = 0;
+        }
+
+
 
 
     };
