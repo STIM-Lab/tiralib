@@ -275,6 +275,8 @@ namespace tira {
         void RenderFiberID(glm::mat4 View, glm::mat4 Proj) {
             _validate();            // validate that the data structure is ready for rendering
 
+            glClear(GL_COLOR_BUFFER_BIT);
+
             for (size_t bi = 0; bi < m_vbuffers.size(); bi++) {
 
                 m_vbuffers[bi].Bind();

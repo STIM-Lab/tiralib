@@ -25,13 +25,6 @@ namespace tira {
             GLBREAK(glDrawBuffers(m_draw_buffers.size(), &m_draw_buffers[0]));
         }
 
-        void Resize(int width, int height) {
-            if (m_framebuffer_id == 0)
-                throw std::runtime_error("ERROR in glFramebuffer: attempt to resize framebuffer without initialization");
-
-            AssignImage(NULL, width, height, 0, m_internal_format, GL_RGBA, GL_UNSIGNED_BYTE);
-        }
-
         void Bind() {
             glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer_id);
         }

@@ -51,7 +51,7 @@ namespace tira {
 			}
 		}
 
-		unsigned int gl2channels(GLenum transferFormat) {
+		unsigned int _glformat2channels(GLenum transferFormat) {
 			switch (transferFormat) {
 			case GL_RED:
 			case GL_RED_INTEGER:
@@ -180,6 +180,14 @@ namespace tira {
 			AssignImage(NULL, width, height, depth, internalFormat, transferFormat, transferDataType);
 		}
 
+		void Resize(const int width, const int height, const int depth = 0) {
+			Bind();
+			GLenum transferFormat = _get_compatible_transfer_format(m_internal_format);
+			GLenum transferDataType = GL_UNSIGNED_BYTE;			// I think this works in all cases
+
+			AssignImage(NULL, width, height, depth, m_internal_format, transferFormat, transferDataType);
+		}
+
 		void AssignImage(const void* bytes,
 			int width, int height, int depth,
 			GLint internalFormat,
@@ -274,7 +282,7 @@ namespace tira {
 			Bind();
 			GLenum transfer_type = type2gl<T>();											// get the appropriate data type used in the transfer
 			GLenum transfer_format = _get_compatible_transfer_format(m_internal_format);	// get the appropriate transfer format
-			unsigned int channels = gl2channels(transfer_format);
+			unsigned int channels = _glformat2channels(transfer_format);
 
 			if (m_Depth != 0) {
 				throw std::runtime_error("glTexture ERROR: a 2D image is requested, however the specified texture is 3D");
