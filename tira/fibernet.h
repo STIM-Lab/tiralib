@@ -200,6 +200,12 @@ namespace tira {
             );
         }
 
+        /**
+         * Returns the list of edges attached to this node
+         * @return indices for the attached edges
+         */
+        std::vector<size_t> Edges() const { return m_edge_indices; }
+
         /////////////////////////////////
 
     };
@@ -323,10 +329,10 @@ namespace tira {
         size_t AddEdge(size_t inode0, size_t inode1, fiber<VertexAttributeType> f, EdgeAttributeType a = {}) {
 
             f.RemoveDuplicates();
-            
+
             edge new_edge(f, inode0, inode1, a);                                  // create a new edge structure
             m_edges.push_back(new_edge);
-            
+
             size_t idx = m_edges.size() - 1;
             m_nodes[inode0].AddEdgeIndex(idx);
             m_nodes[inode1].AddEdgeIndex(idx);
@@ -745,6 +751,46 @@ namespace tira {
                 histogram[degree]++;
             }
             return histogram;
+        }
+
+        /**
+         * Retrieve all node indices connected to the specified edges
+         * @param edges list of edge indices connected to the desired nodes
+         * @return unique node indices connected to the specified edges (duplicates are removed)
+         */
+        std::vector<size_t> Nodes(const std::vector<size_t>& edges) {
+
+            std::vector<size_t> connected_nodes;
+            connected_nodes.reserve(edges.size() * 2);          // reserve two nodes for each edge
+
+            for (size_t i = 0; i < edges.size(); i++) {
+                size_t ei = edges[i];                           // get an edge index
+
+                connected_nodes.emplace_back(m_edges[ei].NodeIndex0());     // put both nodes connected to this edge in the list
+                connected_nodes.emplace_back(m_edges[ei].NodeIndex1());
+            }
+
+            // remove duplicates
+            std::sort(connected_nodes.begin(), connected_nodes.end());
+            connected_nodes.erase( std::unique(connected_nodes.begin(), connected_nodes.end()), connected_nodes.end() );
+            return connected_nodes;
+        }
+
+	    std::vector<size_t> Edges(const std::vector<size_t>& nodes) {
+            std::vector<size_t> connected_edges;
+            connected_edges.reserve(nodes.size() * 3);      // reserve three edges for each node (seems reasonable for vasculature)
+
+            for (size_t i = 0; i < nodes.size(); i++) {
+                size_t ni = nodes[i];
+
+                std::vector<size_t> attached_edges = m_nodes[ni].Edges();
+                connected_edges.insert(connected_edges.end(), attached_edges.begin(), attached_edges.end());
+            }
+
+            // remove duplicates
+            std::sort(connected_edges.begin(), connected_edges.end());
+            connected_edges.erase( std::unique(connected_edges.begin(), connected_edges.end()), connected_edges.end() );
+            return connected_edges;
         }
 
 	};
