@@ -195,6 +195,10 @@ namespace tira {
             m_fiberid_shader.CreateShader(fiber_id_string);
         }
 
+        void BoundingBox(size_t fiber_id, glm::vec3& a, glm::vec3& b) {
+            m_fibers[fiber_id].BoundingBox(a, b);
+        }
+
         glm::vec3 Center() {
             return (m_aabb.first + m_aabb.second)/2.0f;
         }
@@ -269,6 +273,31 @@ namespace tira {
                 GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
                 m_layout.Bind();
                 glDrawArrays(GL_LINE_STRIP, 0, m_fibers[bi].size());
+            }
+        }
+
+        void RenderSelected(glm::mat4 View, glm::mat4 Proj, std::vector<size_t> selected, std::vector<float> cmap_override = {}) {
+            _validate();            // validate that the data structure is ready for rendering
+
+            for (size_t bi = 0; bi < selected.size(); bi++) {
+
+                m_vbuffers[selected[bi]].Bind();
+                m_shader.Bind();
+                m_shader.SetUniformMat4f("V", View);
+                m_shader.SetUniformMat4f("P", Proj);
+                if (cmap_override.size() >= 1)
+                    m_shader.SetUniform1f("vmin", cmap_override[0]);
+                else
+                    m_shader.SetUniform1f("vmin", m_extrema[m_cmap_attribute].first);
+
+                if (cmap_override.size() >= 2)
+                    m_shader.SetUniform1f("vmax", cmap_override[1]);
+                else
+                    m_shader.SetUniform1f("vmax", m_extrema[m_cmap_attribute].second);
+                GLERROR(glEnableVertexAttribArray(0));
+                GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
+                m_layout.Bind();
+                glDrawArrays(GL_LINE_STRIP, 0, m_fibers[selected[bi]].size());
             }
         }
 
