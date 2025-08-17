@@ -474,12 +474,9 @@ namespace tira {
          * @brief Selects edges that are "spines" based on length and degree.
          *        Supports AND/OR logic with previous selection and optional removal.
          *
-         * @param min_len   minimum length of spine edge
-         * @param max_len   maximum length of spine edge
          * @param current   Optional vector of already selected edge indices
          * @param op        If true, perform AND (intersection); else OR (union)
-         * @param remove    If true, remove the selected edges from the network
-         * @return          vector of edge indices that match the spine criteria
+         * @return          vector of edge indices connected to at least one degree-1 node
         */
 
         std::vector<size_t> QuerySpines(const std::vector<size_t>& current = {}, bool and_op = false)
@@ -507,13 +504,6 @@ namespace tira {
                 std::sort(result.begin(), result.end());
                 result.erase(std::unique(result.begin(), result.end()), result.end());
             }
-
-            /*if (remove) {
-                std::sort(result.begin(), result.end(), std::greater<size_t>());
-                for (size_t ei : result) {
-                    this->RemoveEdge(ei);
-                }
-            }*/
 
             return result;
         }
