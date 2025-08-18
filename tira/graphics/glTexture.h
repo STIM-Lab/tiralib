@@ -168,10 +168,10 @@ namespace tira {
 
 		/**
 		 * Constructor generates an empty texture on the GPU with the specified size and internal format
-		 * @param width
-		 * @param height
-		 * @param depth
-		 * @param internalFormat
+		 * @param width width of the texture to be created
+		 * @param height height of the texture to be created
+		 * @param depth depth of a 3D texture (0 for 2D textures)
+		 * @param internalFormat OpenGL enumeration describing how the texture is represented on the GPU (see the internalFormat options for glTexImage2D)
 		 */
 		glTexture(const int width, const int height, const int depth, const GLenum internalFormat) {
 			GLenum transferDataType = GL_UNSIGNED_BYTE;					// I think GL_UNSIGNED_BYTE is compatible with any format
@@ -180,6 +180,12 @@ namespace tira {
 			AssignImage(NULL, width, height, depth, internalFormat, transferFormat, transferDataType);
 		}
 
+		/**
+		 * Resizes a texture that has already been created.
+		 * @param width new width of the texture
+		 * @param height new height of the texture
+		 * @param depth new depth of the texture (0 will create a 2D texture, any positive integer will create a 3D texture)
+		 */
 		void Resize(const int width, const int height, const int depth = 0) {
 			Bind();
 			GLenum transferFormat = _get_compatible_transfer_format(m_internal_format);
@@ -188,11 +194,21 @@ namespace tira {
 			AssignImage(NULL, width, height, depth, m_internal_format, transferFormat, transferDataType);
 		}
 
+		/**
+		 * Main helper function that creates or re-allocates texture memory on the GPU
+		 * @param bytes pointer to the data in main memory that will be used to fill the texture (NULL will create a texture without copying data - contents are undefined)
+		 * @param width with of the texture to allocate
+		 * @param height height of the texture to allocate
+		 * @param depth depth of the texture to allocate - 0 creates a 2D texture and any positive integer specifies a 3D texture
+		 * @param internalFormat internal format used to store the texture on the GPU
+		 * @param externalFormat format for the data stored in bytes used to transfer texture information from main memory
+		 * @param externalDataType data type for the contents of bytes
+		 */
 		void AssignImage(const void* bytes,
-			int width, int height, int depth,
-			GLint internalFormat,
-			GLenum externalFormat,
-			GLenum externalDataType) {
+		                 int width, int height, int depth,
+		                 GLint internalFormat,
+		                 GLenum externalFormat,
+		                 GLenum externalDataType) {
 
 			m_Width = width;
 			m_Height = height;
@@ -208,9 +224,6 @@ namespace tira {
 
 			GLERROR(glBindTexture(m_TextureType, m_TextureID));	// bind the texture
 			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-			//GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-			//GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-			//GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 			if (m_TextureType == GL_TEXTURE_3D) {
 				GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE));
@@ -233,24 +246,36 @@ namespace tira {
 			GLBREAK(glBindTexture(m_TextureType, 0));	// unbind the texture
 		}
 
-			
-		
-
+		/**
+		 * Deletes a texture and invalidates the texture name
+		 */
 		void Destroy() const {
 			GLBREAK(glDeleteTextures(1, &m_TextureID));
 		}
 
-		~glTexture() {
-			
-		}
-		
+		/**
+		 * Destroys the current texture object (doesn't actually do anything to the texture if it is already allocated - use Destroy() for that)
+		 */
+		~glTexture() {}
+
+		/**
+		 * Binds a texture so that it can be used as a shader element
+		 */
 		void Bind() const {
 			GLBREAK(glBindTexture(m_TextureType, m_TextureID));	// bind the texture
 		}
+
+		/**
+		 * Unbinds a texture - this usually isn't necessary since binding a new texture unbinds previous textures
+		 */
 		void Unbind() const {
 			GLBREAK(glBindTexture(m_TextureType, 0));
 		}
 
+		/**
+		 * Sets the type of texture filtering used to access the texture
+		 * @param filter_type
+		 */
 		void SetFilter(const GLenum filter_type) const {
 			GLBREAK(glBindTexture(m_TextureType, m_TextureID));	// bind the texture
 			GLBREAK(glTexParameteri(m_TextureType, GL_TEXTURE_MIN_FILTER, filter_type));
@@ -268,15 +293,44 @@ namespace tira {
 			return (GLenum)format;
 		}
 
-		inline int Width() const { return m_Width; }
-		inline int Height() const { return m_Height; }
-		inline int Depth() const { return m_Depth; }
-		inline GLuint ID() const { return m_TextureID; }
-		inline bool valid() {
+		/**
+		 * Returns the width of the current texture
+		 * @return texture width as an int
+		 */
+		int Width() const { return m_Width; }
+
+		/**
+		 * Returns the height of the current texture
+		 * @return texture height as an int
+		 */
+		int Height() const { return m_Height; }
+
+		/**
+		 * Returns the depth of the current texture
+		 * @return texture depth as an int (returns 0 if the texture is 2D)
+		 */
+		int Depth() const { return m_Depth; }
+
+		/**
+		 * Returns the OpenGL name of the texture
+		 * @return texture name (identifier) as an integer (names provided by OpenGL are > 0)
+		 */
+		GLuint ID() const { return m_TextureID; }
+
+		/**
+		 * Tests to see if the current texture exists (if it has a name >0)
+		 * @return boolean indicating that the texture is valid (true) or invalid (false)
+		 */
+		bool valid() {
 			if (m_TextureID > 0) return true;
-			else return false;
+			return false;
 		}
 
+		/**
+		 * Returns the texture data as a tira::image object
+		 * @tparam T data type used to represent the texture
+		 * @return the texture represented as a tira::image, useful for saving the texture data as a normal image for debugging
+		 */
 		template<typename T>
 		image<T> Image() {
 			Bind();
