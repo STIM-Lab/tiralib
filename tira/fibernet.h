@@ -417,22 +417,22 @@ namespace tira {
          * return: true if deleted, false otherwise
         */
 
-        bool delete_node(size_t node_id) {
+        bool DeleteNode(size_t node_id) {
+
             if (node_id >= m_nodes.size()) return false;
 
-            if (m_nodes[node_id].degree() > 0)
-                throw std::runtime_error("cannot delete node with nonzero degree");
+            if (m_nodes[node_id].Degree() > 0) throw std::runtime_error("cannot delete node with nonzero degree");
 
-            // update all edge references, shift node indices down if they are above the deleted one
-            for (auto& e : m_edges) {
-                if (e.node_index0() > node_id) e.nodes(e.node_index0() - 1, e.node_index1());
-                if (e.node_index1() > node_id) e.nodes(e.node_index0(), e.node_index1() - 1);
+            for (auto& e : m_edges) { // shift edge node references that come after the deleted node
+
+                if (e.NodeIndex0() > node_id) e.nodes(e.NodeIndex0() - 1, e.NodeIndex1());
+
+                if (e.NodeIndex1() > node_id) e.nodes(e.NodeIndex0(), e.NodeIndex1() - 1);
             }
-
-            // erase the node
-            m_nodes.erase(m_nodes.begin() + node_id);
+            m_nodes.erase(m_nodes.begin() + node_id); // erase the node
             return true;
         }
+
 
         /**
          * @brief deletes an edge from the graph and updates all references.
@@ -441,30 +441,24 @@ namespace tira {
          * @param edge_id: index of the edge to delete
         */
 
-        void delete_edge(size_t edge_id) {
+        void DeleteEdge(size_t edge_id) {
+
             if (edge_id >= m_edges.size()) return;
 
-            size_t n0 = m_edges[edge_id].node_index0();
-            size_t n1 = m_edges[edge_id].node_index1();
+            size_t n0 = m_edges[edge_id].NodeIndex0(), n1 = m_edges[edge_id].NodeIndex1();
 
-            // remove edge reference from both nodes
-            m_nodes[n0].remove_edge(edge_id);
-            m_nodes[n1].remove_edge(edge_id);
+            m_nodes[n0].RemoveEdge(edge_id); m_nodes[n1].RemoveEdge(edge_id); // remove edge reference from both nodes
 
-            // update edge indices in all node edge lists
-            for (auto& node : m_nodes) {
-                auto& edge_indices = node.edge_indices();
-                for (auto& ei : edge_indices) {
-                    if (ei > edge_id) ei--;  // shift down by 1 if greater than deleted edge
-                }
+            for (auto& node : m_nodes) { // update edge indices in all nodes
+                auto& edge_indices = node.EdgeIndices();
+                for (auto& ei : edge_indices) if (ei > edge_id) ei--;
             }
 
-            // remove the edge
-            m_edges.erase(m_edges.begin() + edge_id);
+            m_edges.erase(m_edges.begin() + edge_id); // remove the edge
 
-            //  remove nodes if they become unconnected
-            if (m_nodes[n0].degree() == 0) delete_node(n0);
-            if (m_nodes[n1].degree() == 0 && n1 != n0) delete_node(n1); // avoid double-delete
+            if (m_nodes[n0].Degree() == 0) DeleteNode(n0); // delete n0 if isolated
+
+            if (m_nodes[n1].Degree() == 0 && n1 != n0) DeleteNode(n1); // delete n1 if isolated and not same as n0
         }
 
 
@@ -476,61 +470,44 @@ namespace tira {
         * param e2: index of the second edge
        */
 
-        void merge_edges(size_t e1, size_t e2) {
-            if (e1 >= m_edges.size() || e2 >= m_edges.size())
-                throw std::runtime_error("invalid edge index");
+        void MergeEdges(size_t e1, size_t e2) {
+            if (e1 >= m_edges.size() || e2 >= m_edges.size()) throw std::runtime_error("invalid edge index");
 
-            const auto& edge1 = m_edges[e1];
-            const auto& edge2 = m_edges[e2];
+            const auto& edge1 = m_edges[e1], edge2 = m_edges[e2];
 
             std::unordered_map<size_t, int> node_counts;
 
-            // count occurrences of each node across both edges
-            node_counts[edge1.node_index0()]++;
-            node_counts[edge1.node_index1()]++;
-            node_counts[edge2.node_index0()]++;
-            node_counts[edge2.node_index1()]++;
+            node_counts[edge1.NodeIndex0()]++; node_counts[edge1.NodeIndex1()]++;
+            node_counts[edge2.NodeIndex0()]++; node_counts[edge2.NodeIndex1()]++;
 
-            size_t shared = static_cast<size_t>(-1);
-            std::vector<size_t> ends;
+            size_t shared = static_cast<size_t>(-1); std::vector<size_t> ends;
 
-            // identify shared and end nodes
-            for (std::unordered_map<size_t, int>::iterator it = node_counts.begin(); it != node_counts.end(); ++it) {
-                if (it->second == 2)
-                    shared = it->first;
-                else
-                    ends.push_back(it->first);
+
+            for (auto it = node_counts.begin(); it != node_counts.end(); ++it) {
+                if (it->second == 2) shared = it->first; else ends.push_back(it->first);
             }
 
-            if (shared == static_cast<size_t>(-1) || m_nodes[shared].degree() != 2)
+
+            if (shared == static_cast<size_t>(-1) || m_nodes[shared].Degree() != 2)
                 throw std::runtime_error("edges must connect at a degree-2 node");
 
-            // get and orient the fibers
-            fiber<vertex_attribute_type> merged = m_edges[e1];
-            if (edge1.node_index1() == shared) std::reverse(merged.begin(), merged.end());
 
-            fiber<vertex_attribute_type> tail = m_edges[e2];
-            if (edge2.node_index0() != shared) std::reverse(tail.begin(), tail.end());
+            fiber<VertexAttributeType> merged = m_edges[e1];
 
-            // append fibers together
-            merged.insert(merged.end(), tail.begin(), tail.end());
+            if (m_edges[e1].NodeIndex1() == shared) std::reverse(merged.begin(), merged.end());
 
-            // delete both edges (order matters due to index shifting)
-            delete_edge(std::max(e1, e2));
-            delete_edge(std::min(e1, e2));
+            fiber<VertexAttributeType> tail = m_edges[e2];
 
-            // attempt to delete shared node if it's now disconnected
-            if (m_nodes[shared].degree() == 0) {
-                delete_node(shared);
-            }
-            else {
-                std::cout << "[note] shared node " << shared
-                    << " still has degree " << m_nodes[shared].degree()
-                    << ", skipping deletion" << std::endl;
-            }
+            if (m_edges[e2].NodeIndex0() != shared) std::reverse(tail.begin(), tail.end());
 
-            // add the merged edge back to graph
-            add_edge(ends[0], ends[1], merged);
+            merged.insert(merged.end(), tail.begin(), tail.end()); // concatenate fibers
+
+            DeleteEdge(std::max(e1, e2)); DeleteEdge(std::min(e1, e2)); // delete both edges
+
+            if (m_nodes[shared].Degree() == 0) DeleteNode(shared); // delete shared node if now unconnected
+            else std::cout << "[note] shared node " << shared << " still has degree " << m_nodes[shared].Degree() << ", skipping deletion." << std::endl;
+
+            AddEdge(ends[0], ends[1], merged); // add merged edge
         }
         /////////////////////////////////////////////////////////////////
 
