@@ -6,11 +6,8 @@
 
 #include <tira/graphics/glVertexBuffer.h>
 #include <tira/graphics/glVertexBufferLayout.h>
-#include <tira/graphics/glVertexArray.h>
-#include <tira/graphics/glIndexBuffer.h>
 #include <tira/graphics/glShader.h>
 
-#include "src/vascuvis/vascuvis.h"
 
 
 namespace tira {
@@ -53,13 +50,20 @@ namespace tira {
         std::vector< fiber< VertexAttributes > > m_fibers;
 
         /**
-         * Pair that stores an aligned bounding box that surrounds the entire set of fibers.
-         * The first element is the lower-left (smallest) corner and the second element is the
-         * upper-right (largest) corner.
+         * Bounding box for all of the fibers
          */
         std::pair<glm::vec3, glm::vec3> m_aabb;
 
-        std::array< std::pair<float, float>, VertexAttributeNumber> m_extrema;
+        /**
+         * Highest and lowest values for each vertex attribute, used to set color map ranges
+         */
+        std::array< std::pair<float, float>, VertexAttributeNumber> m_vertex_attribute_extrema;
+
+        /**
+         * Values used for color mapping vertex attributes. These are initially the same values as
+         * m_vertex_attribute_extrema. The user can supply overrides for these values to modify the color map.
+         */
+        std::array< std::pair<float, float>, VertexAttributeNumber> m_vertex_attribute_cmap_bounds;
 
         std::vector<glVertexBuffer> m_vbuffers;
 
@@ -79,10 +83,21 @@ namespace tira {
         #include "src/vascuvis/cmap_fragment.shader"
         ;
 
+        inline static const std::string fiber_id_string =
+        #include "src/vascuvis/fiber_id.shader"
+        ;
+
         glShader m_shader;
+        glShader m_fiberid_shader;
         int m_cmap_attribute;                // attribute to be colormapped
 
-        void _assemble_shader(std::string& vertex, std::string& fragment) {
+        /**
+         * Builds a color map shader that selects the desired color map component. The source code for the
+         * vertex and fragment shaders are returned via reference parameters.
+         * @param vertex source code for the vertex shader
+         * @param fragment source code for the fragment shader
+         */
+        void m_AssembleCmapShader(std::string& vertex, std::string& fragment) {
 
             vertex = "#version 330 core\n";    // shader header and required version
             vertex += brewer_pts;                                           // set of Brewer colormap points
@@ -94,14 +109,21 @@ namespace tira {
             fragment += cmap_fragment_string;
         }
 
-        void _generate_shader() {
+        /**
+         * Helper function that generates a colormap shader based on the specified vertex attributes.
+         */
+        void m_GenerateCmapShader() {
             std::string vertex_shader_string, fragment_shader_string;
-            _assemble_shader(vertex_shader_string, fragment_shader_string);
-            std::cout << vertex_shader_string << std::endl << std::endl << fragment_shader_string << std::endl;
+            m_AssembleCmapShader(vertex_shader_string, fragment_shader_string);
             m_shader.CreateShader(vertex_shader_string, fragment_shader_string);
         }
 
-        void _update_aabb(glm::vec3 p) {
+        /**
+         * Integrates a vertex into the glFibers bounding box. If the provided vertex is outside of the current
+         * bounding box, the box is expanded to include the vertex.
+         * @param p vertex to integrate into the bounding box
+         */
+        void m_UpdateBoundingBox(glm::vec3 p) {
             if (m_aabb.first.x > p.x) m_aabb.first.x = p.x;
             if (m_aabb.first.y > p.y) m_aabb.first.y = p.y;
             if (m_aabb.first.z > p.z) m_aabb.first.z = p.z;
@@ -110,10 +132,15 @@ namespace tira {
             if (m_aabb.second.z < p.z) m_aabb.second.z = p.z;
         }
 
-        void _update_extrema(VertexAttributes a) {
-            for (size_t ai = 0; ai < VertexAttributeNumber; ai++) {
-                if (m_extrema[ai].first > a[ai]) m_extrema[ai].first = a[ai];
-                if (m_extrema[ai].second < a[ai]) m_extrema[ai].second = a[ai];
+        /**
+         * Updates the attribute extrema given a new set of vertex attributes. If the vertex attributes in a
+         * are outside of the current extrema values, this function updates the extrema to fit the new values.
+         * @param a attributes to integrate into the current extrema
+         */
+        void m_UpdateVertexAttributeExtrema(VertexAttributes a) {
+            for (size_t ai = 0; ai < VertexAttributeNumber; ai++) {             // for each vertex attribute
+                if (m_vertex_attribute_extrema[ai].first > a[ai]) m_vertex_attribute_extrema[ai].first = a[ai];     // update the extrema values
+                if (m_vertex_attribute_extrema[ai].second < a[ai]) m_vertex_attribute_extrema[ai].second = a[ai];
             }
         }
 
@@ -127,14 +154,13 @@ namespace tira {
             m_aabb.first = glm::vec3(std::numeric_limits<float>::infinity());      // initialize the bounding box to infinity
             m_aabb.second = glm::vec3(-std::numeric_limits<float>::infinity());
             for (size_t ai = 0; ai < VertexAttributeNumber; ai++) {
-                m_extrema[ai].first = std::numeric_limits<float>::infinity();
-                m_extrema[ai].second = -std::numeric_limits<float>::infinity();
+                m_vertex_attribute_extrema[ai].first = std::numeric_limits<float>::infinity();
+                m_vertex_attribute_extrema[ai].second = -std::numeric_limits<float>::infinity();
             }
         }
 
         void _generate_line_buffers() {
             _clear_buffers();                   // destroy existing OpenGL vertex buffers
-
 
             for (size_t fi = 0; fi < m_fibers.size(); fi++) {    // iterate through each fiber
 
@@ -189,7 +215,12 @@ namespace tira {
             m_layout.Push<float>(3);                                         // push the first attribute (vertex position) as 3xfloat32
             for (size_t ai = 0; ai < VertexAttributeNumber; ai++)               // each additional attribute will be a single float32
                 m_layout.Push<float>(1);
-            _generate_shader();
+            m_GenerateCmapShader();
+            m_fiberid_shader.CreateShader(fiber_id_string);
+        }
+
+        void BoundingBox(size_t fiber_id, glm::vec3& a, glm::vec3& b) {
+            m_fibers[fiber_id].BoundingBox(a, b);
         }
 
         glm::vec3 Center() {
@@ -218,8 +249,8 @@ namespace tira {
                 va = attributes[vi];                                    // assign the supplied attribute
                 vertex<VertexAttributes> new_v(positions[vi], va);    // create a new point for the vertex
                 new_fiber.push_back(new_v);                             // push the new point into the new fiber
-                _update_aabb(new_v);                                    // update the axis aligned bounding box to include the new point
-                _update_extrema(va);
+                m_UpdateBoundingBox(new_v);                                    // update the axis aligned bounding box to include the new point
+                m_UpdateVertexAttributeExtrema(va);
             }
             m_fibers.push_back(new_fiber);                               // add the new fiber to the fiber list
 
@@ -231,19 +262,53 @@ namespace tira {
             if (ai < 0 || ai >= VertexAttributeNumber)
                 throw std::runtime_error("glFibers ERROR: vertex attribute index out of range");
             m_cmap_attribute = ai;
-            _generate_shader();                             // changing attributes requires regenerating the shader
+            m_GenerateCmapShader();                             // changing attributes requires regenerating the shader
         }
 
         int CmapAttribute() { return m_cmap_attribute; }
 
-        float Min(size_t attribute) {
-            return m_extrema[attribute].first;
-        }
-        float Max(size_t attribute) {
-            return m_extrema[attribute].second;
+        /**
+         * Reset the bounds of the color map to match the extrema of the vertex attributes.
+         * @param ai index of the attribute to reset
+         */
+        void ResetCmapBounds(size_t ai) {
+            m_vertex_attribute_cmap_bounds[ai].first = m_vertex_attribute_extrema[ai].first;
+            m_vertex_attribute_cmap_bounds[ai].second = m_vertex_attribute_extrema[ai].second;
         }
 
-        void Render(glm::mat4 View, glm::mat4 Proj, std::vector<float> cmap_override = {}) {
+        /**
+         * Reset all of the color map boundaries to match the extreme of the vertex attributes
+         */
+        void ResetCmapBounds() {
+            for (size_t ai = 0; ai < VertexAttributeNumber; ai++) {
+                ResetCmapBounds(ai);
+            }
+        }
+
+        /**
+         * Get a reference to the current minimum colormap value associated with the specified vertex attribute.
+         * @param ai index for the colormapped attribute
+         * @return a reference to the colormap value
+         */
+        float& VertexCmapMin(size_t ai) {
+            return m_vertex_attribute_cmap_bounds[ai].first;
+        }
+
+        /**
+         * Get a reference to the current maximum colormap value associated with a vertex attribute
+         * @param ai index of the color mapped attribute
+         * @return a reference to the colormap value
+         */
+        float& VertexCmapMax(size_t ai) {
+            return m_vertex_attribute_cmap_bounds[ai].second;
+        }
+
+        /**
+         * Render the fibers using a vertex attribute color map
+         * @param View view matrix
+         * @param Proj projection matrix
+         */
+        void RenderColormap(glm::mat4 View, glm::mat4 Proj) {
 
             _validate();            // validate that the data structure is ready for rendering
 
@@ -253,21 +318,56 @@ namespace tira {
                 m_shader.Bind();
                 m_shader.SetUniformMat4f("V", View);
                 m_shader.SetUniformMat4f("P", Proj);
-                if (cmap_override.size() >= 1)
-                    m_shader.SetUniform1f("vmin", cmap_override[0]);
-                else
-                    m_shader.SetUniform1f("vmin", m_extrema[m_cmap_attribute].first);
-
-                if (cmap_override.size() >= 2)
-                    m_shader.SetUniform1f("vmax", cmap_override[1]);
-                else
-                    m_shader.SetUniform1f("vmax", m_extrema[m_cmap_attribute].second);
+                m_shader.SetUniform1f("vmin", m_vertex_attribute_cmap_bounds[m_cmap_attribute].first);
+                m_shader.SetUniform1f("vmax", m_vertex_attribute_cmap_bounds[m_cmap_attribute].second);
                 GLERROR(glEnableVertexAttribArray(0));
                 GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
                 m_layout.Bind();
                 glDrawArrays(GL_LINE_STRIP, 0, m_fibers[bi].size());
             }
         }
+
+        void RenderSelected(glm::mat4 View, glm::mat4 Proj, std::vector<size_t> selected, std::vector<float> cmap_override = {}) {
+            _validate();            // validate that the data structure is ready for rendering
+
+            for (size_t bi = 0; bi < selected.size(); bi++) {
+
+                m_vbuffers[selected[bi]].Bind();
+                m_shader.Bind();
+                m_shader.SetUniformMat4f("V", View);
+                m_shader.SetUniformMat4f("P", Proj);
+                m_shader.SetUniform1f("vmin", m_vertex_attribute_cmap_bounds[m_cmap_attribute].first);
+                m_shader.SetUniform1f("vmax", m_vertex_attribute_cmap_bounds[m_cmap_attribute].second);
+                GLERROR(glEnableVertexAttribArray(0));
+                GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
+                m_layout.Bind();
+                glDrawArrays(GL_LINE_STRIP, 0, m_fibers[selected[bi]].size());
+            }
+        }
+
+        void RenderFiberID(glm::mat4 View, glm::mat4 Proj) {
+            _validate();            // validate that the data structure is ready for rendering
+
+            glClearColor(-1, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            for (size_t bi = 0; bi < m_vbuffers.size(); bi++) {
+
+                m_vbuffers[bi].Bind();
+                m_fiberid_shader.Bind();
+                m_fiberid_shader.SetUniformMat4f("V", View);
+                m_fiberid_shader.SetUniformMat4f("P", Proj);
+                m_fiberid_shader.SetUniform1i("id", bi);
+
+
+                GLERROR(glEnableVertexAttribArray(0));
+                GLERROR(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex<VertexAttributes>), (const void*)0));
+                m_layout.Bind();
+                glDrawArrays(GL_LINE_STRIP, 0, m_fibers[bi].size());
+            }
+        }
+
+
 
 
     };

@@ -24,17 +24,28 @@ namespace tira {
 		VertexAttributeType m_va;
 	public:
 
+		vertex() {}
+
+		/**
+		 * @brief      Constructs a new vertex from a 3D coordinate and attribute
+		 *
+		 * @param[in]  p     { parameter_description }
+		 */
+		vertex(const glm::vec3& p) : glm::vec3(p) { m_va = 0; }
+
 		/**
 		 * @brief      Constructs a new vertex from a 3D coordinate and attribute
 		 *
 		 * @param[in]  p     { parameter_description }
 		 * @param[in]  r     { parameter_description }
 		 */
-		vertex(glm::vec3 p = glm::vec3(0.0f), VertexAttributeType r = {}) : glm::vec3(p) { m_va = r; }
+		vertex(glm::vec3 p, VertexAttributeType r) : glm::vec3(p) { m_va = r; }
+
+		vertex(const vertex& v) : glm::vec3(v) { m_va = v.m_va; }
 
 
 		void Attribute(VertexAttributeType r) { m_va = r; }
-		VertexAttributeType Attribute() { return m_va; }
+		VertexAttributeType Attribute() const { return m_va; }
 	};
 
 	/**
@@ -69,10 +80,10 @@ namespace tira {
 
 			float l1_2, l0_2;
 			glm::vec3 p2;
-			for (size_t pi=1; pi<this->size()-1; pi++) {
-				p0 = this->at(pi-1);
+			for (size_t pi = 1; pi < this->size() - 1; pi++) {
+				p0 = this->at(pi - 1);
 				p1 = this->at(pi);
-				p2 = this->at(pi+1);
+				p2 = this->at(pi + 1);
 
 				l0_1 = glm::length(p1 - p0);
 				l1_2 = glm::length(p2 - p1);
@@ -84,8 +95,8 @@ namespace tira {
 
 			}
 
-			p1 = this->at(this->size()-2);
-			p2 = this->at(this->size()-1);
+			p1 = this->at(this->size() - 2);
+			p2 = this->at(this->size() - 1);
 			l1_2 = glm::length(p2 - p1);
 			if (l1_2 != 0)
 				d_dt.AddLastVertex(vertex<float>((p2 - p1) / l1_2, l1_2));
@@ -117,7 +128,7 @@ namespace tira {
 			// update the LV vector to store the length at the new vertex
 			if (this->size() == 0) m_lparam.push_back(0);				// if the current fiber is empty, the first vertex is l(v) = 0
 			else {
-				float d = glm::length(p - this->back()) ;			// otherwise l(v) = l(v_{n-1}) + |v_{n} - v_{n-1}|
+				float d = glm::length(p - this->back());			// otherwise l(v) = l(v_{n-1}) + |v_{n} - v_{n-1}|
 				m_lparam.push_back(d + m_lparam.back());
 			}
 
@@ -128,18 +139,43 @@ namespace tira {
 			AddLastVertex(glm::vec3(v), v.Attribute());
 		}
 
+		bool BoundingBox(glm::vec3& aabb_min, glm::vec3& aabb_max) {
+			if (this->size() == 0) return false;						// if the fiber is empty, return false (AABB is invalid)
+
+			aabb_min = this->at(0);									// initialize the corners with the first point
+			aabb_max = aabb_min;
+			for (size_t pi = 1; pi < this->size(); pi++) {				// for each of the remaining points in the fiber
+				glm::vec3 p = this->at(pi);
+				if (p.x < aabb_min.x) aabb_min.x = p.x;
+				else if (p.x > aabb_max.x) aabb_max.x = p.x;
+
+				if (p.y < aabb_min.y) aabb_min.y = p.y;
+				else if (p.y > aabb_max.y) aabb_max.y = p.y;
+
+				if (p.z < aabb_min.z) aabb_min.z = p.z;
+				else if (p.z > aabb_max.z) aabb_max.z = p.z;
+			}
+			return true;
+		}
+
 		float Length() {
 			float l = 0;
-			for (size_t vi=1; vi<this->size(); vi++) {
-				l+= glm::length(this->at(vi) - this->at(vi-1));
+			for (size_t vi = 1; vi < this->size(); vi++) {
+				l += glm::length(this->at(vi) - this->at(vi - 1));
 			}
 			return l;
 		}
 
+		float ChordLength() {
+			if (this->size() < 2) return 0.0f;  // not enough points to compute a chord
+			return glm::length(this->back() - this->front());
+		}
+
+
 		fiber Smooth(float sigma, bool anchor_endpoints = true) {
 
 			fiber smoothed;
-			for (size_t vi=0; vi<this->size(); vi++) {
+			for (size_t vi = 0; vi < this->size(); vi++) {
 				if (anchor_endpoints && (vi == 0 || vi == this->size() - 1)) {
 					vertex v = this->at(vi);
 					smoothed.AddLastVertex(v);
@@ -147,7 +183,7 @@ namespace tira {
 				else {
 					glm::vec3 p(0.0f);
 					float g_energy = 0.0f;
-					for (size_t pi=0; pi<this->size(); pi++) {
+					for (size_t pi = 0; pi < this->size(); pi++) {
 						float d = m_lparam[vi] - m_lparam[pi];
 						p += m_Gaussian(d, sigma) * this->at(pi);
 						g_energy += m_Gaussian(d, sigma);
@@ -173,7 +209,7 @@ namespace tira {
 			fiber<float> d_dt = m_Derivative();
 
 			std::vector<glm::vec3> result;
-			for (size_t vi=0; vi<this->size(); vi++) {
+			for (size_t vi = 0; vi < this->size(); vi++) {
 				result.push_back(d_dt[vi]);
 			}
 			return result;
@@ -194,7 +230,7 @@ namespace tira {
 			std::vector<float> kappa;
 			fiber<float> d_dt = m_Derivative();
 			fiber<float> dd_dt = d_dt.m_Derivative();
-			for (size_t vi=0; vi<this->size(); vi++) {
+			for (size_t vi = 0; vi < this->size(); vi++) {
 				float xp = d_dt[vi].x;
 				float yp = d_dt[vi].y;
 				float zp = d_dt[vi].z;
@@ -208,10 +244,10 @@ namespace tira {
 				float c = ypp * xp - xpp * yp;
 				float d = xp * xp + yp * yp + zp * zp;
 
-				float num = std::sqrt( a*a + b*b + c*c );
+				float num = std::sqrt(a * a + b * b + c * c);
 				float denom = std::sqrt(d * d * d);
 
-				kappa.push_back( num / denom );
+				kappa.push_back(num / denom);
 			}
 			return kappa;
 		}

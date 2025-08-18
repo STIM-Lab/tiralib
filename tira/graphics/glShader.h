@@ -198,27 +198,38 @@ namespace tira {
 
 
 
-		/// <summary>
-		/// Load a file containing both a fragment and vertex shader
-		/// The input file should have the shaders labeled with the following:
-		/// # shader vertex
-		/// ....
-		/// # shader fragment
-		/// ....
-		/// </summary>
-		/// <param name="filepath">File path and name</param>
 		glShader() : m_ShaderID(0) {}
+
+		/**
+		 * Constructor builds a shader object and creates a shader from a single shader string. This assumes that the string is separated into vertex and fragment shaders
+		 * using the preprocessor directives:
+		 *     # shader vertex
+		 *     ...
+		 *     # shader fragment
+		 *     ...
+		 * @param shaderstring
+		 */
 		glShader(const std::string& shaderstring) {
 			m_ShaderID = 0;
 			CreateShader(shaderstring);
 		}
+
+		/**
+		 * Constructor builds a glShader object and creates a shader from two separate strings containing source code for the vertex and fragment shaders
+		 * @param vertexSource source code for the vertex shader
+		 * @param fragmentSource source code for the fragment shader
+		 */
 		glShader(const std::string& vertexSource, const std::string& fragmentSource) {
 			m_ShaderID = 0;
 			CreateShader(vertexSource, fragmentSource);
 		}
 
-		
 
+		/**
+		 * Creates a new shader program from two input strings containing the vertex and fragment source code.
+		 * @param vertexShader source code for the vertex shader in GLSL
+		 * @param fragmentShader source code for the fragment shader in GLSL
+		 */
 		void CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
 			if (m_ShaderID != 0)
 				glDeleteProgram(m_ShaderID);
@@ -237,49 +248,114 @@ namespace tira {
 			CacheUniforms();							// cache the new uniform variables
 		}
 
+		/**
+		 * Creates a shader from a single shader string. This assumes that the string is separated into vertex and fragment shaders
+		 * using the preprocessor directives:
+		 *     # shader vertex
+		 *     ...
+		 *     # shader fragment
+		 *     ...
+		 * @param bothShaders
+		 */
 		void CreateShader(const std::string& bothShaders) {
 			ShaderProgramSource source_parsed = ParseShaderSource(bothShaders);
 			CreateShader(source_parsed.VertexSource, source_parsed.FragmentSource);
 		}
 
+		/**
+		 * Initializes the shader using source code from a file. The source file should contain a string separated into vertex and fragment shaders
+		 * using the preprocessor directives:
+		 *     # shader vertex
+		 *     ...
+		 *     # shader fragment
+		 *     ...
+		 * @param filepath name and location of the file containing the vertex and fragment source code
+		 */
 		void LoadShader(const std::string& filepath) {
 			std::string source_code = ParseShaderFile(filepath);
 			ShaderProgramSource source_parsed = ParseShaderSource(source_code);
 			CreateShader(source_parsed.VertexSource, source_parsed.FragmentSource);
 		}
 
+		/**
+		 * Binds the shader so that following draw calls use this shader program
+		 */
 		void Bind() const {
 			GLERROR(glUseProgram(m_ShaderID));
 		}
 
+		/**
+		 * Un-binds the shader - there aren't a lot of uses for this since binding a new shader un-binds previous shaders
+		 */
 		void Unbind() const {
 			GLERROR(glUseProgram(0));
 		}
 
-		// Set uniforms
+		/**
+		 * Sets a shader uniform variable that will be used following draw calls. This should be called after the shader is bound
+		 * with Bind().
+		 * @param name name of the uniform variable in the source code
+		 * @param value value that will be assigned to the uniform
+		 */
 		void SetUniform1f(const std::string& name, float value) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform1f(location, value));
 		}
+
+		/**
+		 * Sets a shader uniform variable that will be used following draw calls. This should be called after the shader is bound with Bind().
+		 * @param name name of the uniform variable in the source code (generally a vec2 in GLSL)
+		 * @param v0 value that will be assigned to the first element of the uniform
+		 * @param v1 value that will be assigned to the second element of the uniform
+		 */
 		void SetUniform2f(const std::string& name, float v0, float v1) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform2f(location, v0, v1));
 		}
+
+		/**
+		 * Sets a shader uniform variable that will be used following draw calls. This should be called after the shader is bound with Bind().
+		 * @param name name of the uniform variable in the source code (generally a vec3 in GLSL)
+		 * @param v0 value that will be assigned to the first element of the uniform
+		 * @param v1 value that will be assigned to the second element of the uniform
+		 * @param v2 value that will be assigned to the third element of the uniform
+		 */
 		void SetUniform3f(const std::string& name, float v0, float v1, float v2) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform3f(location, v0, v1, v2));
 		}
-		void SetUniform3f(const std::string& name, glm::vec3 v) {
+
+		/**
+		 * Sets a vec3 shader uniform variable that will be used in following draw calls. This should be called after the shader is bound with Bind().
+		 * @param name name of the uniform variable in the source code (generally a vec3 in GLSL)
+		 * @param v vec3 variable containing the elements that will be sent to the shader
+		 */
+		void SetUniform(const std::string& name, glm::vec3 v) {
 			SetUniform3f(name, v[0], v[1], v[2]);
 		}
+
+		/**
+		 * Sets a shader uniform variable that will be used following draw calls. This should be called after the shader is bound with Bind().
+		 * @param name name of the uniform variable in the source code (generally a vec4 in GLSL)
+		 * @param v0 value that will be assigned to the first element of the uniform
+		 * @param v1 value that will be assigned to the second element of the uniform
+		 * @param v2 value that will be assigned to the third element of the uniform
+		 * @param v3 value that will be assigned to the fourth element of the uniform
+		 */
 		void SetUniform4f(const std::string& name, float v0, float v1, float v2, float v3) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniform4f(location, v0, v1, v2, v3));
 		}
+
+		/**
+		 * Sets a vec4 shader uniform that will be used following draw calls. This should be called after the shader is bound with Bind().
+		 * @param name name of the uniform variable in the source code (generally a vec4 in GLSL)
+		 * @param v value that will be assigned to the uniform
+		 */
 		void SetUniform4f(const std::string& name, glm::vec4 v) {
 			SetUniform4f(name, v[0], v[1], v[2], v[3]);
 		}
@@ -325,52 +401,57 @@ namespace tira {
 			GLERROR(glUniform4ui(location, v0, v1, v2, v3));
 		}
 
-		inline void SetUniformMat4f(const std::string& name, const glm::mat4& matrix) {
+		void SetUniformMat4f(const std::string& name, const glm::mat4& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix4fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat3f(const std::string& name, const glm::mat3& matrix) {
+		void SetUniformMat3f(const std::string& name, const glm::mat3& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix3fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat2f(const std::string& name, const glm::mat2& matrix) {
+		void SetUniformMat2f(const std::string& name, const glm::mat2& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix2fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat2x3f(const std::string& name, const glm::mat2x3& matrix) {
+		void SetUniformMat2x3f(const std::string& name, const glm::mat2x3& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix2x3fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat3x2f(const std::string& name, const glm::mat3x2& matrix) {
+		void SetUniformMat3x2f(const std::string& name, const glm::mat3x2& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix3x2fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat2x4f(const std::string& name, const glm::mat2x4& matrix) {
+		void SetUniformMat2x4f(const std::string& name, const glm::mat2x4& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix2x4fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat4x2f(const std::string& name, const glm::mat4x2& matrix) {
+		void SetUniformMat4x2f(const std::string& name, const glm::mat4x2& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix4x2fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat3x4f(const std::string& name, const glm::mat3x4& matrix) {
+		void SetUniformMat3x4f(const std::string& name, const glm::mat3x4& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix3x4fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
-		inline void SetUniformMat4x3f(const std::string& name, const glm::mat4x3& matrix) {
+		void SetUniformMat4x3f(const std::string& name, const glm::mat4x3& matrix) {
 			GLint location = GetUniformLocation(name);
 			if (location < 0) std::cout << "Shader ERROR: uniform " << name << " not found." << std::endl;
 			GLERROR(glUniformMatrix4x3fv(location, 1, GL_FALSE, &matrix[0][0]));
 		}
 
+		/**
+		 * Returns a list of uniforms used in this shader program.
+		 * Note: Unused uniforms will be optimized away when the shader is compiled and won't be returned in this list.
+		 * @return an std::vector containing all of the glShaderUniform values used in the shader
+		 */
 		std::vector< glShaderUniform > GetUniformList(){
 			if (m_ShaderID == 0) return std::vector<glShaderUniform>();	// if there isn't a shader program, return an empty vector
 			GLint count;												// stores the number of uniforms
