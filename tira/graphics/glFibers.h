@@ -348,6 +348,7 @@ namespace tira {
         void RenderFiberID(glm::mat4 View, glm::mat4 Proj) {
             _validate();            // validate that the data structure is ready for rendering
 
+            glClearColor(-1, 0, 0, 0);
             glClear(GL_COLOR_BUFFER_BIT);
 
             for (size_t bi = 0; bi < m_vbuffers.size(); bi++) {
@@ -364,9 +365,6 @@ namespace tira {
                 m_layout.Bind();
                 glDrawArrays(GL_LINE_STRIP, 0, m_fibers[bi].size());
             }
-
-            // handle ID here:
-            size_t hit = 0;
         }
 
 
