@@ -173,7 +173,7 @@ namespace tira {
 		 * @param depth depth of a 3D texture (0 for 2D textures)
 		 * @param internalFormat OpenGL enumeration describing how the texture is represented on the GPU (see the internalFormat options for glTexImage2D)
 		 */
-		glTexture(const int width, const int height, const int depth, const GLenum internalFormat) {
+		glTexture(const int width, const int height, const int depth, const GLenum internalFormat) : glTexture() {
 			GLenum transferDataType = GL_UNSIGNED_BYTE;					// I think GL_UNSIGNED_BYTE is compatible with any format
 			GLenum transferFormat = _get_compatible_transfer_format(internalFormat);
 
