@@ -33,7 +33,7 @@ namespace tira {
         glFramebuffer(int width, int height, int format) : glTexture(width, height, 0, format) {
             GLBREAK(glGenFramebuffers(1, &m_framebuffer_id));
             GLBREAK(glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer_id));
-            GLBREAK(glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_TextureID, 0));
+            GLBREAK(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_TextureID, 0));
             m_draw_buffers.push_back(GL_COLOR_ATTACHMENT0);
             GLBREAK(glDrawBuffers(m_draw_buffers.size(), &m_draw_buffers[0]));
         }
