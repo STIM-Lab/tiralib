@@ -142,9 +142,18 @@ namespace tira {
 
     public:
 
+        node() : vertex<VertexAttributeType>() {}
+
         node(const node& n) : vertex<VertexAttributeType>(n) {
             m_node_attribute = n.m_node_attribute;
             m_edge_indices = n.m_edge_indices;
+        }
+
+        node& operator=(node x) {
+            vertex<VertexAttributeType>::operator=(x);      // call the vertex assignment operator
+            m_node_attribute = x.m_node_attribute;
+            m_edge_indices = x.m_edge_indices;
+            return *this;
         }
 
         /**
@@ -156,6 +165,8 @@ namespace tira {
         node(vertex<VertexAttributeType> v, NodeAttributeType attrib) : vertex<VertexAttributeType>(v) {
             m_node_attribute = attrib;
         }
+
+
 
         /**
          * @brief      Connects this node to an edge. This should be done in parity with connecting edges to nodes
