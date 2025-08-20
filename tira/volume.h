@@ -833,9 +833,64 @@ namespace tira {
 
 			//return dist;
 		}
+
+		/**
+		 * Calculate the gradient of the volume using second-order finite differences for internal voxels and first-order
+		 * finite differences for external voxels. This is the standard for most mathematical libraries, and may have something
+		 * to do with preventing unusually large values at the edges.
+		 * @param axis axis along which the gradient is calculated (X = 0, Y = 1, Z = 2)
+		 * @return a volume containing the specified gradient
+		 */
+		volume gradient(const unsigned int axis) {
+			volume output(X(), Y(), Z());
+
+			double d = _spacing[axis];
+
+			size_t i[3];
+			size_t S[3] = {X(), Y(), Z()};
+			for (i[2] = 0; i[2] < Z(); i[2]++) {
+				for (i[1] = 0; i[1] < Y(); i[1]++) {
+					for (i[0] = 0; i[0] < X(); i[0]++) {
+
+						// if we are at the left edge of the axis dimension, use the forward difference
+						if (i[axis] == 0) {
+							std::vector p_this = {i[2], i[1], i[0]};
+							std::vector p_right = {i[2], i[1], i[0]};
+							p_right[2 - axis] += 1;
+
+							T a = field<T>::read(p_this);
+							T b = field<T>::read(p_right);
+
+							output(i[0], i[1], i[2]) = (b - a) / d;
+						}
+						// if we are at the right edge of the axis dimension, use the backward difference
+						else if (i[axis] == S[axis] - 1) {
+							std::vector p_this = {i[2], i[1], i[0]};
+							std::vector p_left = {i[2], i[1], i[0]};
+							p_left[2 - axis] -= 1;
+
+							T b = field<T>::read(p_this);
+							T a = field<T>::read(p_left);
+							output(i[0], i[1], i[2]) = (b - a) / d;
+						}
+						else {
+							std::vector p_left = {i[2], i[1], i[0]};
+							p_left[2 - axis] -= 1;
+
+							std::vector p_right = {i[2], i[1], i[0]};
+							p_right[2 - axis] += 1;
+
+							T a = field<T>::read(p_left);
+							T b = field<T>::read(p_right);
+
+							output(i[0], i[1], i[2]) = (b - a) / (2.0 * d);
+						}
+					}
+				}
+			}
+			return output;
+		}
 	
-
-
 		// Calculate gradient along dx (3D) with spacing consideration
 		tira::volume<float> gradient_dx()
 		{
