@@ -14,9 +14,16 @@ namespace tira {
         a = b;
         b = temp;
     }
+
+    template <typename T>
+    CUDA_CALLABLE T sgn(T& a) {
+        if (a > (T)0) return (T)(1);
+        if (a < (T)0) return (T)(-1);
+        else return (T)0;
+    }
     
     template <typename T>
-    CUDA_CALLABLE inline T dot3(const T* a, const T* b) {
+    CUDA_CALLABLE T dot3(const T* a, const T* b) {
         // | a0  a1  a2 |
         // | b0  b1  b2 |
         return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -31,14 +38,14 @@ namespace tira {
     }
     
     template <typename T>
-    CUDA_CALLABLE inline void normalize3(T* v) {
+    CUDA_CALLABLE void normalize3(T* v) {
         // | v0  v1  v2 |
         T n = sqrt(dot3(v, v));
         if (n > T(0)) { v[0] /= n; v[1] /= n;   v[2] /= n;  }
 	}
 
     template <typename T>
-    CUDA_CALLABLE inline void cross3(const T* a, const T* b, T* result) {
+    CUDA_CALLABLE void cross3(const T* a, const T* b, T* result) {
 	    // | a0  a1  a2 |
 	    // | b0  b1  b2 |
 	    // result = | a1*b2 - a2*b1, a2*b0 - a0*b2, a0*b1 - a1*b0 |
@@ -536,13 +543,13 @@ namespace tira::cpu {
         return vecs;
     }
 
-    /// <summary>
-    /// CPU code for calculating eigenvalues of a 3D matrix array
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="mats"></param>
-    /// <param name="n"></param>
-    /// <returns></returns>
+    /**
+     * Calculate the eigenvalues for an array of symmetric 3x3 matrices and return the results in a new array.
+     * @tparam T data type for the matrix elements
+     * @param mats pointer to an array of N 3x3 matrices (3x3xN elements of type T)
+     * @param n number of matrices in the array
+     * @return a newly allocated array of eigenvalues in ascending order (3xN elements of type T)
+     */
     template<typename T>
     T* evals3_symmetric(const T* mats, const size_t n) {
 
@@ -566,48 +573,23 @@ namespace tira::cpu {
         return evals;
     }
 
-    template<typename T>
-    T* evecs3_symmetric(const T* mats, const T* lambda, const size_t n) {
-        // | a  b  d |
-        // | b  c  e |
-        // | d  e  f |
 
-        T* evecs = new T[9 * n];
-        for (unsigned int i = 0; i < n; i++) {
-            T a = mats[i * 9 + 0];
-            T b = mats[i * 9 + 1];
-            T d = mats[i * 9 + 2];
-            T c = mats[i * 9 + 4];
-            T e = mats[i * 9 + 5];
-            T f = mats[i * 9 + 8];
-
-            // Now we can safely calculate the eigenvectors
-            T* evec0 = new T[3];
-            T* evec1 = new T[3];
-            T* evec2 = new T[3];
-            T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
-            evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
-            
-            evecs[i * 9 + 0] = evec0[0];
-            evecs[i * 9 + 1] = evec0[1];
-            evecs[i * 9 + 2] = evec0[2];        // first eigenvector
-            evecs[i * 9 + 3] = evec1[0];
-            evecs[i * 9 + 4] = evec1[1];
-            evecs[i * 9 + 5] = evec1[2];        // second eigenvector
-            evecs[i * 9 + 6] = evec2[0];
-            evecs[i * 9 + 7] = evec2[1];
-            evecs[i * 9 + 8] = evec2[2];        // third eigenvector
-        }
-        return evecs;
-    }
-
+    /**
+     * Calculate the eigenvectors of an array of 3x3 matrices. The eigenvectors are returned in spherical coordinates (theta, phi)
+     * where theta (0 < theta < 2pi) is the azimuthal angle and phi (0 < phi < pi) is the polar angle.
+     * @tparam T data type for the matrix elements (ex. float)
+     * @param mats pointer to an array of 3x3 matrices (3x3xN elements of type T)
+     * @param lambda pointer to an array of eigenvalues (3xN elements of type T)
+     * @param n number of matrices in the array
+     * @return a new array of eigenvectors (3x2xN elements of type T) in spherical coordinates
+     */
     template<typename T>
     T* evecs3spherical_symmetric(const T* mats, const T* lambda, const size_t n) {
         // | a  b  d |
         // | b  c  e |
         // | d  e  f |
 
-        T* evecs = new T[4 * n];
+        T* evecs = new T[3 * 2 * n];
         for (unsigned int i = 0; i < n; i++) {
             T a = mats[i * 9 + 0];
             T b = mats[i * 9 + 1];
@@ -623,14 +605,14 @@ namespace tira::cpu {
             T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
             evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
 
-            evecs[i * 4 + 0] = std::atan2(evec1[1], evec1[0]);
-            evecs[i * 4 + 1] = std::acos(evec2[2]);
+            evecs[i * 6 + 0] = std::atan2(evec0[1], evec0[0]);
+            evecs[i * 6 + 1] = std::acos(evec0[2]);
 
-            evecs[i * 4 + 2] = std::atan2(evec2[1], evec2[0]);
-            evecs[i * 4 + 3] = std::acos(evec2[2]);
+            evecs[i * 6 + 2] = std::atan2(evec1[1], evec1[0]);
+            evecs[i * 6 + 3] = std::acos(evec1[2]);
 
-            //evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
-            //evecs[i * 6 + 5] = std::acos(evec2[2]);
+            evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
+            evecs[i * 6 + 5] = std::acos(evec2[2]);
         }
 
         return evecs;

@@ -18,6 +18,7 @@ namespace tira {
 		GLint m_internal_format;		// internal format of the texture on the GPU
 
 
+	public:
 		/// Helper function returns an OpenGL data type constant given a specified data type in the template
 		template <typename D>
 		static GLenum type2gl() {
@@ -51,7 +52,7 @@ namespace tira {
 			}
 		}
 
-		unsigned int _glformat2channels(GLenum transferFormat) {
+		static unsigned int _glformat2channels(GLenum transferFormat) {
 			switch (transferFormat) {
 			case GL_RED:
 			case GL_RED_INTEGER:
@@ -70,6 +71,7 @@ namespace tira {
 			}
 		}
 
+	protected:
 		/**
 		 * Apparently even empty textures have to be specified with a transfer format that is compatible with the specified internal
 		 * format. For example, if you try to create an empty texture with an internal format of GL_R32I, the transfer format has to be

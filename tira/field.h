@@ -331,7 +331,12 @@ namespace tira {
 				cast_dest_shape.push_back(sizeof(T) / sizeof(D));			// add another dimension to account for this
 
 
-			npy::SaveArrayAsNumpy(filename, fortran_order, cast_dest_shape.size(), (const unsigned long*)&cast_dest_shape[0], (D*)(&_data[0]));
+			try {
+				npy::SaveArrayAsNumpy(filename, fortran_order, cast_dest_shape.size(), (const unsigned long*)&cast_dest_shape[0], (D*)(&_data[0]));
+			}
+			catch (std::out_of_range) {
+				throw std::runtime_error("field ERROR: data type not recognized by external code npy.hpp");
+			}
 		}
 
 		void save_raw(const std::string& filename) {
