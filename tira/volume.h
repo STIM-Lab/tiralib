@@ -33,7 +33,7 @@ namespace tira {
 			field<T>::_shape.push_back(x);
 			field<T>::_shape.push_back(c);
 
-			field<T>::_allocate();
+			field<T>::m_Allocate();
 
 		}
 
@@ -711,9 +711,9 @@ namespace tira {
 
 		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
 			
-			tira::field<float> F = tira::field<float>::derivative(axis, d, order, print_coefs);		// derivative of the field
-			tira::volume<float> D(tira::field<float>::shape());										// create a new volume
-			memcpy(D.data(), F.data(), D.bytes());										// copy the field to the volume
+			tira::field<float> F = tira::field<float>::Derivative(axis, d, order, print_coefs);		// derivative of the field
+			tira::volume<float> D(tira::field<float>::Shape());										// create a new volume
+			memcpy(D.Data(), F.Data(), D.Bytes());										// copy the field to the volume
 			D._spacing = _spacing;																	// copy the spacing (a volume has spacing, but a field doesn't)
 			D = D * (1 / D._spacing[axis]);															// scale the gradient by the axis spacing
 			return D;
@@ -721,7 +721,7 @@ namespace tira {
 
 		tira::volume<float> gradmag(unsigned int order) {
 			tira::field<float> F = field<float>::gradmag(order);
-			tira::volume<float> R(F.data(), X(), Y(), Z());
+			tira::volume<float> R(F.Data(), X(), Y(), Z());
 			return R;
 		}
 
@@ -730,8 +730,8 @@ namespace tira {
 		/// </summary>
 		/// <returns></returns>
 		tira::volume<float> sign() {
-			tira::field<float> F = field<float>::sign();
-			tira::volume<float> R(F.data(), X(), Y(), Z());
+			tira::field<float> F = field<float>::Sign();
+			tira::volume<float> R(F.Data(), X(), Y(), Z());
 			return R;
 		}
 
@@ -1465,7 +1465,7 @@ namespace tira {
 					for (size_t z = 0; z < Z(); z++) {
 						size_t n = ((z + w) * (X() + w * 2) * (Y() + w * 2)) + ((y + w) * (X() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
 						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
-						result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+						result.Data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
 					}
 				}
 			}
@@ -1510,7 +1510,7 @@ namespace tira {
 					for (size_t z = 0; z < Z(); z++) {
 						size_t n = ((z + w) * (X() + w * 2) * (Z() + w * 2)) + ((y + w) * (Z() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
 						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
-						result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+						result.Data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
 					}
 				}
 			}
@@ -1973,7 +1973,7 @@ namespace tira {
 			volume<unsigned char> color_result(X(), Y(), Z(), 3);									// create the new color image
 			float a;																		// create a normalized value as a reference for the color map
 			for (size_t i = 0; i < field<T>::_data.size(); i++) {
-				cmap::colormap(field<T>::_data[i], minval, maxval, color_result.data()[i * 3 + 0], color_result.data()[i * 3 + 1], color_result.data()[i * 3 + 2], colormap);
+				cmap::colormap(field<T>::_data[i], minval, maxval, color_result.Data()[i * 3 + 0], color_result.Data()[i * 3 + 1], color_result.Data()[i * 3 + 2], colormap);
 			}
 			return color_result;
 		}

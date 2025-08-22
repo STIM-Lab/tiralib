@@ -23,16 +23,16 @@ namespace tira {
 	protected:
 
 		void init(std::vector<size_t> image_shape) {
-			if (field<T>::_shape.size() != 0) {													// if this image has already been allocated
-				field<T>::_shape.clear();														// clear the shape and data vectors to start from scratch
-				field<T>::_data.clear();
+			if (field<T>::m_shape.size() != 0) {													// if this image has already been allocated
+				field<T>::m_shape.clear();														// clear the shape and data vectors to start from scratch
+				field<T>::m_data.clear();
 			}
-			field<T>::_shape.push_back(image_shape[1]);
-			field<T>::_shape.push_back(image_shape[0]);
+			field<T>::m_shape.push_back(image_shape[1]);
+			field<T>::m_shape.push_back(image_shape[0]);
 			if (image_shape.size() == 3)
-				field<T>::_shape.push_back(image_shape[2]);
+				field<T>::m_shape.push_back(image_shape[2]);
 
-			field<T>::_allocate();
+			field<T>::m_Allocate();
 		}
 
 		/// <summary>
@@ -63,7 +63,7 @@ namespace tira {
 
 		T& at(size_t x, size_t y, size_t c = 0) {
 			size_t idx = idx_offset(x, y, c);
-			return field<T>::_data[idx];
+			return field<T>::m_data[idx];
 		}
 
 		/// <summary>
@@ -204,11 +204,11 @@ namespace tira {
 		
 		
 	public:
-		inline size_t Y() const { return field<T>::_shape[0]; }
-		inline size_t X() const { return field<T>::_shape[1]; }
+		inline size_t Y() const { return field<T>::m_shape[0]; }
+		inline size_t X() const { return field<T>::m_shape[1]; }
 		inline size_t C() const {
-			if(field<T>::_shape.size() <=2) return 1;
-			return field<T>::_shape[2];
+			if(field<T>::m_shape.size() <=2) return 1;
+			return field<T>::m_shape[2];
 		}
 
 		/// <summary>
@@ -217,18 +217,18 @@ namespace tira {
 		image() : field<T>() {}			//initialize all variables, don't allocate any memory
 
 		image(std::vector<size_t> shape) {
-			field<T>::_shape = shape;
-			field<T>::_allocate();
+			field<T>::m_shape = shape;
+			field<T>::m_Allocate();
 		}
 
 		/// <summary>
 		/// Constructor creates an image from a field
 		/// </summary>
 		/// <param name="F"></param>
-		image(field<T> F) : image(F.shape()) {
-			//field<T>::_shape = F.shape();
-			//field<T>::_allocate();
-			memcpy(&field<T>::_data[0], F.data(), F.bytes());
+		image(field<T> F) : image(F.Shape()) {
+			//field<T>::m_shape = F.shape();
+			//field<T>::m_Allocate();
+			memcpy(&field<T>::m_data[0], F.Data(), F.Bytes());
 		}
 
 		
@@ -251,7 +251,7 @@ namespace tira {
 		/// <param name="y">size of the image along the Y (slow) axis</param>
 		/// <param name="c">number of channels (channels are interleaved)</param>
 		image(T* data, size_t x, size_t y, size_t c = 0) : image(x, y, c) {
-			memcpy(&field<T>::_data[0], data, field<T>::bytes());									// use memcpy to copy the raw data into the field array
+			memcpy(&field<T>::m_data[0], data, field<T>::Bytes());									// use memcpy to copy the raw data into the field array
 		}
 
 		/// <summary>
@@ -259,7 +259,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="I">image object to be copied</param>
 		image(const image<T>& I) : image(I.X(), I.Y(), I.C()) {
-			memcpy(&field<T>::_data[0], &I._data[0], field<T>::bytes());
+			memcpy(&field<T>::m_data[0], &I.m_data[0], field<T>::Bytes());
 		}
 
 		/// <summary>
@@ -308,32 +308,32 @@ namespace tira {
 			if (&I == this)													// handle self-assignment
 				return *this;
 			init(I.X(), I.Y(), I.C());
-			memcpy(&field<T>::_data[0], &I._data[0], field<T>::bytes());		// copy the data
+			memcpy(&field<T>::m_data[0], &I.m_data[0], field<T>::Bytes());		// copy the data
 			return *this;													// return a pointer to the current object
 		}
 
 		
 		image<T> operator+(T rhs) {
-			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(this->shape());								//allocate space for the resulting image
+			size_t N = field<T>::Size();							//calculate the total number of values in the image
+			image<T> r(this->Shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] + rhs;				//add the individual pixels
+				r.m_data[n] = field<T>::m_data[n] + rhs;				//add the individual pixels
 			return r;												//return the summed result
 		}
 
 		image<T> operator*(T rhs) {
-			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(this->shape());								//allocate space for the resulting image
+			size_t N = field<T>::Size();							//calculate the total number of values in the image
+			image<T> r(this->Shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] * rhs;				//add the individual pixels
+				r.m_data[n] = field<T>::m_data[n] * rhs;				//add the individual pixels
 			return r;												//return the summed result
 		}
 
 		image<T> operator/(T rhs) {
-			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(this->shape());								//allocate space for the resulting image
+			size_t N = field<T>::Size();							//calculate the total number of values in the image
+			image<T> r(this->Shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] / rhs;				//add the individual pixels
+				r.m_data[n] = field<T>::m_data[n] / rhs;				//add the individual pixels
 			return r;												//return the summed result
 		}
 
@@ -342,9 +342,9 @@ namespace tira {
 				throw std::runtime_error("Images dimensions are incompatible");
 
 			if(C() == rhs.C()) {					// if both images have the same number of color channels
-				tira::image<T> result(this->shape());
-				for(size_t i = 0; i < field<T>::size(); i++) {
-					result._data[i] = field<T>::_data[i] * rhs._data[i];
+				tira::image<T> result(this->Shape());
+				for(size_t i = 0; i < field<T>::Size(); i++) {
+					result.m_data[i] = field<T>::m_data[i] * rhs.m_data[i];
 				}
 				return result;
 			}
@@ -360,7 +360,7 @@ namespace tira {
 				return result;
 			}
 			else if(rhs.C() == 1) {
-				tira::image<T> result(this->shape());
+				tira::image<T> result(this->Shape());
 				for(size_t yi = 0; yi < Y(); yi++) {
 					for(size_t xi = 0; xi < X(); xi++) {
 						for(size_t ci = 0; ci < C(); ci++) {
@@ -382,7 +382,7 @@ namespace tira {
 			if (C() == rhs.C()) {					// if both images have the same number of color channels
 				tira::image<T> result(this->shape());
 				for (size_t i = 0; i < field<T>::size(); i++) {
-					result._data[i] = field<T>::_data[i] / rhs._data[i];
+					result.m_data[i] = field<T>::m_data[i] / rhs.m_data[i];
 				}
 				return result;
 			}
@@ -417,7 +417,7 @@ namespace tira {
 			size_t N = field<T>::size();							//calculate the total number of values in the image
 			image<T> r(this->shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] - rhs;				//add the individual pixels
+				r.m_data[n] = field<T>::m_data[n] - rhs;				//add the individual pixels
 			return r;												//return the summed result
 		}
 
@@ -430,9 +430,9 @@ namespace tira {
 		/// </summary>
 		/// <param name="v">Constant that all elements will be set to</param>
 		image<T>& operator=(T v) {														//set all elements of the image to a given value v
-			const size_t N = field<T>::size();
+			const size_t N = field<T>::Size();
 			for(size_t n = 0; n < N; n++)
-				field<T>::_data[n] = v;
+				field<T>::m_data[n] = v;
 			return *this;
 		}
 
@@ -442,15 +442,15 @@ namespace tira {
 		/// <param name="rhs"></param>
 		/// <returns></returns>
 		image<T> operator+(image<T> rhs) {
-			size_t N = field<T>::size();							//calculate the total number of values in the image
-			image<T> r(this->shape());								//allocate space for the resulting image
+			size_t N = field<T>::Size();							//calculate the total number of values in the image
+			image<T> r(this->Shape());								//allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] + rhs._data[n];		//add the individual pixels
+				r.m_data[n] = field<T>::m_data[n] + rhs.m_data[n];		//add the individual pixels
 			return r;												//return the inverted image
 		}
 
 		image<T> abs() {
-			image<T> result = field<T>::abs();
+			image<T> result = field<T>::Abs();
 			return result;
 		}
 
@@ -459,12 +459,12 @@ namespace tira {
 		}
 
 		image<T> clamp(T min, T max) {
-			size_t N = field<T>::size();
-			image<T> r(this->shape());
+			size_t N = field<T>::Size();
+			image<T> r(this->Shape());
 			for (size_t n = 0; n < N; n++) {
-				if (field<T>::_data[n] < min) r._data[n] = min;
-				else if (field<T>::_data[n] > max) r._data[n] = max;
-				else r._data[n] = field<T>::_data[n];
+				if (field<T>::m_data[n] < min) r.m_data[n] = min;
+				else if (field<T>::m_data[n] > max) r.m_data[n] = max;
+				else r.m_data[n] = field<T>::m_data[n];
 			}
 
 			return r;
@@ -476,8 +476,8 @@ namespace tira {
 		/// <typeparam name="V"></typeparam>
 		template<typename V>
 		operator image<V>() {
-			image<V> r(this->shape());					//create a new image
-			std::copy(&field<T>::_data[0], &field<T>::_data[0] + field<T>::size(), r.data());		//copy and cast the data
+			image<V> r(this->Shape());					//create a new image
+			std::copy(&field<T>::m_data[0], &field<T>::m_data[0] + field<T>::Size(), r.Data());		//copy and cast the data
 			return r;									//return the new image
 		}
 
@@ -511,7 +511,7 @@ namespace tira {
 				for (size_t y = 0; y < Y(); y++) {
 					size_t source_i = idx_offset(x, y, c);
 					size_t dest_i = r.idx_offset(x, y, 0);
-					r._data[dest_i] = field<T>::_data[source_i];
+					r.m_data[dest_i] = field<T>::m_data[source_i];
 				}
 			}
 			return r;
@@ -525,7 +525,7 @@ namespace tira {
 		void channel(T* src, const size_t c) {
 			for (size_t y = 0; y < Y(); y++) {
 				for (size_t x = 0; x < X(); x++) {
-					field<T>::_data[idx_offset(x, y, c)] = src[y * X() + x];
+					field<T>::m_data[idx_offset(x, y, c)] = src[y * X() + x];
 				}
 			}
 		}
@@ -538,7 +538,7 @@ namespace tira {
 		void channel(T val, size_t c) {
 			for (size_t y = 0; y < Y(); y++) {
 				for (size_t x = 0; x < X(); x++) {
-					field<T>::_data[idx_offset(x, y, c)] = val;
+					field<T>::m_data[idx_offset(x, y, c)] = val;
 				}
 			}
 		}
@@ -566,22 +566,8 @@ namespace tira {
 			size_t y = list[0].height();
 			init(x, y, list.size());			//re-allocate the image
 			for (size_t c = 0; c < list.size(); c++)		//for each channel
-				channel(&list[c].channel(0)._data[0], c);	//insert the channel into the output image
+				channel(&list[c].channel(0).m_data[0], c);	//insert the channel into the output image
 		}
-
-		/*
-		/// <summary>
-		/// Returns a pointer to the raw image data
-		/// </summary>
-		/// <returns>Pointer to the raw image data</returns>
-		T* data() {
-			return &field<T>::_data[0];
-		}
-
-		const T* const_data() const {
-			return &field<T>::_data[0];
-		}
-		*/
 
 		/// <summary>
 		/// Returns the number of foreground pixels (given a specific background value)
@@ -594,7 +580,7 @@ namespace tira {
 
 			size_t num_foreground = 0;
 			for (size_t n = 0; n < N; n++)
-				if (field<T>::_data[n] != background) num_foreground++;
+				if (field<T>::m_data[n] != background) num_foreground++;
 
 			return num_foreground;	//return the number of foreground values
 		}
@@ -620,7 +606,7 @@ namespace tira {
 
 			size_t i = 0;
 			for (size_t n = 0; n < N; n++) {
-				if (field<T>::_data[n] != background) {
+				if (field<T>::m_data[n] != background) {
 					s[i] = n;
 					i++;
 				}
@@ -634,13 +620,13 @@ namespace tira {
 		/// </summary>
 		/// <returns></returns>
 		T maxv() {
-			T max_val = field<T>::_data[0];				//initialize the maximum value to the first one
-			size_t N = field<T>::size();	//get the number of pixels
+			T max_val = field<T>::m_data[0];				//initialize the maximum value to the first one
+			size_t N = field<T>::Size();	//get the number of pixels
 
 			for (size_t n = 0; n < N; n++) {		//for every value
 
-				if (field<T>::_data[n] > max_val) {			//if the value is higher than the current max
-					max_val = field<T>::_data[n];
+				if (field<T>::m_data[n] > max_val) {			//if the value is higher than the current max
+					max_val = field<T>::m_data[n];
 				}
 			}
 			return max_val;
@@ -652,12 +638,12 @@ namespace tira {
 		/// </summary>
 		/// <returns></returns>
 		T minv() {
-			T min_val = field<T>::_data[0];				//initialize the maximum value to the first one
-			size_t N = field<T>::size();	//get the number of pixels
+			T min_val = field<T>::m_data[0];				//initialize the maximum value to the first one
+			size_t N = field<T>::Size();	//get the number of pixels
 
 			for (size_t n = 0; n < N; n++) {		//for every value
-				if (field<T>::_data[n] < min_val) {			//if the value is higher than the current max
-					min_val = field<T>::_data[n];
+				if (field<T>::m_data[n] < min_val) {			//if the value is higher than the current max
+					min_val = field<T>::m_data[n];
 				}
 			}
 
@@ -679,11 +665,11 @@ namespace tira {
 				return result;
 			}
 
-			size_t N = field<T>::size();						//get the number of values in the image
+			size_t N = field<T>::Size();						//get the number of values in the image
 			T range = maxval - minval;			//calculate the current range of the image
 			T desired_range = high - low;		//calculate the desired range of the image
 			for (size_t n = 0; n < N; n++) {		//for each element in the image
-				result._data[n] = desired_range * (field<T>::_data[n] - minval) / range + low;
+				result.m_data[n] = desired_range * (field<T>::m_data[n] - minval) / range + low;
 			}
 			return result;
 		}
@@ -701,7 +687,7 @@ namespace tira {
 				for (size_t x = 0; x < width(); x++) {
 					size_t n = (y + w) * (width() + w * 2) + x + w;				//calculate the index of the corresponding pixel in the result image
 					size_t n0 = idx_offset(x, y);										//calculate the index for this pixel in the original image
-					result._data[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+					result.m_data[n] = field<T>::m_data[n0];									// copy the original image to the result image afer the border area
 				}
 			}
 			return result;
@@ -724,7 +710,7 @@ namespace tira {
 				for (size_t x = 0; x < width(); x++) {
 					size_t n = (y + w) * (width() + w * 2) + x + w;				//calculate the index of the corresponding pixel in the result image
 					size_t n0 = idx_offset(x, y);										//calculate the index for this pixel in the original image
-					result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+					result.data()[n] = field<T>::m_data[n0];									// copy the original image to the result image afer the border area
 				}
 			}
 			const size_t l = w;
@@ -797,7 +783,7 @@ namespace tira {
 			for (size_t yi = 0; yi < h; yi++) {						//for each row in the cropped image
 				size_t srci = (y0 + yi) * X() * C() + x0 * C();			//calculate the source index
 				size_t dsti = yi * w * C();								//calculate the destination index
-				memcpy(&result._data[dsti], &field<T>::_data[srci], line_bytes);	//copy the data
+				memcpy(&result.m_data[dsti], &field<T>::m_data[srci], line_bytes);	//copy the data
 			}
 			return result;
 		}
@@ -823,7 +809,7 @@ namespace tira {
 						T sum = static_cast<T>(0);
 						for (size_t vi = 0; vi < kheight; vi++) {
 							for (size_t ui = 0; ui < kwidth; ui++) {
-								ival = field<T>::_data[idx_offset(xi + ui, yi + vi, ci)];
+								ival = field<T>::m_data[idx_offset(xi + ui, yi + vi, ci)];
 								kval = mask(ui, vi, 0);
 								sum += ival * kval;
 							}
@@ -877,7 +863,7 @@ namespace tira {
 			for (size_t y = 0; y < Y(); y++) {
 				for (size_t x = 0; x < X(); x++) {
 					for (size_t c = 0; c < C(); c++) {
-						dest[c * Y() * X() + y * X() + x] = field<T>::_data[idx_offset(x, y, c)];
+						dest[c * Y() * X() + y * X() + x] = field<T>::m_data[idx_offset(x, y, c)];
 					}
 				}
 			}
@@ -913,7 +899,7 @@ namespace tira {
 			for (size_t y = 0; y < Y(); y++) {
 				for (size_t x = 0; x < X(); x++) {
 					for (size_t c = 0; c < C(); c++) {
-						field<T>::_data[idx_offset(x, y, c)] = data[c * Y() * X() + y * X() + x];
+						field<T>::m_data[idx_offset(x, y, c)] = data[c * Y() * X() + y * X() + x];
 					}
 				}
 			}
@@ -921,9 +907,9 @@ namespace tira {
 
 		template<typename D = T>
 		void load_npy(std::string filename) {
-			field<T>::template load_npy<D>(filename);										// load the numpy file using the tira::field class
-			if (field<T>::_shape.size() == 2)										// if the numpy array is only 2D, add a color channel of size 1
-				field<T>::_shape.push_back(1);
+			field<T>::template LoadNpy<D>(filename);										// load the numpy file using the tira::field class
+			if (field<T>::m_shape.size() == 2)										// if the numpy array is only 2D, add a color channel of size 1
+				field<T>::m_shape.push_back(1);
 		}
 
 		image<T> dist() {
@@ -1033,8 +1019,8 @@ namespace tira {
 				throw "Cannot create a color map from images with more than one channel!";
 			}
 			image<unsigned char> color_result(X(), Y(), 3);									// create the new color image
-			for (size_t i = 0; i < field<T>::_data.size(); i++) {
-				cmap::colormap(field<T>::_data[i], minval, maxval, color_result.data()[i * 3 + 0], color_result.data()[i * 3 + 1], color_result.data()[i * 3 + 2], colormap);
+			for (size_t i = 0; i < field<T>::m_data.size(); i++) {
+				cmap::colormap(field<T>::m_data[i], minval, maxval, color_result.Data()[i * 3 + 0], color_result.Data()[i * 3 + 1], color_result.Data()[i * 3 + 2], colormap);
 			}
 			return color_result;
 		}
