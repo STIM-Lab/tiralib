@@ -70,7 +70,7 @@ namespace tira {
             glGetError();
 
             // upload the current volume as a texture map
-            if (this->size() > 0)
+            if (this->Size() > 0)
                 _material.SetTexture("texmap", this->getTexture());
             glGetError();
 
