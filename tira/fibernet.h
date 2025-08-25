@@ -441,6 +441,8 @@ namespace tira {
             return true;
         }
 
+        const std::vector<fnode>& InternalNodes() const { return m_nodes; }
+        const std::vector<fedge>& InternalEdges() const { return m_edges; }
 
         /**
          * @brief deletes an edge from the graph and updates all references.
@@ -457,10 +459,22 @@ namespace tira {
 
             m_nodes[n0].RemoveEdge(edge_id); m_nodes[n1].RemoveEdge(edge_id); // remove edge reference from both nodes
 
-            for (auto& node : m_nodes) { // update edge indices in all nodes
-                auto& edge_indices = node.EdgeIndices();
-                for (auto& ei : edge_indices) if (ei > edge_id) ei--;
+            for (auto& node : m_nodes) {
+                std::vector<size_t> updated;
+
+                for (auto ei : node.Edges()) {
+
+                    if (ei > edge_id) updated.push_back(ei - 1);
+
+                    else if (ei < edge_id) updated.push_back(ei);
+                    // else skip (ei == edge_id, already removed)
+                }
+                node.ClearEdgeIndices();
+
+                for (auto ei : updated)
+                    node.AddEdgeIndex(ei);
             }
+
 
             m_edges.erase(m_edges.begin() + edge_id); // remove the edge
 
@@ -478,45 +492,152 @@ namespace tira {
         * param e2: index of the second edge
        */
 
-        void MergeEdges(size_t e1, size_t e2) {
-            if (e1 >= m_edges.size() || e2 >= m_edges.size()) throw std::runtime_error("invalid edge index");
+        /*
+        
+         Start at a degree-2 node that hasn't been visited yet.
 
-            const auto& edge1 = m_edges[e1], edge2 = m_edges[e2];
+         expand forward through the graph following only other degree-2 nodes.
 
-            std::unordered_map<size_t, int> node_counts;
+         then expand backward the same way.
 
-            node_counts[edge1.NodeIndex0()]++; node_counts[edge1.NodeIndex1()]++;
-            node_counts[edge2.NodeIndex0()]++; node_counts[edge2.NodeIndex1()]++;
+         now have a list of connected nodes  and their connecting edges.
 
-            size_t shared = static_cast<size_t>(-1); std::vector<size_t> ends;
+         if this path has 3 or more nodes, can merge it:
 
+         concatenate their fiber geometry in order.
 
-            for (auto it = node_counts.begin(); it != node_counts.end(); ++it) {
-                if (it->second == 2) shared = it->first; else ends.push_back(it->first);
+         Delete all  degree 2 ones between the ends.
+
+         delete all edges.
+  
+         add a new edge from the first to the last node with the merged fiber.
+
+         Repeat for all degree 2 chains.
+        
+        */
+        void MergeDegree2Chains() {
+
+            std::vector<bool> visited_node(m_nodes.size(), false);
+            std::vector<bool> visited_edge(m_edges.size(), false);
+
+            auto is_mergeable = [&](size_t node) {
+                return node < m_nodes.size() && m_nodes[node].Degree() == 2;
+                };
+
+            size_t totalMerged = 0;
+
+            for (size_t ni = 0; ni < m_nodes.size(); ++ni) {
+                if (!is_mergeable(ni) || visited_node[ni])
+                    continue;
+
+                std::vector<size_t> chain_nodes{ ni };
+                std::vector<size_t> chain_edges;
+
+                // Expand forward
+                size_t curr = ni;
+                size_t prev = static_cast<size_t>(-1);
+                while (true) {
+                    visited_node[curr] = true;
+                    const auto& edges = m_nodes[curr].Edges();
+                    size_t next = static_cast<size_t>(-1), next_edge = static_cast<size_t>(-1);
+
+                    for (size_t ei : edges) {
+                        if (visited_edge[ei]) continue;
+
+                        const auto& edge = m_edges[ei];
+                        size_t n0 = edge.NodeIndex0(), n1 = edge.NodeIndex1();
+                        size_t other = (n0 == curr) ? n1 : n0;
+
+                        if (other != prev && is_mergeable(other)) {
+                            next = other;
+                            next_edge = ei;
+                            break;
+                        }
+                    }
+
+     
+                    if (next_edge == static_cast<size_t>(-1)) break;
+
+                    chain_edges.push_back(next_edge);
+                    curr = next;
+                    prev = chain_nodes.back();
+                    chain_nodes.push_back(curr);
+                }
+
+                // Expand backward
+                curr = ni;
+                prev = static_cast<size_t>(-1);
+                while (true) {
+                    const auto& edges = m_nodes[curr].Edges();
+                    size_t next = static_cast<size_t>(-1), next_edge = static_cast<size_t>(-1);
+
+                    for (size_t ei : edges) {
+                        if (visited_edge[ei]) continue;
+
+                        const auto& edge = m_edges[ei];
+                        size_t n0 = edge.NodeIndex0(), n1 = edge.NodeIndex1();
+                        size_t other = (n0 == curr) ? n1 : n0;
+
+                        if (other != prev && is_mergeable(other)) {
+                            next = other;
+                            next_edge = ei;
+                            break;
+                        }
+                    }
+
+                    if (next_edge == static_cast<size_t>(-1)) break;
+
+                    chain_edges.insert(chain_edges.begin(), next_edge);
+                    curr = next;
+                    prev = chain_nodes.front();
+                    chain_nodes.insert(chain_nodes.begin(), curr);
+                    visited_node[curr] = true;
+                }
+
+                // Validate
+                if (chain_nodes.size() < 3) continue;
+
+                size_t start_node = chain_nodes.front();
+                size_t end_node = chain_nodes.back();
+
+                // Build merged fiber
+                tira::fiber<float> merged_fiber;
+                for (size_t i = 0; i < chain_edges.size(); ++i) {
+                    const auto& edge = m_edges[chain_edges[i]];
+                    fiber<float> segment = edge;
+
+                    if (edge.NodeIndex1() == chain_nodes[i]) {
+                        std::reverse(segment.begin(), segment.end());
+                    }
+
+                    if (merged_fiber.empty())
+                        merged_fiber.insert(merged_fiber.end(), segment.begin(), segment.end());
+                    else
+                        merged_fiber.insert(merged_fiber.end(), segment.begin() + 1, segment.end()); // avoid duplication
+                }
+
+                // Delete edges (reverse order)
+                std::sort(chain_edges.begin(), chain_edges.end(), std::greater<size_t>());
+                for (size_t ei : chain_edges) {
+                    visited_edge[ei] = true;
+                    DeleteEdge(ei);
+                }
+
+                // Delete internal nodes
+                for (size_t i = 1; i + 1 < chain_nodes.size(); ++i) {
+                    size_t nid = chain_nodes[i];
+                    if (m_nodes[nid].Degree() == 0) {
+                        DeleteNode(nid);
+                    }
+                }
+
+                AddEdge(start_node, end_node, merged_fiber);
+                totalMerged++;
             }
 
-
-            if (shared == static_cast<size_t>(-1) || m_nodes[shared].Degree() != 2)
-                throw std::runtime_error("edges must connect at a degree-2 node");
-
-
-            fiber<VertexAttributeType> merged = m_edges[e1];
-
-            if (m_edges[e1].NodeIndex1() == shared) std::reverse(merged.begin(), merged.end());
-
-            fiber<VertexAttributeType> tail = m_edges[e2];
-
-            if (m_edges[e2].NodeIndex0() != shared) std::reverse(tail.begin(), tail.end());
-
-            merged.insert(merged.end(), tail.begin(), tail.end()); // concatenate fibers
-
-            DeleteEdge(std::max(e1, e2)); DeleteEdge(std::min(e1, e2)); // delete both edges
-
-            if (m_nodes[shared].Degree() == 0) DeleteNode(shared); // delete shared node if now unconnected
-            else std::cout << "[note] shared node " << shared << " still has degree " << m_nodes[shared].Degree() << ", skipping deletion." << std::endl;
-
-            AddEdge(ends[0], ends[1], merged); // add merged edge
+            std::cout << "Merged " << totalMerged << " degree 2 chains." << std::endl;
         }
+
         /////////////////////////////////////////////////////////////////
 
         /**
