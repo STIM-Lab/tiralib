@@ -220,9 +220,9 @@ CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3 uvw, const glm::vec2 s
 
     const glm::vec3 q(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
 
-    glm::vec3 d = uvw;                                          // normalize the direction vector
-    const float l = glm::length(d);                             // calculate ell (distance between voter/votee)
-    if (l == 0) d = glm::vec3(0, 0, 0);                         // assumes that the voter DOES contribute to itself
+    glm::vec3 d = uvw;                                                  // normalize the direction vector
+    const float l = glm::length(d);                                     // calculate ell (distance between voter/votee)
+    if (l == 0) d = glm::vec3(q.x, q.y, q.z);                           // assumes that the voter DOES contribute to itself
     else d = glm::normalize(d);
 
     const float qTd = glm::dot(q, d);
