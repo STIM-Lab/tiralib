@@ -43,6 +43,12 @@ namespace tira {
 
 		vertex(const vertex& v) : glm::vec3(v) { m_va = v.m_va; }
 
+		vertex& operator=(const vertex& v) {
+			glm::vec3::operator=(v);
+			m_va = v.m_va;
+			return *this;
+		}
+
 
 		void Attribute(VertexAttributeType r) { m_va = r; }
 		VertexAttributeType Attribute() const { return m_va; }

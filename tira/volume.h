@@ -28,12 +28,12 @@ namespace tira {
 		/// <param name="z">Z size (slowest axis)</param>
 		/// <param name="c">Number of color channels</param>
 		void init(size_t x, size_t y, size_t z, size_t c = 1) {
-			field<T>::_shape.push_back(z);
-			field<T>::_shape.push_back(y);
-			field<T>::_shape.push_back(x);
-			field<T>::_shape.push_back(c);
+			field<T>::m_shape.push_back(z);
+			field<T>::m_shape.push_back(y);
+			field<T>::m_shape.push_back(x);
+			field<T>::m_shape.push_back(c);
 
-			field<T>::_allocate();
+			field<T>::m_Allocate();
 
 		}
 
@@ -89,7 +89,7 @@ namespace tira {
 
 		T& at(size_t x, size_t y, size_t z, size_t c = 0) {
 			size_t i = idx_offset(x, y, z, c);
-			return field<T>::_data[i];
+			return field<T>::m_data[i];
 		}
 
 		tira::volume<float> _dist(tira::volume<int>& binary_boundary) {
@@ -100,7 +100,7 @@ namespace tira {
 			int l = Z();
 
 			// resize the binary boundary grid
-			binary_boundary.resize(field<T>::_shape);
+			binary_boundary.resize(field<T>::m_shape);
 
 			std::vector<std::tuple<int, int, int>> neighbors;				// vector stores a template for 4-connected indices
 			neighbors.emplace_back(0, 0, 1);
@@ -379,7 +379,7 @@ namespace tira {
 		/// <param name="z">size of the image along the Z (slowest) axis</param>
 		/// <param name="c">number of channels (channels are interleaved)</param>
 		volume(T* data, size_t x, size_t y, size_t z, size_t c = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume(x, y, z, c) {
-			memcpy(&field<T>::_data[0], data, field<T>::bytes());									// use memcpy to copy the raw data into the field array
+			memcpy(&field<T>::m_data[0], data, field<T>::Bytes());									// use memcpy to copy the raw data into the field array
 			_spacing = spacing;
 		}
 
@@ -393,7 +393,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="I">image object to be copied</param>
 		volume(const volume<T>& V) : volume(V.X(), V.Y(), V.Z(), V.C()) {
-			memcpy(&field<T>::_data[0], &V._data[0], field<T>::bytes());
+			memcpy(&field<T>::m_data[0], &V.m_data[0], field<T>::Bytes());
 			_spacing = V._spacing;
 		}
 
@@ -412,10 +412,10 @@ namespace tira {
 		}
 
 		// access methods for the volume size and number of channels
-		inline size_t Z() const { return field<T>::_shape[0]; }
-		inline size_t Y() const { return field<T>::_shape[1]; }
-		inline size_t X() const { return field<T>::_shape[2]; }
-		inline size_t C() const { return field<T>::_shape[3]; }
+		inline size_t Z() const { return field<T>::m_shape[0]; }
+		inline size_t Y() const { return field<T>::m_shape[1]; }
+		inline size_t X() const { return field<T>::m_shape[2]; }
+		inline size_t C() const { return field<T>::m_shape[3]; }
 
 		inline double dx() const { return _spacing[0]; }
 		inline double dy() const { return _spacing[1]; }
@@ -438,10 +438,10 @@ namespace tira {
 		/// <returns></returns>
 		volume<T> channel(const size_t c) const {
 			volume<T> r(X(), Y(), Z());							// create a new single-channel image
-			T* dp = r.data();									// create a pointer to the raw result
+			T* dp = r.Data();									// create a pointer to the raw result
 			size_t S = X() * Y() * Z();							// number of voxels
 			for (size_t i = 0; i < S; i++) {					// for each voxel
-				dp[i] = field<T>::_data[i * C() + c];			// copy the value corresponding to the desired channel
+				dp[i] = field<T>::m_data[i * C() + c];			// copy the value corresponding to the desired channel
 			}
 			return r;
 		}
@@ -453,17 +453,17 @@ namespace tira {
 		template<typename V>
 		operator volume<V>() {
 			volume<V> r(this->shape());					//create a new image
-			std::copy(&field<T>::_data[0], &field<T>::_data[0] + field<T>::size(), r.data());		//copy and cast the data
+			std::copy(&field<T>::m_data[0], &field<T>::m_data[0] + field<T>::size(), r.data());		//copy and cast the data
 			return r;									//return the new image
 		}
 
 		T minv() {
-			T m = *std::min_element(field<T>::_data.begin(), field<T>::_data.end());
+			T m = *std::min_element(field<T>::m_data.begin(), field<T>::m_data.end());
 			return m;
 		}
 
 		T maxv() {
-			T m = *std::max_element(field<T>::_data.begin(), field<T>::_data.end());
+			T m = *std::max_element(field<T>::m_data.begin(), field<T>::m_data.end());
 			return m;
 		}
 
@@ -498,10 +498,10 @@ namespace tira {
 						x = xi * pixel_size[0];
 
 						if (grid(x, y, z, boxes)) {
-							field<T>::_data[idx] = sqrt(x * x + y * y + z * z) / sqrt(3) * 255;
+							field<T>::m_data[idx] = sqrt(x * x + y * y + z * z) / sqrt(3) * 255;
 						}
 						else {
-							field<T>::_data[idx] = 0;
+							field<T>::m_data[idx] = 0;
 						}
 					}
 				}
@@ -533,14 +533,14 @@ namespace tira {
 						x = xi * pixel_size[0];
 
 						if (grid(x, y, z, boxes)) {
-							field<T>::_data[idx + 0] = x * 255;
-							field<T>::_data[idx + 1] = y * 255;
-							field<T>::_data[idx + 2] = z * 255;
+							field<T>::m_data[idx + 0] = x * 255;
+							field<T>::m_data[idx + 1] = y * 255;
+							field<T>::m_data[idx + 2] = z * 255;
 						}
 						else {
-							field<T>::_data[idx + 0] = 0;
-							field<T>::_data[idx + 1] = 0;
-							field<T>::_data[idx + 2] = 0;
+							field<T>::m_data[idx + 0] = 0;
+							field<T>::m_data[idx + 1] = 0;
+							field<T>::m_data[idx + 2] = 0;
 						}
 					}
 				}
@@ -711,9 +711,9 @@ namespace tira {
 
 		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
 			
-			tira::field<float> F = tira::field<float>::derivative(axis, d, order, print_coefs);		// derivative of the field
-			tira::volume<float> D(tira::field<float>::shape());										// create a new volume
-			memcpy(D.data(), F.data(), D.bytes());										// copy the field to the volume
+			tira::field<float> F = tira::field<float>::Derivative(axis, d, order, print_coefs);		// derivative of the field
+			tira::volume<float> D(tira::field<float>::Shape());										// create a new volume
+			memcpy(D.Data(), F.Data(), D.Bytes());													// copy the field to the volume
 			D._spacing = _spacing;																	// copy the spacing (a volume has spacing, but a field doesn't)
 			D = D * (1 / D._spacing[axis]);															// scale the gradient by the axis spacing
 			return D;
@@ -721,7 +721,7 @@ namespace tira {
 
 		tira::volume<float> gradmag(unsigned int order) {
 			tira::field<float> F = field<float>::gradmag(order);
-			tira::volume<float> R(F.data(), X(), Y(), Z());
+			tira::volume<float> R(F.Data(), X(), Y(), Z());
 			return R;
 		}
 
@@ -730,8 +730,8 @@ namespace tira {
 		/// </summary>
 		/// <returns></returns>
 		tira::volume<float> sign() {
-			tira::field<float> F = field<float>::sign();
-			tira::volume<float> R(F.data(), X(), Y(), Z());
+			tira::field<float> F = field<float>::Sign();
+			tira::volume<float> R(F.Data(), X(), Y(), Z());
 			return R;
 		}
 
@@ -833,9 +833,64 @@ namespace tira {
 
 			//return dist;
 		}
+
+		/**
+		 * Calculate the gradient of the volume using second-order finite differences for internal voxels and first-order
+		 * finite differences for external voxels. This is the standard for most mathematical libraries, and may have something
+		 * to do with preventing unusually large values at the edges.
+		 * @param axis axis along which the gradient is calculated (X = 0, Y = 1, Z = 2)
+		 * @return a volume containing the specified gradient
+		 */
+		volume gradient(const unsigned int axis) {
+			volume output(X(), Y(), Z());
+
+			double d = _spacing[axis];
+
+			size_t i[3];
+			size_t S[3] = {X(), Y(), Z()};
+			for (i[2] = 0; i[2] < Z(); i[2]++) {
+				for (i[1] = 0; i[1] < Y(); i[1]++) {
+					for (i[0] = 0; i[0] < X(); i[0]++) {
+
+						// if we are at the left edge of the axis dimension, use the forward difference
+						if (i[axis] == 0) {
+							std::vector p_this = {i[2], i[1], i[0]};
+							std::vector p_right = {i[2], i[1], i[0]};
+							p_right[2 - axis] += 1;
+
+							T a = field<T>::read(p_this);
+							T b = field<T>::read(p_right);
+
+							output(i[0], i[1], i[2]) = (b - a) / d;
+						}
+						// if we are at the right edge of the axis dimension, use the backward difference
+						else if (i[axis] == S[axis] - 1) {
+							std::vector p_this = {i[2], i[1], i[0]};
+							std::vector p_left = {i[2], i[1], i[0]};
+							p_left[2 - axis] -= 1;
+
+							T b = field<T>::read(p_this);
+							T a = field<T>::read(p_left);
+							output(i[0], i[1], i[2]) = (b - a) / d;
+						}
+						else {
+							std::vector p_left = {i[2], i[1], i[0]};
+							p_left[2 - axis] -= 1;
+
+							std::vector p_right = {i[2], i[1], i[0]};
+							p_right[2 - axis] += 1;
+
+							T a = field<T>::read(p_left);
+							T b = field<T>::read(p_right);
+
+							output(i[0], i[1], i[2]) = (b - a) / (2.0 * d);
+						}
+					}
+				}
+			}
+			return output;
+		}
 	
-
-
 		// Calculate gradient along dx (3D) with spacing consideration
 		tira::volume<float> gradient_dx()
 		{
@@ -1410,7 +1465,7 @@ namespace tira {
 					for (size_t z = 0; z < Z(); z++) {
 						size_t n = ((z + w) * (X() + w * 2) * (Y() + w * 2)) + ((y + w) * (X() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
 						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
-						result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+						result.Data()[n] = field<T>::m_data[n0];									// copy the original image to the result image afer the border area
 					}
 				}
 			}
@@ -1455,7 +1510,7 @@ namespace tira {
 					for (size_t z = 0; z < Z(); z++) {
 						size_t n = ((z + w) * (X() + w * 2) * (Z() + w * 2)) + ((y + w) * (Z() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
 						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
-						result.data()[n] = field<T>::_data[n0];									// copy the original image to the result image afer the border area
+						result.Data()[n] = field<T>::m_data[n0];									// copy the original image to the result image afer the border area
 					}
 				}
 			}
@@ -1507,7 +1562,7 @@ namespace tira {
 				for (size_t yi = 0; yi < h; yi++) {												// loop through each row
 					size_t srci = ((z0 + zi) * Y() * X() + (y0 + yi) * X() + x0) * C();			// calculate the source index
 					size_t dsti = (zi * h * w  + yi * w) * C();									// calculate the destination index
-					memcpy(&result._data[dsti], &field<T>::_data[srci], line_bytes);			// copy the data
+					memcpy(&result.m_data[dsti], &field<T>::m_data[srci], line_bytes);			// copy the data
 				}
 			}
 			
@@ -1549,7 +1604,7 @@ namespace tira {
 					for (size_t xi = 0; xi < X(); xi++) {
 						for (size_t c = 0; c < C(); c++) {
 							size_t volume_index = idx_offset(xi, yi, zi, c);
-							field<T>::_data[volume_index] = img(xi, yi, c);
+							field<T>::m_data[volume_index] = img(xi, yi, c);
 						}
 					}
 				}
@@ -1559,9 +1614,9 @@ namespace tira {
 		}
 
 		void load(std::string file_mask) {
-			if (field<T>::_shape.size() != 0) {							// if a volume is already allocated, clear it
-				field<T>::_shape.clear();
-				field<T>::_data.clear();
+			if (field<T>::m_shape.size() != 0) {							// if a volume is already allocated, clear it
+				field<T>::m_shape.clear();
+				field<T>::m_data.clear();
 			}
 			// generate a list of file names from the mask
 
@@ -1612,18 +1667,18 @@ namespace tira {
 		template<typename D = T>
 		void load_npy(std::string filename) {
 			field<T>::template load_npy<D>(filename);										// load the numpy file using the tira::field class
-			if (field<T>::_shape.size() == 3)										// if the numpy array is only 2D, add a color channel of size 1
-				field<T>::_shape.push_back(1);
+			if (field<T>::m_shape.size() == 3)										// if the numpy array is only 2D, add a color channel of size 1
+				field<T>::m_shape.push_back(1);
 		}
 
 		/// Save the volume as a Numpy file. If there is only one channel, this function will squeeze the dimensions.
 		template<typename D = T>
 		void save_npy(std::string filename) {
-			std::vector<size_t> squeezed_shape = field<T>::_shape;
-			if (field<T>::_shape[3] == 1) {
+			std::vector<size_t> squeezed_shape = field<T>::m_shape;
+			if (field<T>::m_shape[3] == 1) {
 				squeezed_shape.pop_back();
 			}
-			field<T>::template save_npy<D>(filename, squeezed_shape);
+			field<T>::template SaveNpy<D>(filename, squeezed_shape);
 
 		}
 
@@ -1640,26 +1695,26 @@ namespace tira {
 		}
 
 		tira::volume<T> operator*(T rhs) {
-			size_t N = field<T>::size();									// calculate the total number of values in the volume
-			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
+			size_t N = field<T>::Size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->Shape(), this->_spacing);								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] * rhs;						// multiply the individual samples
+				r.m_data[n] = field<T>::m_data[n] * rhs;						// multiply the individual samples
 			return r;														// return the final result
 		}
 
 		tira::volume<T> operator+(T rhs) {
-			size_t N = field<T>::size();									// calculate the total number of values in the volume
-			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
+			size_t N = field<T>::Size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->Shape(), this->_spacing);								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] + rhs;						// add the individual pixels
+				r.m_data[n] = field<T>::m_data[n] + rhs;						// add the individual pixels
 			return r;														// return the summed result
 		}
 
 		tira::volume<T> operator-(T rhs) {
-			size_t N = field<T>::size();									// calculate the total number of values in the volume
-			tira::volume<T> r(this->shape(), this->_spacing);								// allocate space for the resulting image
+			size_t N = field<T>::Size();									// calculate the total number of values in the volume
+			tira::volume<T> r(this->Shape(), this->_spacing);								// allocate space for the resulting image
 			for (size_t n = 0; n < N; n++)
-				r._data[n] = field<T>::_data[n] - rhs;						// add the individual pixels
+				r.m_data[n] = field<T>::m_data[n] - rhs;						// add the individual pixels
 			return r;														// return the summed result
 		}
 
@@ -1668,9 +1723,9 @@ namespace tira {
 				throw std::runtime_error("Images dimensions are incompatible");
 
 			if (C() == rhs.C()) {					// if both images have the same number of color channels
-				tira::volume<T> result(this->shape(), this->_spacing);
-				for (size_t i = 0; i < field<T>::size(); i++) {
-					result._data[i] = field<T>::_data[i] * rhs._data[i];
+				tira::volume<T> result(this->Shape(), this->_spacing);
+				for (size_t i = 0; i < field<T>::Size(); i++) {
+					result.m_data[i] = field<T>::m_data[i] * rhs.m_data[i];
 				}
 				return result;
 			}
@@ -1688,7 +1743,7 @@ namespace tira {
 				return result;
 			}
 			else if (rhs.C() == 1) {
-				tira::volume<T> result(this->shape(), this->_spacing);
+				tira::volume<T> result(this->Shape(), this->_spacing);
 				for (size_t zi = 0; zi < Z(); zi++) {
 					for (size_t yi = 0; yi < Y(); yi++) {
 						for (size_t xi = 0; xi < X(); xi++) {
@@ -1709,7 +1764,7 @@ namespace tira {
 			if (X() != rhs.X() || Y() != rhs.Y())
 				throw std::runtime_error("Images dimensions are incompatible");
 
-			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
+			tira::volume<T> result(this->Shape(), this->_spacing);						// create the output
 			for (size_t zi = 0; zi < Z(); zi++) {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
@@ -1726,7 +1781,7 @@ namespace tira {
 			if (X() != rhs.X() || Y() != rhs.Y())
 				throw std::runtime_error("Images dimensions are incompatible");
 
-			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
+			tira::volume<T> result(this->Shape(), this->_spacing);						// create the output
 			for (size_t zi = 0; zi < Z(); zi++) {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
@@ -1743,7 +1798,7 @@ namespace tira {
 			if (X() != rhs.X() || Y() != rhs.Y())
 				throw std::runtime_error("Images dimensions are incompatible");
 
-			tira::volume<T> result(this->shape(), this->_spacing);						// create the output
+			tira::volume<T> result(this->Shape(), this->_spacing);						// create the output
 			for (size_t zi = 0; zi < Z(); zi++) {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
@@ -1759,13 +1814,13 @@ namespace tira {
 
 		void resize(size_t x, size_t y, size_t z, size_t c = 0) {
 			std::vector<size_t> shape = { z, y, x, c };
-			tira::field<T>::resize(shape);
+			tira::field<T>::Resize(shape);
 		}
 
 		void resize(std::vector<size_t> shape) {
 			for (size_t d = shape.size(); d < 4; d++)
 				shape.push_back(1);
-			field<T>::resize(shape);
+			field<T>::Resize(shape);
 		}
 
 		/// <summary>
@@ -1917,8 +1972,8 @@ namespace tira {
 			}
 			volume<unsigned char> color_result(X(), Y(), Z(), 3);									// create the new color image
 			float a;																		// create a normalized value as a reference for the color map
-			for (size_t i = 0; i < field<T>::_data.size(); i++) {
-				cmap::colormap(field<T>::_data[i], minval, maxval, color_result.data()[i * 3 + 0], color_result.data()[i * 3 + 1], color_result.data()[i * 3 + 2], colormap);
+			for (size_t i = 0; i < field<T>::m_data.size(); i++) {
+				cmap::colormap(field<T>::m_data[i], minval, maxval, color_result.Data()[i * 3 + 0], color_result.Data()[i * 3 + 1], color_result.Data()[i * 3 + 2], colormap);
 			}
 			return color_result;
 		}

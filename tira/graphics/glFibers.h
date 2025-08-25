@@ -327,7 +327,7 @@ namespace tira {
             }
         }
 
-        void RenderSelected(glm::mat4 View, glm::mat4 Proj, std::vector<size_t> selected, std::vector<float> cmap_override = {}) {
+        void RenderSelected(glm::mat4 View, glm::mat4 Proj, std::vector<size_t> selected) {
             _validate();            // validate that the data structure is ready for rendering
 
             for (size_t bi = 0; bi < selected.size(); bi++) {

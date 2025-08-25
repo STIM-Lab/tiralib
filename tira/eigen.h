@@ -7,7 +7,6 @@
 
 namespace tira {
 
-
     // function used to quickly swap two values
     template <typename T>
     CUDA_CALLABLE void swap(T& a, T& b) {
@@ -17,15 +16,18 @@ namespace tira {
     }
 
     template <typename T>
-    CUDA_CALLABLE T trace2(const T* matrix) {
-        return matrix[0] + matrix[3];
+    CUDA_CALLABLE T sgn(T& a) {
+        if (a > (T)0) return (T)(1);
+        if (a < (T)0) return (T)(-1);
+        else return (T)0;
     }
-
+    
     template <typename T>
-    CUDA_CALLABLE T determinant2(const T* matrix) {
-        return matrix[0] * matrix[3] - matrix[1] * matrix[2];
-    }
-
+    CUDA_CALLABLE T dot3(const T* a, const T* b) {
+        // | a0  a1  a2 |
+        // | b0  b1  b2 |
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+	}
     template <typename T>
     CUDA_CALLABLE T determinant3(const T a, const T b, const T c, const T d,
         const T e, const T f) {
@@ -34,6 +36,13 @@ namespace tira {
 	    // | d  e  f |
 	    return a * (c * f - e * e) - b * (b * f - e * d) + d * (b * e - c * d);
     }
+    
+    template <typename T>
+    CUDA_CALLABLE void normalize3(T* v) {
+        // | v0  v1  v2 |
+        T n = sqrt(dot3(v, v));
+        if (n > T(0)) { v[0] /= n; v[1] /= n;   v[2] /= n;  }
+	}
 
     template <typename T>
     CUDA_CALLABLE void cross3(const T* a, const T* b, T* result) {
@@ -44,11 +53,7 @@ namespace tira {
 	    result[1] = a[2] * b[0] - a[0] * b[2];
 	    result[2] = a[0] * b[1] - a[1] * b[0];
     }
-    template <typename T>
-    CUDA_CALLABLE int sgn(T x) {
-        if (x < 0) return -1;
-        else return 1;
-    }
+
     /// <summary>
     /// Calculate the roots of a quadratic equation where a=1 using stable
     /// assumptions for eigenvalues of 2x2 matrices. In particular, if b = 0
@@ -80,10 +85,9 @@ namespace tira {
         // | a  b |
         // | b  c |
 
-
         // this algorithm uses the trace method to calculate the eigenvalues
-        T tr = a + c; //trace2(matrix);              // calculate the matrix trace
-        T det = a * c - b * b; //determinant2(matrix);       // calculate the determinant
+        T tr = a + c;                                   // calculate the matrix trace
+        T det = a * c - b * b;                          // calculate the determinant
 
         T l0, l1;
         quad_root(-tr, det, l0, l1);    // find the roots of the quadratic equation - these are the eigenvalues
@@ -100,9 +104,6 @@ namespace tira {
     CUDA_CALLABLE void evec2polar_symmetric(const T a, const T b, const T c, const T* lambdas, T& theta0, T& theta1) {
         //[a  b]
         //[b  c]
-
-        //const float a = matrix[0];
-        //const float b = matrix[1];
 
         T l0 = lambdas[0];
         T l1 = lambdas[1];
@@ -126,25 +127,22 @@ namespace tira {
     }
 
 
-    /// Robustly compute a right-handed orthonormal set { U, V, W }.
-    /// The vector W is guaranteed to be unit-length, in which case
+    /// Compute a right-handed orthonormal set { U, V, evec }.
+    /// The vector evec is guaranteed to be unit-length, in which case
     /// there is no need to worry about a division by zero when computing invLength.
     template<typename T>
     CUDA_CALLABLE void ComputeOrthogonalComplement(const T* evec, T* U, T* V) {
-        T invLength;
+        // Compute a right-handed orthonormal set { U, V, evec }
+        T inv;
         if (std::fabs(evec[0]) > std::fabs(evec[1])) {
             // The component of maximum absolute value is either evec[0] or evec[2]
-		    invLength = (T)1 / sqrt(evec[0] * evec[0] + evec[2] * evec[2]);
-            U[0] = -evec[2] * invLength;
-            U[1] = (T)0;
-            U[2] = evec[0] * invLength; // U is orthogonal to evec
+		    inv = T(1) / sqrt(evec[0] * evec[0] + evec[2] * evec[2]);
+            U[0] = -evec[2] * inv;  U[1] = T(0);    U[2] = evec[0] * inv; // U is orthogonal to evec
         }
         else {
 		    // The component of maximum absolute value is either evec[1] or evec[2]
-		    invLength = (T)1 / sqrt(evec[1] * evec[1] + evec[2] * evec[2]);
-            U[0] = (T)0;
-            U[1] = evec[2] * invLength;
-            U[2] = - evec[1] * invLength;
+		    inv = T(1) / sqrt(evec[1] * evec[1] + evec[2] * evec[2]);
+            U[0] = T(0);    U[1] = evec[2] * inv;   U[2] = -evec[1] * inv;
         }
 		cross3(evec, U, V); // V = evec x U
     }
@@ -156,9 +154,16 @@ namespace tira {
 	    // | b  c  e |
 	    // | d  e  f |
 
-	    T r0[] = { a - eval0, b, d };
-	    T r1[] = { b, c - eval0, e };
-	    T r2[] = { d, e, f - eval0 };
+        const T upper_diagonal_norm = b * b + d * d + e * e;
+        if (upper_diagonal_norm == T(0)) {
+            evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
+            return;
+        }
+
+        // Solve (A - LI) v = 0 via cross products of two rows with largest area
+	    T r0[3] = { a - eval0,  b,          d           };
+	    T r1[3] = { b,          c - eval0,  e           };
+	    T r2[3] = { d,          e,          f - eval0   };
 
         // calculate the cross-product of each two rows
         T r0xr1[3], r0xr2[3], r1xr2[3];
@@ -167,91 +172,102 @@ namespace tira {
 	    cross3(r1, r2, r1xr2);
 
         // dot products - to find out which cross-product has the largest length
-        T d01 = r0xr1[0] * r0xr1[0] + r0xr1[1] * r0xr1[1] + r0xr1[2] * r0xr1[2];
-        T d02 = r0xr2[0] * r0xr2[0] + r0xr2[1] * r0xr2[1] + r0xr2[2] * r0xr2[2];
-        T d12 = r1xr2[0] * r1xr2[0] + r1xr2[1] * r1xr2[1] + r1xr2[2] * r1xr2[2];
+		const T d01 = dot3(r0xr1, r0xr1);
+		const T d02 = dot3(r0xr2, r0xr2);
+		const T d12 = dot3(r1xr2, r1xr2);
 
-        T* r = r0xr1;
-        T norm = sqrt(d01);
-
-        if (d02 > d01 && d02 > d12) {
-            r = r0xr2;
-            norm = sqrt(d02);
+        T dmax = d01;
+        int imax = 0;
+        if (d02 > dmax) { dmax = d02; imax = 1; }
+        if (d12 > dmax) { imax = 2; }
+        if (imax == 0) {
+            // r0xr1 is the largest cross product
+			T norm = sqrt(d01);
+            evec0[0] = r0xr1[0] / norm;
+            evec0[1] = r0xr1[1] / norm;
+            evec0[2] = r0xr1[2] / norm;
         }
-        else if (d12 > d01 && d12 > d02) {
-            r = r1xr2;
-            norm = sqrt(d12);
+        else if (imax == 1) {
+            T norm = sqrt(d02);
+            // r0xr2 is the largest cross product
+            evec0[0] = r0xr2[0] / norm;
+            evec0[1] = r0xr2[1] / norm;
+            evec0[2] = r0xr2[2] / norm;
         }
-
-        evec0[0] = r[0] / norm;
-        evec0[1] = r[1] / norm;
-        evec0[2] = r[2] / norm;
+        else {
+            // r1xr2 is the largest cross product
+            T norm = sqrt(d12);
+            evec0[0] = r1xr2[0] / norm;
+            evec0[1] = r1xr2[1] / norm;
+            evec0[2] = r1xr2[2] / norm;
+		}
+		normalize3(evec0); // ensure that the eigenvector is unit-length
     }
 
     template <typename T>
     CUDA_CALLABLE void evec3_symmetric_1(const T a, const T b, const T c, const T d, const T e, const T f,
         const T eval1, const T* evec0, T* evec1) {
-	    T* U = new T[3];
-	    T* V = new T[3];
+
+        // Compute a right-handed orthonormal set { U, V, evec0 }
+        T U[3]; T V[3];
 	    ComputeOrthogonalComplement(evec0, U, V);
 
-	    T AU[] = {
-		    a * U[0] + b * U[1] + d * U[2],
-		    b * U[0] + c * U[1] + e * U[2],
-		    d * U[0] + e * U[1] + f * U[2]
-	    };
-	    T AV[] = {
-		    a * V[0] + b * V[1] + d * V[2],
-		    b * V[0] + c * V[1] + e * V[2],
-		    d * V[0] + e * V[1] + f * V[2]
-	    };
-	    T m00 = U[0] * AU[0] + U[1] * AU[1] + U[2] * AU[2] - eval1;
-	    T m01 = U[0] * AV[0] + U[1] * AV[1] + U[2] * AV[2];
-	    T m11 = V[0] * AV[0] + V[1] * AV[1] + V[2] * AV[2] - eval1;
+        // AU, AV
+	    const T AU[3] = {   a * U[0] + b * U[1] + d * U[2],
+		                    b * U[0] + c * U[1] + e * U[2],
+		                    d * U[0] + e * U[1] + f * U[2]  };
+	    const T AV[3] = {   a * V[0] + b * V[1] + d * V[2],
+		                    b * V[0] + c * V[1] + e * V[2],
+		                    d * V[0] + e * V[1] + f * V[2]  };
+	    
+        // 2x2 projected (A - LI) matrix on {U,V}
+        T m00 = dot3(U, AU) - eval1;
+	    T m01 = dot3(U, AV);
+	    T m11 = dot3(V, AV) - eval1;
 
+        // Choose the largest-length row of M to compute the eigenvector
         T absM00 = std::fabs(m00);
         T absM01 = std::fabs(m01);
         T absM11 = std::fabs(m11);
         T maxAbsComp;
 
-        // Compare absM00 and absM11 first
         if (absM00 >= absM11) {
             maxAbsComp = (absM00 >= absM01) ? absM00 : absM01;
-            if (maxAbsComp > (T)0) {
+            if (maxAbsComp > T(0)) {
                 if (absM00 >= absM01) {
                     m01 /= m00;
-                    m00 = (T)1 / std::sqrt((T)1 + m01 * m01);
+                    m00 = T(1) / std::sqrt(T(1) + m01 * m01);
                     m01 *= m00;
                 }
                 else {
                     m00 /= m01;
-                    m01 = (T)1 / std::sqrt((T)1 + m00 * m00);
+                    m01 = T(1) / std::sqrt(T(1) + m00 * m00);
                     m00 *= m01;
                 }
-                // Subtract(Multiply(m01, U), Multiply(m00, V))
+				//evec1 = subtract3(multiply3(m01, U), multiply3(m00, V));
                 evec1[0] = m01 * U[0] - m00 * V[0];
                 evec1[1] = m01 * U[1] - m00 * V[1];
                 evec1[2] = m01 * U[2] - m00 * V[2];
-
             }
             else {
-				evec1[0] = U[0];    evec1[1] = U[1];    evec1[2] = U[2];
+                evec1[0] = U[0];    evec1[1] = U[1];    evec1[2] = U[2];
             }
         }
         else {
             maxAbsComp = (absM11 >= absM01) ? absM11 : absM01;
-            if (maxAbsComp > (T)0) {
+            if (maxAbsComp > T(0)) {
                 if (absM11 >= absM01) {
                     m01 /= m11;
-                    m11 = (T)1 / std::sqrt((T)1 + m01 * m01);
+                    m11 = T(1) / std::sqrt(T(1) + m01 * m01);
                     m01 *= m11;
                 }
                 else {
                     m11 /= m01;
-                    m01 = (T)1 / std::sqrt((T)1 + m11 * m11);
+                    m01 = T(1) / std::sqrt(T(1) + m11 * m11);
                     m11 *= m01;
                 }
                 // Subtract(Multiply(m11, U), Multiply(m01, V))
+				// evec1 = subtract3(multiply3(m11, U), multiply3(m01, V));
                 evec1[0] = m11 * U[0] - m01 * V[0];
                 evec1[1] = m11 * U[1] - m01 * V[1];
                 evec1[2] = m11 * U[2] - m01 * V[2];
@@ -446,42 +462,31 @@ namespace tira {
         // | b  c  e |
         // | d  e  f |
 
-        // To guard against floating-point overflow, we precondition the matrix by normalizing by the largest value
-        T max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);              // calculate the largest absolute value in the matrix
-        T max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
-        T max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
-        T maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
-        if (maxElement == 0.0) {
-			evec0[0] = 1.0;    evec0[1] = 0.0;    evec0[2] = 0.0;
-			evec1[0] = 0.0;    evec1[1] = 1.0;    evec1[2] = 0.0;
-			evec2[0] = 0.0;    evec2[1] = 0.0;    evec2[2] = 1.0;
-            return;
-        }
-
-        T invMaxElement = 1.0 / maxElement;                            // normalize the matrix
-        a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
-        c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
-
 		// test to see if this matrix is diagonal, return basis vectors if it is
-        T upper_diagonal_norm = b * b + d * d + e * e;
-        if (upper_diagonal_norm == 0.0) {
-            evec0[0] = (T)1.0;    evec0[1] = (T)0.0;    evec0[2] = (T)0.0;
-            evec1[0] = (T)0.0;    evec1[1] = (T)1.0;    evec1[2] = (T)0.0;
-            evec2[0] = (T)0.0;    evec2[1] = (T)0.0;    evec2[2] = (T)1.0;
+        const T upper_diagonal_norm = b * b + d * d + e * e;
+        if (upper_diagonal_norm == T(0)) {
+            evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
+            evec1[0] = T(0);    evec1[1] = T(1);    evec1[2] = T(0);
+            evec2[0] = T(0);    evec2[1] = T(0);    evec2[2] = T(1);
             return;
         }
+        
+        const T q = (a + c + f) / T(3);
+        const T p2 = pow(a - q, 2) + pow(c - q, 2) + pow(f - q, 2) + T(2) * upper_diagonal_norm;
+        const T p = sqrt(p2 / T(6));
+        T halfDet = determinant3(a - q, b, c - q, d, e, f - q) / T(2) * pow(p, 3);
+        halfDet = (halfDet < T(-1)) ? T(-1) : ((halfDet > T(1)) ? T(1) : halfDet);
 
-        T q = (a + c + f) / 3.0;
-	    T determinant = determinant3(a - q, b, c - q, d, e, f - q);
-        if (determinant >= 0.0) {
-		    evec3_symmetric_0(a, b, c, d, e, f, evals[2], evec2);
-		    evec3_symmetric_1(a, b, c, d, e, f, evals[1], evec2, evec1);
-		    cross3(evec2, evec1, evec0);        // evec0 = evec2 x evec1
+        if (halfDet >= T(0)) {
+            evec3_symmetric_0(a, b, c, d, e, f, evals[2], evec2);
+            evec3_symmetric_1(a, b, c, d, e, f, evals[1], evec2, evec1);
+            cross3(evec2, evec1, evec0);        // evec0 = evec2 x evec1
         }
         else {
-		    evec3_symmetric_0(a, b, c, d, e, f, evals[0], evec0);
-		    evec3_symmetric_1(a, b, c, d, e, f, evals[1], evec0, evec1);
-		    cross3(evec0, evec1, evec2);        // evec2 = evec0 x evec1
+            evec3_symmetric_0(a, b, c, d, e, f, evals[0], evec0);
+            evec3_symmetric_1(a, b, c, d, e, f, evals[1], evec0, evec1);
+            cross3(evec0, evec1, evec2);        // evec2 = evec0 x evec1
+            normalize3(evec2);
         }
     }
 }
@@ -538,13 +543,13 @@ namespace tira::cpu {
         return vecs;
     }
 
-    /// <summary>
-    /// CPU code for calculating eigenvalues of a 3D matrix array
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="mats"></param>
-    /// <param name="n"></param>
-    /// <returns></returns>
+    /**
+     * Calculate the eigenvalues for an array of symmetric 3x3 matrices and return the results in a new array.
+     * @tparam T data type for the matrix elements
+     * @param mats pointer to an array of N 3x3 matrices (3x3xN elements of type T)
+     * @param n number of matrices in the array
+     * @return a newly allocated array of eigenvalues in ascending order (3xN elements of type T)
+     */
     template<typename T>
     T* evals3_symmetric(const T* mats, const size_t n) {
 
@@ -568,48 +573,23 @@ namespace tira::cpu {
         return evals;
     }
 
-    template<typename T>
-    T* evecs3_symmetric(const T* mats, const T* lambda, const size_t n) {
-        // | a  b  d |
-        // | b  c  e |
-        // | d  e  f |
 
-        T* evecs = new T[9 * n];
-        for (unsigned int i = 0; i < n; i++) {
-            T a = mats[i * 9 + 0];
-            T b = mats[i * 9 + 1];
-            T d = mats[i * 9 + 2];
-            T c = mats[i * 9 + 4];
-            T e = mats[i * 9 + 5];
-            T f = mats[i * 9 + 8];
-
-            // Now we can safely calculate the eigenvectors
-            T* evec0 = new T[3];
-            T* evec1 = new T[3];
-            T* evec2 = new T[3];
-            T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
-            evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
-            
-            evecs[i * 9 + 0] = evec0[0];
-            evecs[i * 9 + 1] = evec0[1];
-            evecs[i * 9 + 2] = evec0[2];        // first eigenvector
-            evecs[i * 9 + 3] = evec1[0];
-            evecs[i * 9 + 4] = evec1[1];
-            evecs[i * 9 + 5] = evec1[2];        // second eigenvector
-            evecs[i * 9 + 6] = evec2[0];
-            evecs[i * 9 + 7] = evec2[1];
-            evecs[i * 9 + 8] = evec2[2];        // third eigenvector
-        }
-        return evecs;
-    }
-
+    /**
+     * Calculate the eigenvectors of an array of 3x3 matrices. The eigenvectors are returned in spherical coordinates (theta, phi)
+     * where theta (0 < theta < 2pi) is the azimuthal angle and phi (0 < phi < pi) is the polar angle.
+     * @tparam T data type for the matrix elements (ex. float)
+     * @param mats pointer to an array of 3x3 matrices (3x3xN elements of type T)
+     * @param lambda pointer to an array of eigenvalues (3xN elements of type T)
+     * @param n number of matrices in the array
+     * @return a new array of eigenvectors (3x2xN elements of type T) in spherical coordinates
+     */
     template<typename T>
     T* evecs3spherical_symmetric(const T* mats, const T* lambda, const size_t n) {
         // | a  b  d |
         // | b  c  e |
         // | d  e  f |
 
-        T* evecs = new T[4 * n];
+        T* evecs = new T[3 * 2 * n];
         for (unsigned int i = 0; i < n; i++) {
             T a = mats[i * 9 + 0];
             T b = mats[i * 9 + 1];
@@ -625,14 +605,14 @@ namespace tira::cpu {
             T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
             evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
 
-            evecs[i * 4 + 0] = std::atan2(evec1[1], evec1[0]);
-            evecs[i * 4 + 1] = std::acos(evec2[2]);
+            evecs[i * 6 + 0] = std::atan2(evec0[1], evec0[0]);
+            evecs[i * 6 + 1] = std::acos(evec0[2]);
 
-            evecs[i * 4 + 2] = std::atan2(evec2[1], evec2[0]);
-            evecs[i * 4 + 3] = std::acos(evec2[2]);
+            evecs[i * 6 + 2] = std::atan2(evec1[1], evec1[0]);
+            evecs[i * 6 + 3] = std::acos(evec1[2]);
 
-            //evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
-            //evecs[i * 6 + 5] = std::acos(evec2[2]);
+            evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
+            evecs[i * 6 + 5] = std::acos(evec2[2]);
         }
 
         return evecs;

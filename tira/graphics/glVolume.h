@@ -15,13 +15,13 @@ namespace tira{
 		void generate_rgb(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1){
 			volume<T>::generate_rgb(X, Y, Z, boxes);
 			GLint external_type = glTexture::type2gl<T>();
-			_texture.AssignImage((unsigned char*)&volume<T>::_data[0], X, Y, Z, GL_RGB, GL_RGB, external_type);
+			_texture.AssignImage((unsigned char*)&volume<T>::m_data[0], X, Y, Z, GL_RGB, GL_RGB, external_type);
 		}
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1){
 			volume<T>::generate_grid(X, Y, Z, boxes);
 			GLint external_type = glTexture::type2gl<T>();
-			_texture.AssignImage((unsigned char*)&volume<T>::_data[0], X, Y, Z, GL_RED, GL_RED, external_type);
+			_texture.AssignImage((unsigned char*)&volume<T>::m_data[0], X, Y, Z, GL_RED, GL_RED, external_type);
 		}
 
 		void setData(void* volData, unsigned int X, unsigned int Y, unsigned int Z, GLint internalFormat, GLenum externalFormat, GLenum externalDataType){
@@ -32,7 +32,7 @@ namespace tira{
 			GLenum internalFormat = glTexture::format2gl(this->C());
 			GLenum externalFormat = glTexture::format2gl(this->C());
 			GLenum externalDataType = glTexture::type2gl<T>();
-			_texture.AssignImage((unsigned char*)this->data(), this->X(), this->Y(), this->Z(), internalFormat, externalFormat, externalDataType);
+			_texture.AssignImage((unsigned char*)this->Data(), this->X(), this->Y(), this->Z(), internalFormat, externalFormat, externalDataType);
 		}
 
 		template<typename D = T>

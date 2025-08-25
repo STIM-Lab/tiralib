@@ -211,12 +211,12 @@ namespace tira{
         /// <param name="filter_type">Filter type used for texture sampling (GL_LINEAR, GL_NEAREST).</param>
         template <typename T>
         void SetTexture(const std::string name, tira::image<T> teximage, const GLenum internalFormat = GL_RGB, const GLenum filter_type = GL_LINEAR) {
-            SetTexture<T>(name, teximage.data(), teximage.width(), teximage.height(), 0, teximage.channels(), internalFormat, filter_type);
+            SetTexture<T>(name, teximage.Data(), teximage.width(), teximage.height(), 0, teximage.channels(), internalFormat, filter_type);
         }
 
         template <typename T>
         void SetTexture(const std::string name, tira::volume<T> texvolume, const GLenum internalFormat = GL_RGB, const GLenum filter_type = GL_LINEAR) {
-            SetTexture<T>(name, texvolume.data(), texvolume.X(), texvolume.Y(), texvolume.Z(), texvolume.C(), internalFormat, filter_type);
+            SetTexture<T>(name, texvolume.Data(), texvolume.X(), texvolume.Y(), texvolume.Z(), texvolume.C(), internalFormat, filter_type);
         }
 
         void SetTexture(const std::string name, const glTexture tex) {
