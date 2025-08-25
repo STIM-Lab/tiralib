@@ -345,7 +345,7 @@ namespace tira {
 			}
 
 			image<T> texture_image(m_Width, m_Height, channels);
-			glGetTexImage(GL_TEXTURE_2D, 0, transfer_format, transfer_type, texture_image.data());
+			glGetTexImage(GL_TEXTURE_2D, 0, transfer_format, transfer_type, texture_image.Data());
 			return texture_image;
 		}
 	};
