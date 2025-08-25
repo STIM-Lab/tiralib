@@ -6,50 +6,50 @@
 #include <chrono>
 #include <glm/glm.hpp>
 
-__global__ static void cuda_stickvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, float norm,
-    int w, int s0, int s1) {
+namespace tira::tensorvote {
+    __global__ static void global_stickvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, float norm,
+        int w, int s0, int s1) {
 
-    int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
-    int x1 = blockDim.y * blockIdx.y + threadIdx.y;
-    if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
-        return;
+        int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
+        int x1 = blockDim.y * blockIdx.y + threadIdx.y;
+        if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
+            return;
 
-    glm::mat2 Receiver = stickvote2(L, V, sigma, power, norm, w, s0, s1, glm::ivec2(x0, x1));
-    VT[x0 * s1 + x1] += Receiver;
-}
+        glm::mat2 Receiver = stickvote2(L, V, sigma, power, norm, w, s0, s1, glm::ivec2(x0, x1));
+        VT[x0 * s1 + x1] += Receiver;
+    }
 
-__global__ static void cuda_platevote2(glm::mat2* VT, glm::vec2* L, glm::vec2 sigma, unsigned int power,
-    int w, int s0, int s1, unsigned samples) {
+    __global__ static void global_platevote2(glm::mat2* VT, glm::vec2* L, glm::vec2 sigma, unsigned int power,
+        int w, int s0, int s1, unsigned samples) {
 
-    int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
-    int x1 = blockDim.y * blockIdx.y + threadIdx.y;
-    if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
-        return;
+        int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
+        int x1 = blockDim.y * blockIdx.y + threadIdx.y;
+        if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
+            return;
 
-    glm::mat2 Receiver = platevote2(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
-    VT[x0 * s1 + x1] += Receiver;
-}
+        glm::mat2 Receiver = platevote2(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
+        VT[x0 * s1 + x1] += Receiver;
+    }
 
-__global__ static void cuda_stickvote3(glm::mat3* VT, glm::vec3* L, glm::mat2* V, glm::vec2 sigma,
-    unsigned int power, float norm, int w, int s0, int s1, int s2) {
-    
-    int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                     // get the x, y, and z volume coordinates for the current thread
-    int x1 = blockDim.y * blockIdx.y + threadIdx.y;
-    int x2 = blockDim.z * blockIdx.z + threadIdx.z;
-    if (x0 >= s0 || x1 >= s1 || x2 >= s2)                                               // if not within bounds of image, return
-        return;
+    __global__ static void global_stickvote3(glm::mat3* VT, glm::vec3* L, glm::mat2* V, glm::vec2 sigma,
+        unsigned int power, float norm, int w, int s0, int s1, int s2) {
 
-	glm::mat3 Receiver = stickvote3(L, V, sigma, power, norm, w, s0, s1, s2, glm::ivec3(x0, x1, x2));
-    VT[x0 * s1 * s2 + x1 * s2 + x2] += Receiver;
-}
+        int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                     // get the x, y, and z volume coordinates for the current thread
+        int x1 = blockDim.y * blockIdx.y + threadIdx.y;
+        int x2 = blockDim.z * blockIdx.z + threadIdx.z;
+        if (x0 >= s0 || x1 >= s1 || x2 >= s2)                                               // if not within bounds of image, return
+            return;
 
-__global__ static void cuda_platevote3(glm::mat3* VT, glm::vec3* L, glm::vec2 sigma, unsigned int power,
-    int w, int s0, int s1, int s2, unsigned samples) {
-	return; // Not implemented yet
-}
-namespace tira::cuda {
+	    glm::mat3 Receiver = stickvote3(L, V, sigma, power, norm, w, s0, s1, s2, glm::ivec3(x0, x1, x2));
+        VT[x0 * s1 * s2 + x1 * s2 + x2] += Receiver;
+    }
 
-    static void tensorvote2(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
+    __global__ static void global_platevote3(glm::mat3* VT, glm::vec3* L, glm::vec2 sigma, unsigned int power,
+        int w, int s0, int s1, int s2, unsigned samples) {
+	    return; // Not implemented yet
+    }
+
+    static void tensorvote2_cuda(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
         unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -103,9 +103,9 @@ namespace tira::cuda {
 
         start = std::chrono::high_resolution_clock::now();
         if(STICK)
-            cuda_stickvote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, glm::vec2(sigma, sigma2), power, sn, w, s0, s1);
+            global_stickvote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, glm::vec2(sigma, sigma2), power, sn, w, s0, s1);
         if (PLATE)
-            cuda_platevote2 <<< blocks, threads >>>((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, glm::vec2(sigma, sigma2), power, w, s0, s1, samples);
+            global_platevote2 <<< blocks, threads >>>((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, glm::vec2(sigma, sigma2), power, w, s0, s1, samples);
         cudaDeviceSynchronize();
         end = std::chrono::high_resolution_clock::now();
         float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -139,7 +139,7 @@ namespace tira::cuda {
     }
 
 
-    static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float sigma, 
+    /*static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float sigma,
         float sigma2, unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
         auto start = std::chrono::high_resolution_clock::now();
         cudaDeviceProp props;
@@ -223,6 +223,5 @@ namespace tira::cuda {
             std::cout << "cudaFree: " << t_devicefree << " ms" << std::endl;
             std::cout << "cudaDeviceProps: " << t_deviceprops << " ms" << std::endl;
         }
-    }
-
+    }*/
 }

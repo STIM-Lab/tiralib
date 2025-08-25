@@ -137,7 +137,7 @@ namespace tira::cmap {
 			if (input_scalar[i] > max_val) max_val = input_scalar[i];
 		}
 
-		colormap(input_scalar, output_colors, num_values, min_val, max_val);
+		colormap(input_scalar, output_colors, num_values, min_val, max_val, cmap);
 	}
 
 }

@@ -407,9 +407,20 @@ namespace tira {
 		}
 
 		/// Destructor
-		~volume() {
+		~volume() { }
 
+		/**
+		 * @brief Assignment operator fills the current field with the data from another field
+		 * @param other is the right-hand-side operator in the assignment and the field containing the data to be copied
+		 * @return a reference to the current field after the data has been copied from other
+		 */
+		volume& operator=(const volume& other) {
+			field<T>::operator=(other);
+			_spacing = other._spacing;
+			return *this;
 		}
+
+
 
 		// access methods for the volume size and number of channels
 		inline size_t Z() const { return field<T>::m_shape[0]; }
@@ -516,10 +527,6 @@ namespace tira {
 
 			size_t idx_z, idx_y, idx;
 			float x, y, z;
-			unsigned char r;
-			unsigned char g;
-			unsigned char b;
-			bool x_box, y_box, z_box;
 			for (size_t zi = 0; zi < Z; zi++) {
 				idx_z = zi * X * Y * 3;
 				z = zi * pixel_size[2];

@@ -174,8 +174,8 @@ namespace tira {
 			 */
 			explicit iterator(field* f) {
 				m_field = f;
-				m_ptr = m_field->data();
-				m_coord = std::vector<size_t>(m_field->shape().size(), 0);
+				m_ptr = m_field->Data();
+				m_coord = std::vector<size_t>(m_field->Shape().size(), 0);
 			}
 
 			/**
@@ -222,7 +222,7 @@ namespace tira {
 
 				++m_ptr;
 
-				const int D = m_field->ndims();
+				const int D = m_field->Ndims();
 				++m_coord[D - 1];
 
 				//if the position overflows, update
@@ -292,7 +292,7 @@ namespace tira {
 			 * index value that can be used to directly access the element in the private field std::vector.
 			 * @return a one-dimensional index into the field vector
 			 */
-			size_t idx() { return m_ptr - m_field->data(); }
+			size_t idx() { return m_ptr - m_field->Data(); }
 
 
 		private:
@@ -362,6 +362,17 @@ namespace tira {
 		field(const field<T>& other) {
 			m_shape = other.m_shape;
 			m_data = other.m_data;
+		}
+
+		/**
+		 * @brief Assignment operator fills the current field with the data from another field
+		 * @param other is the right-hand-side operator in the assignment and the field containing the data to be copied
+		 * @return a reference to the current field after the data has been copied from other
+		 */
+		field& operator=(const field& other) {
+			m_data = other.m_data;
+			m_shape = other.m_shape;
+			return *this;
 		}
 
 		/**
@@ -943,7 +954,7 @@ namespace tira {
 			try {
 				npy::SaveArrayAsNumpy(filename, fortran_order, cast_dest_shape.size(), (const unsigned long*)&cast_dest_shape[0], (D*)(&m_data[0]));
 			}
-			catch (std::out_of_range) {
+			catch (std::out_of_range&) {
 				throw std::runtime_error("field ERROR: data type not recognized by external code npy.hpp");
 			}
 		}

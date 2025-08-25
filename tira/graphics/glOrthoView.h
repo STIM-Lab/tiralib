@@ -140,6 +140,7 @@ namespace tira {
         }
         glm::vec3 slice_positions_normalized(glm::vec3 n) {
             _normalized_slices = n / dimensions();
+            return _normalized_slices;
         }
 
         /**
