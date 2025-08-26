@@ -14,7 +14,16 @@ static void cuHandleError( const cudaError_t err, const char *file,  const int l
 
    	}
 }
+
+static void cuThrowException( const cudaError_t err, const char *file,  const int line ) {
+	if (err != cudaSuccess) {
+		printf("%s in %s at line %d\n", cudaGetErrorString( err ),  file, line );
+		throw std::runtime_error("CUDA API ERROR");
+
+	}
+}
 #define HANDLE_ERROR( err ) (cuHandleError( err, __FILE__, __LINE__ ))
+#define CUDA_THROW( err ) (cuThrowException( err, __FILE__, __LINE__ ))
 static void cufftHandleError( const cufftResult err, const char* file, const int line )
 {
     if (err != CUFFT_SUCCESS)
