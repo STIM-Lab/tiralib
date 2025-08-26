@@ -31,7 +31,7 @@ namespace tira::tensorvote {
         VT[x0 * s1 + x1] += Receiver;
     }
 
-    __global__ static void global_stickvote3(glm::mat3* VT, glm::vec3* L, glm::mat2* V, glm::vec2 sigma,
+    __global__ static void global_stickvote3(glm::mat3* VT, const glm::vec3* L, const glm::vec2* V, glm::vec2 sigma,
         unsigned int power, float norm, int w, int s0, int s1, int s2) {
 
         int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                     // get the x, y, and z volume coordinates for the current thread
@@ -102,10 +102,10 @@ namespace tira::tensorvote {
             std::cout << "Stick Area: " << sn << std::endl;
 
         start = std::chrono::high_resolution_clock::now();
-        if(STICK)
+        if (STICK)
             global_stickvote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, glm::vec2(sigma, sigma2), power, sn, w, s0, s1);
         if (PLATE)
-            global_platevote2 <<< blocks, threads >>>((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, glm::vec2(sigma, sigma2), power, w, s0, s1, samples);
+            global_platevote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, glm::vec2(sigma, sigma2), power, w, s0, s1, samples);
         cudaDeviceSynchronize();
         end = std::chrono::high_resolution_clock::now();
         float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();

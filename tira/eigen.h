@@ -599,9 +599,7 @@ namespace tira::cpu {
             T f = mats[i * 9 + 8];
 
 			// Now we can safely calculate the eigenvectors
-            T* evec0 = new T[3];
-            T* evec1 = new T[3];
-            T* evec2 = new T[3];
+			T evec0[3], evec1[3], evec2[3];
             T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
             evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
 
@@ -614,7 +612,6 @@ namespace tira::cpu {
             evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
             evecs[i * 6 + 5] = std::acos(evec2[2]);
         }
-
         return evecs;
     }
 }
