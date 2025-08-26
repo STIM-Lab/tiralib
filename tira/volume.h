@@ -1673,7 +1673,7 @@ namespace tira {
 		/// <param name="filename"></param>
 		template<typename D = T>
 		void load_npy(std::string filename) {
-			field<T>::template load_npy<D>(filename);										// load the numpy file using the tira::field class
+			field<T>::template LoadNpy<D>(filename);										// load the numpy file using the tira::field class
 			if (field<T>::m_shape.size() == 3)										// if the numpy array is only 2D, add a color channel of size 1
 				field<T>::m_shape.push_back(1);
 		}
