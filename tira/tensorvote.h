@@ -252,7 +252,7 @@ namespace tira::tensorvote {
     /// <param name="s1">size of the L and V images along the second dimension</param>
     /// <param name="x">position of the receiver</param>
     /// <returns></returns>
-    CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3* L, const glm::mat2* V, const glm::vec2 sigma, const unsigned power, const float norm,
+    CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3* L, const glm::vec2* V, const glm::vec2 sigma, const unsigned power, const float norm,
         const int w, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
 
         const int x0 = x[0];
@@ -262,30 +262,34 @@ namespace tira::tensorvote {
         glm::mat3 Votee(0.0f);
 
         const int hw = w / 2;
-        for (int w = -hw; w < hw; w++) {                         // for each pixel in the window
-            const int r0 = static_cast<int>(x0) + w;
-            if (r0 >= 0 && r0 < s0) {
-                for (int v = -hw; v < hw; v++) {
-                    const int r1 = static_cast<int>(x1) + v;
-                    if (r1 >= 0 && r1 < s1) {
-                        for (int u = -hw; u < hw; u++) {
-                            const int r2 = static_cast<int>(x2) + u;
-                            if (r2 >= 0 && r2 < s2) {
-                                // calculate the contribution of (u,v,w) to (x,y,z)
-                                unsigned base = r0 * s1 * s2 + r1 * s2 + r2;
-                                glm::vec2 Vpolar = V[base][1];
-                                const float theta = Vpolar.x;
-                                const float phi = Vpolar.y;
-                                const glm::vec3 uvw(u, v, w);
-                                glm::mat3 vote = stickvote3(uvw, sigma, theta, phi, power);
-                                //const float l0 = L[base][0];
-                                const float l1 = L[base][1];
-                                const float l2 = L[base][2];
-                                float scale = std::copysign(std::abs(l2) - std::abs(l1), l2);
-                                Votee = Votee + scale * vote * norm;
-                            }
-                        }
-                    }
+        for (int dw = -hw; dw <= hw; dw++) {                         // For each pixel in the window
+            const int r0 = x0 + dw;
+            if (r0 < 0 || r0 >= (int)s0) continue;
+
+            for (int dv = -hw; dv <= hw; dv++) {
+                const int r1 = x1 + dv;
+                if (r1 < 0 || r1 >= (int)s1) continue;
+
+                for (int du = -hw; du <= hw; du++) {
+                    const int r2 = x2 + du;
+                    if (r2 < 0 || r2 >= (int)s2) continue;
+
+					// Flat index of the voter
+                    const unsigned base = (unsigned)r0 * s1 * s2 + (unsigned)r1 * s2 + (unsigned)r2;
+
+					// Largest eigenvector in polar coordinates
+                    glm::vec2 Vpolar = V[base];
+                    const float theta = Vpolar.x;
+                    const float phi = Vpolar.y;
+
+                    // Calculate the contribution of (du,dv,dw) to (x,y,z)
+                    const glm::vec3 uvw((float)du, (float)dv, (float)dw);
+                    glm::mat3 vote = stickvote3(uvw, sigma, theta, phi, power);
+
+                    const float l1 = L[base][1];
+                    const float l2 = L[base][2];
+                    float scale = std::copysign(std::abs(l2) - std::abs(l1), l2);
+                    Votee += scale * vote * norm;
                 }
             }
         }
@@ -435,7 +439,7 @@ namespace tira::tensorvote {
         }
     }
 
-    static void tensorvote3_cpu(glm::mat3* VT, glm::vec3* L, glm::mat2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
+    static void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
         const unsigned s0, const unsigned s1, const unsigned s2, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
         const float sticknorm = 1.0;    // not yet implemented
         for (int x0 = 0; x0 < s0; x0++) {
