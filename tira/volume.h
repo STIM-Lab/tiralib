@@ -175,7 +175,7 @@ namespace tira {
 			// at this point, the distance image has the correct distances in cells surround the boundary
 			
 
-            _fast_sweep_3d(dist);
+			FastSweep(dist);
 
 
 			return dist;
@@ -885,7 +885,7 @@ namespace tira {
 					}
 				}
 			}
-			_fast_sweep_3d(sdf);
+			FastSweep(sdf);
 
 			tira::volume<float> sign_phi = phi.sign();
 			sdf = sdf * sign_phi;
