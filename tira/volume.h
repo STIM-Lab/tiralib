@@ -322,10 +322,6 @@ namespace tira {
 		 */
 		double sz() const { return Z() * _spacing[2]; }
 
-		double px(size_t xi) { return xi * dx(); }
-		double py(size_t yi) { return yi * dy(); }
-		double pz(size_t zi) { return zi * dz(); }
-
 		/**
 		 * @brief Calculate a 1D index into the data array given a set of spatial coordinates and a color
 		 * @param x is the x index into the volume
@@ -339,7 +335,11 @@ namespace tira {
 			return i;		// z * C * X * Y + y * C * X + x * C + c
 		}
 
-		void _fast_sweep_3d(tira::volume<float>& dist) {
+		/**
+		 * @brief Run the fast sweeping algorithm to expand a distance field through an entire volume
+		 * @param dist is the initial distance field (usually specified near the surface boundaries)
+		 */
+		void FastSweep(volume<float>& dist) {
 
 			// Get volume dimensions
 			int x = X();  // Number of voxels in x-direction
