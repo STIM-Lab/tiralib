@@ -9,9 +9,11 @@
 
 
 namespace tira {
-	/// This static class provides the STIM interface for loading, saving, and storing 2D images.
-	/// Data is stored in an interleaved (BIP) format (default for saving and loading is RGB).
-
+	/**
+	 * @brief This class extends tira::field in the case where the field is 3D. This provides several convenient simplifications
+	 * and addresses the fact that 3D volumes are usually indexed in (x, y, z) order.
+	 * @tparam T
+	 */
 	template <class T>
 	class volume : public field<T> {		// the image class extends field
 
@@ -19,15 +21,15 @@ namespace tira {
 
 		std::vector<double> _spacing;
 
-	
-		/// <summary>
-		/// Allocate space for an empty volume
-		/// </summary>
-		/// <param name="x">X size (fastest axis)</param>
-		/// <param name="y">Y size (slower axis)</param>
-		/// <param name="z">Z size (slowest axis)</param>
-		/// <param name="c">Number of color channels</param>
-		void init(size_t x, size_t y, size_t z, size_t c = 1) {
+
+		/**
+		 * @brief Private initialization function sets the shape of the volume and allocates memory to store the data points
+		 * @param x is the size of the volume along the fastest dimension
+		 * @param y is the size of the volume along the middle dimension
+		 * @param z is the size of the volume along the slowest dimension
+		 * @param c is the number of color channels, which is stored interleaved (colors are a really fast dimension)
+		 */
+		void m_Init(size_t x, size_t y, size_t z, size_t c = 1) {
 			field<T>::m_shape.push_back(z);
 			field<T>::m_shape.push_back(y);
 			field<T>::m_shape.push_back(x);
@@ -38,27 +40,6 @@ namespace tira {
 		}
 
 		/// <summary>
-		/// Calculate the 1D array coordinate given spatial and color coordinates
-		/// </summary>
-		/// <param name="x">X axis position (fastest axis)</param>
-		/// <param name="y">Y axis position (slower axis)</param>
-		/// <param name="z">Z axis position (slowest axis)</param>
-		/// <param name="c">Color channel</param>
-		/// <returns></returns>
-		inline size_t idx_offset(size_t x, size_t y, size_t z, size_t c = 0) const {
-			size_t i = z * C() * X() * Y() + y * C() * X() + x * C() + c;
-			return i;		// z * C * X * Y + y * C * X + x * C + c
-		}
-
-		/// <summary>
-		/// Binary XOR function
-		/// </summary>
-		/// <typeparam name="T"></typeparam>
-		//bool XOR(bool a, bool b) {
-		//	return (((a) && (!(b))) || (((!a)) && (b)));
-		//}
-
-		/// <summary>
 		/// Evaluates the grid status of a given coordinate (used to generate grids)
 		/// </summary>
 		/// <param name="x"></param>
@@ -66,7 +47,7 @@ namespace tira {
 		/// <param name="z"></param>
 		/// <param name="boxes"></param>
 		/// <returns></returns>
-		bool grid(float x, float y, float z, unsigned int boxes) {
+		bool m_Grid(float x, float y, float z, unsigned int boxes) {
 			bool x_box, y_box, z_box;
 			float box_size = 1.0f / (float)boxes;
 			if ((unsigned int)(z / box_size) % 2)
@@ -87,12 +68,20 @@ namespace tira {
 			return (x_box ^ y_box) ^ z_box;
 		}
 
-		T& at(size_t x, size_t y, size_t z, size_t c = 0) {
-			size_t i = idx_offset(x, y, z, c);
+		/**
+		 * @brief Retrieve a copy of the value at (x, y, z, c)
+		 * @param x is the index of the value in the x dimension
+		 * @param y is the index of the value in the y dimension
+		 * @param z is the index of the value in the z dimension
+		 * @param c is the index of the color value
+		 * @return a copy of the value at the specified index coordinates
+		 */
+		T m_Get(size_t x, size_t y, size_t z, size_t c = 0) {
+			size_t i = Idx(x, y, z, c);
 			return field<T>::m_data[i];
 		}
 
-		tira::volume<float> _dist(tira::volume<int>& binary_boundary) {
+		volume<float> _dist(volume<int>& binary_boundary) {
 
 			// create registers to hold the size
 			int w = X();
@@ -122,7 +111,7 @@ namespace tira {
 							int ny = y + get<1>(neighbors[k]);				// calculate the y coordinate of the neighbor cell
 							int nz = z + get<2>(neighbors[k]);				// calculate the z coordinate of the neighbor cell
 
-							if (at(x, y, z) * at(nx, ny, nz) <= 0) {				// if the product of the current cell and neighboring cell is negative (it is a boundary cell)
+							if (m_Get(x, y, z) * m_Get(nx, ny, nz) <= 0) {				// if the product of the current cell and neighboring cell is negative (it is a boundary cell)
 								binary_boundary(x, y, z) = 1;					// this cell is a boundary cell
 								binary_boundary(nx, ny, nz) = 1;				// the neighboring cell is ALSO a boundary cell
 							}
@@ -132,7 +121,7 @@ namespace tira {
 			}
 
 
-			tira::volume<float> dist(w, h, l);										// create an image to store the distance field
+			volume<float> dist(w, h, l);										// create an image to store the distance field
 			const float bignum = 9999.0f;
 			dist = bignum;																// initialize the distance field to a very large value
 			/*for (int y = 0; y < h; y++) {
@@ -161,8 +150,8 @@ namespace tira {
 								int ny = y + get<1>(neighbors[k]);								// calculate the y coordinate of the neighbor cell
 								int nz = z + get<2>(neighbors[k]);								// calculate the z coordinate of the neighbor cell
 								if (binary_boundary(nx, ny, nz)) {							// if the neighboring cell (nx, ny) is ALSO in the boundary
-									float p_dist = abs(at(x, y, z));
-									float n_dist = abs(at(nx, ny, nz));
+									float p_dist = abs(m_Get(x, y, z));
+									float n_dist = abs(m_Get(nx, ny, nz));
 
 									float da, db;
 									if (p_dist == n_dist) {											// handle division by zero
@@ -170,8 +159,8 @@ namespace tira {
 										db = bignum;
 									}
 									else {
-										da = (abs(at(x, y, z))) / (abs(at(nx, ny, nz) - at(x, y, z)));
-										db = (abs(at(nx, ny, nz))) / (abs(at(nx, ny, nz) - at(x, y, z)));
+										da = (abs(m_Get(x, y, z))) / (abs(m_Get(nx, ny, nz) - m_Get(x, y, z)));
+										db = (abs(m_Get(nx, ny, nz))) / (abs(m_Get(nx, ny, nz) - m_Get(x, y, z)));
 									}
 									dist(x, y, z) = std::min(dist(x, y, z), da);									// minimum between distance and large boundary value of pixel (x,y)
 									dist(nx, ny, nz) = std::min(dist(nx, ny, nz), db);					// minimum between distance and large boundary value of neighbor (nx, ny)
@@ -193,6 +182,116 @@ namespace tira {
 		}
 
 	public:
+		/**
+		 * @brief Default constructor creates a volume with isotropic spacing between voxels
+		 */
+		volume() : field<T>() {
+			_spacing = { 1.0f, 1.0f, 1.0f };
+		}			//initialize all variables, don't allocate any memory
+
+		/**
+		 * @brief Constructor builds a volume with the specified size, number of color channels, and spacing between voxels.
+		 * @param nx is the number of pixels along the x dimension (fastest)
+		 * @param ny is the number of pixels along the y dimension
+		 * @param nz is the number of pixels along the z dimension
+		 * @param nc is the number of color channels
+		 * @param spacing is the spacing between voxels (default is 1.0 along all dimensions)
+		 */
+		volume(size_t nx, size_t ny, size_t nz, size_t nc = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume() {
+			m_Init(nx, ny, nz, nc);
+			_spacing = spacing;
+		}
+
+		/**
+		 * @brief Constructor creates a volume from a provided array
+		 * @param data is a pointer to the data that will be copied into the volume
+		 * @param nx is the number of voxels along the x-dimension (fastest)
+		 * @param ny is the number of voxels along the y-dimension
+		 * @param nz is the number of voxels along the z-dimension (slowest)
+		 * @param nc is the number of interleaved color channels
+		 * @param spacing is the spatial distance between samples (default is 1.0 along all dimensions)
+		 */
+		volume(T* data, size_t nx, size_t ny, size_t nz, size_t nc = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume(nx, ny, nz, nc) {
+			memcpy(&field<T>::m_data[0], data, field<T>::Bytes());									// use memcpy to copy the raw data into the field array
+			_spacing = spacing;
+		}
+
+		/**
+		 * @brief Generate a new volume from a tira::field shape. I don't really like this function because it doesn't obfuscate the main
+		 * difference between a tira::volume and a tira::field, which is the order of dimensions. However it's a good way to create a volume
+		 * that is the same size as a field.
+		 * @param shape is a vector specifying the shape of the volume from slowest-to-fastest order: {z, y, x, c}
+		 * @param spacing is the spacing between each voxel in (x, y, z) order (which is why I don't like this constructor)
+		 */
+		volume(std::vector<size_t> shape, std::vector<double> spacing = {1.0, 1.0, 1.0}) : field<T>(shape) {
+			_spacing = spacing;
+		}
+
+		/**
+		 * @brief Copy constructor that creates a volume from a given volume
+		 * @param V is the volume to copy
+		 */
+		volume(const volume& V) : volume(V.X(), V.Y(), V.Z(), V.C()) {
+			memcpy(&field<T>::m_data[0], &V.m_data[0], field<T>::Bytes());
+			_spacing = V._spacing;
+		}
+
+
+		/**
+		 * @brief Creates a new volume from a stack of images
+		 * @param filemask is a mask used to glob a list of files to construct the volume
+		 */
+		volume(std::string filemask) {
+			load(filemask);
+			_spacing = { 1.0f, 1.0f, 1.0f };
+		}
+
+		/**
+		 * @brief Is the default constructor (all of the member variables are smart so this can be simple)
+		 */
+		~volume() { }
+
+		/**
+		 * @brief Assignment operator fills the current field with the data from another field
+		 * @param other is the right-hand-side operator in the assignment and the field containing the data to be copied
+		 * @return a reference to the current field after the data has been copied from other
+		 */
+		volume& operator=(const volume& other) {
+			field<T>::operator=(other);
+			_spacing = other._spacing;
+			return *this;
+		}
+
+		// access methods for the volume size and number of channels
+		size_t Z() const { return field<T>::m_shape[0]; }
+		size_t Y() const { return field<T>::m_shape[1]; }
+		size_t X() const { return field<T>::m_shape[2]; }
+		size_t C() const { return field<T>::m_shape[3]; }
+
+		double dx() const { return _spacing[0]; }
+		double dy() const { return _spacing[1]; }
+		double dz() const { return _spacing[2]; }
+
+		double sx() const { return X() * _spacing[0]; }
+		double sy() const { return Y() * _spacing[1]; }
+		double sz() const { return Z() * _spacing[2]; }
+
+		double px(size_t xi) { return xi * dx(); }
+		double py(size_t yi) { return yi * dy(); }
+		double pz(size_t zi) { return zi * dz(); }
+
+		/**
+		 * @brief Calculate a 1D index into the data array given a set of spatial coordinates and a color
+		 * @param x is the x index into the volume
+		 * @param y is the y index into the volume
+		 * @param z is the z index into the volume
+		 * @param c is the color channel
+		 * @return a one-dimensional index providing the location of the specified value in m_data
+		 */
+		size_t Idx(size_t x, size_t y, size_t z, size_t c = 0) const {
+			size_t i = z * C() * X() * Y() + y * C() * X() + x * C() + c;
+			return i;		// z * C * X * Y + y * C * X + x * C + c
+		}
 
 		void _fast_sweep_3d(tira::volume<float>& dist) {
 
@@ -350,96 +449,6 @@ namespace tira {
 
 		}
 
-
-		/// <summary>
-		/// Default constructor initializes an empty volume (0x0x0 with 0 channels)
-		/// </summary>
-		volume() : field<T>() {
-			_spacing = { 1.0f, 1.0f, 1.0f };
-		}			//initialize all variables, don't allocate any memory
-
-		/// <summary>
-		/// Create a new volume from scratch given a number of samples and channels
-		/// </summary>
-		/// <param name="x">size of the image along the X (fast) axis</param>
-		/// <param name="y">size of the image along the Y (slow) axis</param>
-		/// <param name="z">size of the image along the Z (slowest) axis</param>
-		/// <param name="c">number of channels</param>
-		volume(size_t x, size_t y, size_t z, size_t c = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume() {
-			init(x, y, z, c);
-			_spacing = spacing;
-		}
-
-		/// <summary>
-		/// Create a new volume with the data given in a pointer 'data'
-		/// </summary>
-		/// <param name="data">pointer to the raw image data</param>
-		/// <param name="x">size of the image along the X (fast) axis</param>
-		/// <param name="y">size of the image along the Y (slow) axis</param>
-		/// <param name="z">size of the image along the Z (slowest) axis</param>
-		/// <param name="c">number of channels (channels are interleaved)</param>
-		volume(T* data, size_t x, size_t y, size_t z, size_t c = 1, std::vector<double> spacing = {1.0, 1.0, 1.0}) : volume(x, y, z, c) {
-			memcpy(&field<T>::m_data[0], data, field<T>::Bytes());									// use memcpy to copy the raw data into the field array
-			_spacing = spacing;
-		}
-
-		volume(std::vector<size_t> shape, std::vector<double> spacing = {1.0, 1.0, 1.0}) : field<T>(shape) {
-			//_spacing = { 1.0f, 1.0f, 1.0f };
-			_spacing = spacing;
-		}
-
-		/// <summary>
-		/// Copy constructor - duplicates a volume object
-		/// </summary>
-		/// <param name="I">image object to be copied</param>
-		volume(const volume<T>& V) : volume(V.X(), V.Y(), V.Z(), V.C()) {
-			memcpy(&field<T>::m_data[0], &V.m_data[0], field<T>::Bytes());
-			_spacing = V._spacing;
-		}
-
-		/// <summary>
-		/// Creates a new image from a stack of image files
-		/// </summary>
-		/// <param name="filename">Name of the file to load (uses CImg)</param>
-		volume(std::string filename) {
-			load(filename);
-			_spacing = { 1.0f, 1.0f, 1.0f };
-		}
-
-		/// Destructor
-		~volume() { }
-
-		/**
-		 * @brief Assignment operator fills the current field with the data from another field
-		 * @param other is the right-hand-side operator in the assignment and the field containing the data to be copied
-		 * @return a reference to the current field after the data has been copied from other
-		 */
-		volume& operator=(const volume& other) {
-			field<T>::operator=(other);
-			_spacing = other._spacing;
-			return *this;
-		}
-
-
-
-		// access methods for the volume size and number of channels
-		inline size_t Z() const { return field<T>::m_shape[0]; }
-		inline size_t Y() const { return field<T>::m_shape[1]; }
-		inline size_t X() const { return field<T>::m_shape[2]; }
-		inline size_t C() const { return field<T>::m_shape[3]; }
-
-		inline double dx() const { return _spacing[0]; }
-		inline double dy() const { return _spacing[1]; }
-		inline double dz() const { return _spacing[2]; }
-
-		inline double sx() const { return X() * _spacing[0]; }
-		inline double sy() const { return Y() * _spacing[1]; }
-		inline double sz() const { return Z() * _spacing[2]; }
-
-		inline double px(size_t xi) { return xi * dx(); }
-		inline double py(size_t yi) { return yi * dy(); }
-		inline double pz(size_t zi) { return zi * dz(); }
-
 		inline double smax() const { return std::max(sx(), std::max(sy(), sz())); }
 
 		/// <summary>
@@ -488,7 +497,7 @@ namespace tira {
 		}
 
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
-			init(X, Y, Z, 1);
+			m_Init(X, Y, Z, 1);
 
 			float pixel_size[] = { 1.0f / X, 1.0f / Y, 1.0f / Z };
 
@@ -508,7 +517,7 @@ namespace tira {
 						idx = idx_y + xi;
 						x = xi * pixel_size[0];
 
-						if (grid(x, y, z, boxes)) {
+						if (m_Grid(x, y, z, boxes)) {
 							field<T>::m_data[idx] = sqrt(x * x + y * y + z * z) / sqrt(3) * 255;
 						}
 						else {
@@ -520,7 +529,7 @@ namespace tira {
 		}
 
 		void generate_rgb(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
-			init(X, Y, Z, 3);
+			m_Init(X, Y, Z, 3);
 
 
 			float pixel_size[] = { 1.0f / X, 1.0f / Y, 1.0f / Z };
@@ -539,7 +548,7 @@ namespace tira {
 						idx = idx_y + xi * 3;
 						x = xi * pixel_size[0];
 
-						if (grid(x, y, z, boxes)) {
+						if (m_Grid(x, y, z, boxes)) {
 							field<T>::m_data[idx + 0] = x * 255;
 							field<T>::m_data[idx + 1] = y * 255;
 							field<T>::m_data[idx + 2] = z * 255;
@@ -642,7 +651,7 @@ namespace tira {
 				for (size_t zi = 0; zi < Z(); zi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
 						for (size_t ci = 0; ci < C(); ci++) {
-							result(xi, zi, ci) = at(xi, i, zi, ci);
+							result(xi, zi, ci) = m_Get(xi, i, zi, ci);
 						}
 					}
 				}
@@ -656,7 +665,7 @@ namespace tira {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
 						for (size_t ci = 0; ci < C(); ci++) {
-							result(xi, yi, ci) = at(xi, yi, i, ci);
+							result(xi, yi, ci) = m_Get(xi, yi, i, ci);
 						}
 					}
 				}
@@ -918,17 +927,17 @@ namespace tira {
 						{
 							j_left = 0;
 							j_right = 1;
-							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / dx;
+							output(j, i, k) = (m_Get(j_right, i, k) - m_Get(j_left, i, k)) / dx;
 						}
 						else if (j_right >= X())
 						{
 							j_right = X() - 1;
 							j_left = j_right - 1;
-							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / dx;
+							output(j, i, k) = (m_Get(j_right, i, k) - m_Get(j_left, i, k)) / dx;
 						}
 						else
 						{
-							output(j, i, k) = (at(j_right, i, k) - at(j_left, i, k)) / (2.0 * dx);
+							output(j, i, k) = (m_Get(j_right, i, k) - m_Get(j_left, i, k)) / (2.0 * dx);
 						}
 					}
 				}
@@ -958,17 +967,17 @@ namespace tira {
 						{
 							i_left = 0;
 							i_right = 1;
-							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / dy;
+							output(j, i, k) = (m_Get(j, i_right, k) - m_Get(j, i_left, k)) / dy;
 						}
 						else if (i_right >= Y())
 						{
 							i_right = Y() - 1;
 							i_left = i_right - 1;
-							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / dy;
+							output(j, i, k) = (m_Get(j, i_right, k) - m_Get(j, i_left, k)) / dy;
 						}
 						else
 						{
-							output(j, i, k) = (at(j, i_right, k) - at(j, i_left, k)) / (2.0 * dy);
+							output(j, i, k) = (m_Get(j, i_right, k) - m_Get(j, i_left, k)) / (2.0 * dy);
 						}
 					}
 				}
@@ -998,17 +1007,17 @@ namespace tira {
 						{
 							k_left = 0;
 							k_right = 1;
-							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / dz;
+							output(j, i, k) = (m_Get(j, i, k_right) - m_Get(j, i, k_left)) / dz;
 						}
 						else if (k_right >= Z())
 						{
 							k_right = Z() - 1;
 							k_left = k_right - 1;
-							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / dz;
+							output(j, i, k) = (m_Get(j, i, k_right) - m_Get(j, i, k_left)) / dz;
 						}
 						else
 						{
-							output(j, i, k) = (at(j, i, k_right) - at(j, i, k_left)) / (2.0 * dz);
+							output(j, i, k) = (m_Get(j, i, k_right) - m_Get(j, i, k_left)) / (2.0 * dz);
 						}
 					}
 				}
@@ -1037,7 +1046,7 @@ namespace tira {
 							for (size_t ui = 0; ui < mask.X(); ui++) {
 								for (size_t wi = 0; wi < mask.Z(); wi++) {
 
-									sum += at((xi + ui), (yi + vi), (zi + wi)) * mask(ui, vi, wi);
+									sum += m_Get((xi + ui), (yi + vi), (zi + wi)) * mask(ui, vi, wi);
 									
 								}
 							}
@@ -1068,7 +1077,7 @@ namespace tira {
 					for (size_t zi = 0; zi < result_x.Z(); zi++) {
 						sum = 0;
 						for (size_t ui = 0; ui < k_size; ui++) {
-							sum += at(xi, (yi + ui), zi) * K[ui];
+							sum += m_Get(xi, (yi + ui), zi) * K[ui];
 						}
 						result_x(xi, yi, zi) = sum;
 					}
@@ -1153,7 +1162,7 @@ namespace tira {
 					for (size_t zi = 0; zi < result_x.Z(); zi++) {
 						float sum = 0;
 						for (size_t ui = 0; ui < kernel_size_x; ui++) {
-							sum += at(xi + ui, yi, zi) * kernel_x[ui];
+							sum += m_Get(xi + ui, yi, zi) * kernel_x[ui];
 						}
 						result_x(xi, yi, zi) = sum;
 					}
@@ -1341,14 +1350,14 @@ namespace tira {
 						float wx = xf - x0;
 
 						// Trilinear interpolation
-						float c000 = at(x0, y0, z0);
-						float c100 = at(x1, y0, z0);
-						float c010 = at(x0, y1, z0);
-						float c110 = at(x1, y1, z0);
-						float c001 = at(x0, y0, z1);
-						float c101 = at(x1, y0, z1);
-						float c011 = at(x0, y1, z1);
-						float c111 = at(x1, y1, z1);
+						float c000 = m_Get(x0, y0, z0);
+						float c100 = m_Get(x1, y0, z0);
+						float c010 = m_Get(x0, y1, z0);
+						float c110 = m_Get(x1, y1, z0);
+						float c001 = m_Get(x0, y0, z1);
+						float c101 = m_Get(x1, y0, z1);
+						float c011 = m_Get(x0, y1, z1);
+						float c111 = m_Get(x1, y1, z1);
 
 						float c00 = c000 * (1 - wx) + c100 * wx;
 						float c10 = c010 * (1 - wx) + c110 * wx;
@@ -1438,7 +1447,7 @@ namespace tira {
 									else if (x_idx >= X()) {
 										x_idx = X() - 1;
 									}
-									p[ix] = at(x_idx, y_idx, z_idx); // Retrieve voxel value from original volume
+									p[ix] = m_Get(x_idx, y_idx, z_idx); // Retrieve voxel value from original volume
 								}
 								interpy[iy] = cubicInterpolate(p, dx); // Interpolate along x-axis for fixed y and z
 							}
@@ -1471,7 +1480,7 @@ namespace tira {
 				for (size_t x = 0; x < X(); x++) {
 					for (size_t z = 0; z < Z(); z++) {
 						size_t n = ((z + w) * (X() + w * 2) * (Y() + w * 2)) + ((y + w) * (X() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
-						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
+						size_t n0 = Idx(x, y, z);										//calculate the index for this pixel in the original image
 						result.Data()[n] = field<T>::m_data[n0];									// copy the original image to the result image afer the border area
 					}
 				}
@@ -1516,7 +1525,7 @@ namespace tira {
 				for (size_t x = 0; x < X(); x++) {
 					for (size_t z = 0; z < Z(); z++) {
 						size_t n = ((z + w) * (X() + w * 2) * (Z() + w * 2)) + ((y + w) * (Z() + w * 2)) + (x + w);				//calculate the index of the corresponding pixel in the result image
-						size_t n0 = idx_offset(x, y, z);										//calculate the index for this pixel in the original image
+						size_t n0 = Idx(x, y, z);										//calculate the index for this pixel in the original image
 						result.Data()[n] = field<T>::m_data[n0];									// copy the original image to the result image afer the border area
 					}
 				}
@@ -1610,7 +1619,7 @@ namespace tira {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
 						for (size_t c = 0; c < C(); c++) {
-							size_t volume_index = idx_offset(xi, yi, zi, c);
+							size_t volume_index = Idx(xi, yi, zi, c);
 							field<T>::m_data[volume_index] = img(xi, yi, c);
 						}
 					}
@@ -1690,7 +1699,7 @@ namespace tira {
 		}
 
 		T& operator()(size_t x, size_t y, size_t z, size_t c = 0) {
-			return at(x, y, z, c);
+			return field<T>::m_data[Idx(x, y, z, c)];
 		}
 
 		/// <summary>
@@ -1742,7 +1751,7 @@ namespace tira {
 					for (size_t yi = 0; yi < Y(); yi++) {
 						for (size_t xi = 0; xi < X(); xi++) {
 							for (size_t ci = 0; ci < rhs.C(); ci++) {
-								result(xi, yi, zi, ci) = at(xi, yi, zi) * rhs(xi, yi, zi, ci);
+								result(xi, yi, zi, ci) = m_Get(xi, yi, zi) * rhs(xi, yi, zi, ci);
 							}
 						}
 					}
@@ -1755,7 +1764,7 @@ namespace tira {
 					for (size_t yi = 0; yi < Y(); yi++) {
 						for (size_t xi = 0; xi < X(); xi++) {
 							for (size_t ci = 0; ci < C(); ci++) {
-								result(xi, yi, zi, ci) = at(xi, yi, zi, ci) * rhs(xi, yi, zi);
+								result(xi, yi, zi, ci) = m_Get(xi, yi, zi, ci) * rhs(xi, yi, zi);
 							}
 						}
 					}
@@ -1776,7 +1785,7 @@ namespace tira {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
 						for (size_t ci = 0; ci < C(); ci++) {
-							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) + rhs(xi, yi, zi);
+							result(xi, yi, zi, ci) = m_Get(xi, yi, zi, ci) + rhs(xi, yi, zi);
 						}
 					}
 				}
@@ -1793,7 +1802,7 @@ namespace tira {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
 						for (size_t ci = 0; ci < C(); ci++) {
-							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) - rhs(xi, yi, zi);
+							result(xi, yi, zi, ci) = m_Get(xi, yi, zi, ci) - rhs(xi, yi, zi);
 						}
 					}
 				}
@@ -1810,7 +1819,7 @@ namespace tira {
 				for (size_t yi = 0; yi < Y(); yi++) {
 					for (size_t xi = 0; xi < X(); xi++) {
 						for (size_t ci = 0; ci < C(); ci++) {
-							result(xi, yi, zi, ci) = at(xi, yi, zi, ci) / rhs(xi, yi, zi);
+							result(xi, yi, zi, ci) = m_Get(xi, yi, zi, ci) / rhs(xi, yi, zi);
 						}
 					}
 				}

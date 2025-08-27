@@ -71,14 +71,6 @@ namespace tira {
 			return true;											// if all shape values are identical, the fields are the same shape
 		}
 
-		/*size_t m_IdxOffset(size_t d, size_t i) const {				// base function calculates the index offset for the last dimension (called by recursive version)
-			size_t off = i;
-			for (size_t di = d + 1; di < m_shape.size(); di++) {
-				off *= m_shape[di];
-			}
-			return off;
-		}*/
-
 
 		/**
 		 * @brief Calculate the partial derivative of the field along the specified axis and return a pointer to the resulting data.
