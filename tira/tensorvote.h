@@ -20,6 +20,14 @@ namespace tira::tensorvote {
     }
 
     template <typename T>
+    CUDA_CALLABLE static T FractionalAnisotropy(T l0, T l1, T l2) {
+        T l_average = (l0 + l1 + l2) / 3.0;
+        T numer = (l2 - l_average) * (l2 - l_average) + (l1 - l_average) * (l1 - l_average) + (l0 - l_average) * (l0 - l_average);
+        T denom = l0 * l0 + l1 * l1 + l2 * l2;
+        return std::sqrt(3.0 / 2.0 * (numer / denom));
+    }
+
+    template <typename T>
     CUDA_CALLABLE static T PlateDecay2D(T length, T sigma) {
         T c = TV_PI * exp(-(length * length) / (sigma * sigma)) / 2.0f;
         return c;

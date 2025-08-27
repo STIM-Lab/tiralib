@@ -489,6 +489,25 @@ namespace tira {
             normalize3(evec2);
         }
     }
+
+    template <typename T>
+    CUDA_CALLABLE void evec3spherical_symmetric(T a, T b, T c, T d, T e, T f,
+        const T* evals, T* evec0, T* evec1, T* evec2) {
+
+        T cart_evec0[3];
+        T cart_evec1[3];
+        T cart_evec2[3];
+        evec3_symmetric(a, b, c, d, e, f, evals, cart_evec0, cart_evec1, cart_evec2);
+
+        evec0[0] = std::atan2(cart_evec0[1], cart_evec0[0]);
+        evec0[1] = std::acos(cart_evec0[2]);
+
+        evec1[0] = std::atan2(cart_evec1[1], cart_evec1[0]);
+        evec1[1] = std::acos(cart_evec1[2]);
+
+        evec2[0] = std::atan2(cart_evec2[1], cart_evec2[0]);
+        evec2[1] = std::acos(cart_evec2[2]);
+    }
 }
 
 
