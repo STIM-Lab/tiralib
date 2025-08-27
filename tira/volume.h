@@ -262,18 +262,64 @@ namespace tira {
 			return *this;
 		}
 
-		// access methods for the volume size and number of channels
+		/**
+		 * @brief Get the number of samples along the z-axis (slowest)
+		 * @return the number of samples along the z-axis
+		 */
 		size_t Z() const { return field<T>::m_shape[0]; }
+
+		/**
+		 * @brief Get the number of samples along the y-axis
+		 * @return the number of samples along the y-axis
+		 */
 		size_t Y() const { return field<T>::m_shape[1]; }
+
+		/**
+		 * @brief Get the number of samples along the x-axis (fastest)
+		 * @return the number of samples along the x-axis
+		 */
 		size_t X() const { return field<T>::m_shape[2]; }
+
+		/**
+		 * @brief Get the number of color channels in the volume
+		 * @return the number of color channels
+		 */
 		size_t C() const { return field<T>::m_shape[3]; }
 
+		/**
+		 * @brief Get the spacing between samples along the x-axis
+		 * @return the spacing between samples along the x-axis
+		 */
 		double dx() const { return _spacing[0]; }
+
+		/**
+		 * @brief Get the spacing between samples along the y-axis
+		 * @return the spacing between samples along the y-axis
+		 */
 		double dy() const { return _spacing[1]; }
+
+		/**
+		 * @brief Get the spacing between samples along the z-axis
+		 * @return the spacing between samples along the z-axis
+		 */
 		double dz() const { return _spacing[2]; }
 
+		/**
+		 * @brief Calculates the size of the entire volume along the x-axis based on the number of samples and spacing between them
+		 * @return the size of the volume along the x axis
+		 */
 		double sx() const { return X() * _spacing[0]; }
+
+		/**
+		 * @brief Calculates the size of the entire volume along the y-axis based on the number of samples and spacing between them
+		 * @return the size of the volume along the y axis
+		 */
 		double sy() const { return Y() * _spacing[1]; }
+
+		/**
+		 * @brief Calculates the size of the entire volume along the z-axis based on the number of samples and spacing between them
+		 * @return the size of the volume along the z axis
+		 */
 		double sz() const { return Z() * _spacing[2]; }
 
 		double px(size_t xi) { return xi * dx(); }
