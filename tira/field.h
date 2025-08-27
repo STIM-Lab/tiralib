@@ -947,12 +947,15 @@ namespace tira {
 		template<typename D = T>
 		void SaveNpy(const std::string& filename, std::vector<size_t> dest_shape) {
 			bool fortran_order = false;										// default to standard (C) order
-			std::vector cast_dest_shape(dest_shape.begin(), dest_shape.end());
+
+			// IMPORTANT: this has to be cast to an unsigned long so that it is compatible with npy::SaveArrayAsNumpy in Windows
+			// because the data types are different in Visual Studio vs. other compilers
+			std::vector<unsigned long> cast_dest_shape(dest_shape.begin(), dest_shape.end());
 
 			if (sizeof(D) < sizeof(T))										// if the data type stored is smaller than the grid data type
 				cast_dest_shape.push_back(sizeof(T) / sizeof(D));			// add another dimension to account for this
 			try {
-				npy::SaveArrayAsNumpy(filename, fortran_order, cast_dest_shape.size(), (const unsigned long*)&cast_dest_shape[0], (D*)(&m_data[0]));
+				npy::SaveArrayAsNumpy(filename, fortran_order, cast_dest_shape.size(), &cast_dest_shape[0], (D*)(&m_data[0]));
 			}
 			catch (std::out_of_range&) {
 				throw std::runtime_error("field ERROR: data type not recognized by external code npy.hpp");
