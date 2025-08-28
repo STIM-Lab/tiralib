@@ -717,58 +717,6 @@ namespace tira {
 				}
 				return result;
 			}
-
-
-
-
-
-			/*size_t width, height;
-			size_t min_x = 0;	size_t max_x = X() - 1;		
-			size_t min_y = 0;	size_t max_y = Y() - 1;		
-			size_t min_z = 0;	size_t max_z = Z() - 1;		
-			if (axis == 0) {
-				width = Y();
-				height = Z();
-				min_x = i; max_x = i;
-			}
-			else if (axis == 1) {
-				width = X();
-				height = Z();
-				min_y = i; max_y = i;
-			}
-			else {
-				width = X();
-				height = Y();
-				min_z = i; max_z = i;
-			}
-
-			size_t sx = max_x - min_x;
-			size_t sy = max_y - min_y;
-			size_t sz = max_z - min_z;
-			size_t sc = C();
-
-			tira::image<T> result(width, height, C());				// create an image at the appropriate size with the correct
-																	// number of color channels
-			size_t idx_x, idx_y, idx_z, idx3;
-			size_t idx2 = 0;
-			T value;
-			for (size_t zi = 0; zi <= sz; zi++) {
-				//idx_z = (zi + min_z) * Y() * X() * C();				// z index into the 3D volume
-				for (size_t yi = 0; yi <= sy; yi++) {
-					//idx_y = (yi + min_y) * X() * C();				// y index into the 3D volume
-					for (size_t xi = 0; xi <= sx; xi++) {
-						//idx_x = (xi + min_x) * C();					// x index into the 3D volume
-						for (size_t ci = 0; ci < C(); ci++) {
-							//idx3 = idx_x + idx_y + idx_z + ci;
-							//value = field<T>::_data[idx3];
-							value = at(xi, yi, zi, ci);
-							result.data()[idx2] = value;
-							idx2++;
-						}
-					}
-				}
-			}
-			return result;*/
 		}
 
 		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
@@ -920,8 +868,8 @@ namespace tira {
 							std::vector p_right = {i[2], i[1], i[0]};
 							p_right[2 - axis] += 1;
 
-							T a = field<T>::read(p_this);
-							T b = field<T>::read(p_right);
+							T a = field<T>::Read(p_this);
+							T b = field<T>::Read(p_right);
 
 							output(i[0], i[1], i[2]) = (b - a) / d;
 						}
@@ -931,8 +879,8 @@ namespace tira {
 							std::vector p_left = {i[2], i[1], i[0]};
 							p_left[2 - axis] -= 1;
 
-							T b = field<T>::read(p_this);
-							T a = field<T>::read(p_left);
+							T b = field<T>::Read(p_this);
+							T a = field<T>::Read(p_left);
 							output(i[0], i[1], i[2]) = (b - a) / d;
 						}
 						else {
@@ -942,8 +890,8 @@ namespace tira {
 							std::vector p_right = {i[2], i[1], i[0]};
 							p_right[2 - axis] += 1;
 
-							T a = field<T>::read(p_left);
-							T b = field<T>::read(p_right);
+							T a = field<T>::Read(p_left);
+							T b = field<T>::Read(p_right);
 
 							output(i[0], i[1], i[2]) = (b - a) / (2.0 * d);
 						}
