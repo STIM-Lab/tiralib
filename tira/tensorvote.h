@@ -135,7 +135,7 @@ namespace tira::tensorvote {
     // thus -> p = 1
     CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, glm::vec2 sigma) {
 
-        //float length = sqrt(u * u + v * v);                     // calculate the distance between voter and votee
+        // calculate the distance between voter and votee
         const float length = sqrt(uv[0] * uv[0] + uv[1] * uv[1]);
         const float l2 = length * length;
         const float s12 = sigma[0] * sigma[0];
@@ -224,7 +224,7 @@ namespace tira::tensorvote {
         const float cos_phi = cosf(phi);
         const float sin_phi = sinf(phi);
 
-        const glm::vec3 q(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
+        const glm::vec3 q(cos_theta * sin_phi, sin_theta * sin_phi, cos_phi);
 
         glm::vec3 d = uvw;                                                  // normalize the direction vector
         const float l = glm::length(d);                                     // calculate ell (distance between voter/votee)
@@ -306,7 +306,7 @@ namespace tira::tensorvote {
 
     CUDA_CALLABLE  static glm::mat3 platevote3(glm::vec3 uvw, glm::vec2 sigma, const unsigned power) {
 
-        //float length = sqrt(u * u + v * v + w * w);                     // calculate the distance between voter and votee
+        // calculate the distance between voter and votee
         const float length = sqrt(uvw[0] * uvw[0] + uvw[1] * uvw[1] + uvw[2] * uvw[2]);
         glm::vec3 d(0.0f);
         if (length != 0) d = glm::normalize(uvw);                 // normalize direction vector
