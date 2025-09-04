@@ -177,27 +177,49 @@ namespace tira {
 			return glm::length(this->back() - this->front());
 		}
 
+		/**
+		 * @brief Smooth a fiber by applying a Gaussian kernel to its vertex coordinates
+		 * @param sigma is the standard deviation for the smoothing kernel
+		 * @return a smoothed version of the current fiber
+		 */
+		fiber Smooth(float sigma) {
 
-		fiber Smooth(float sigma, bool anchor_endpoints = true) {
+			fiber smoothed_fiber;
 
-			fiber smoothed;
-			for (size_t vi = 0; vi < this->size(); vi++) {
-				if (anchor_endpoints && (vi == 0 || vi == this->size() - 1)) {
-					vertex v = this->at(vi);
-					smoothed.AddLastVertex(v);
-				}
-				else {
-					glm::vec3 p(0.0f);
-					float g_energy = 0.0f;
-					for (size_t pi = 0; pi < this->size(); pi++) {
-						float d = m_lparam[vi] - m_lparam[pi];
-						p += m_Gaussian(d, sigma) * this->at(pi);
-						g_energy += m_Gaussian(d, sigma);
+			// add the first vertex to the smoothed fiber unchanged - the end points will remain the same
+			smoothed_fiber.AddLastVertex(this->at(0));
+
+			// pre-calculate the Gaussian window size and number of vertices
+			int window = (int)(sigma * 3);
+			int num_vertices = (int)this->size();
+
+			// for each internal vertex of the fiber
+			for (int vi = 1; vi < num_vertices - 1; vi++) {
+				float gaussian_integral = 0.0f;
+				glm::vec3 weighted_point(0.0f);
+
+				// for every point within range of the current point to be smoothed
+				for (int wi = -window; wi < window; wi++) {
+					int fid = vi + wi;							// calculate the ID of the windowed vertex
+
+					// if the windowed vertex is within the fiber, apply the appropriate weights
+					if (fid >= 0 && fid < num_vertices) {
+						float d = std::abs(m_lparam[vi] - m_lparam[fid]);
+						float gaussian_value = m_Gaussian(d, sigma);
+						gaussian_integral += gaussian_value;
+						weighted_point += gaussian_value * this->at(fid);
 					}
-					smoothed.AddLastVertex(p / g_energy, this->at(vi).Attribute());
 				}
+				glm::vec3 smoothed_point = weighted_point / gaussian_integral;
+				smoothed_fiber.AddLastVertex(smoothed_point, this->at(vi).Attribute());
 			}
-			return smoothed;
+
+			// add the last point to the smoothed fiber unchanged
+			smoothed_fiber.AddLastVertex((this->at(0)));
+
+			// return the smoothed version of the fiber
+			return smoothed_fiber;
+
 		}
 
 		size_t RemoveDuplicates() {
