@@ -116,23 +116,53 @@ protected:
      * Removes duplicated vertices within fibers and between fibers and nodes. These shouldn't occur, so a warning
      * is output whenever it happens.
      */
+    //void _remove_duplicate_points() {
+    //    for (size_t ei=0; ei< m_edges.size(); ei++) {
+    //        size_t removed = m_edges[ei].RemoveDuplicates();
+    //        if (removed != 0) {
+    //            std::cout<<"tira::vascular WARNING: "<<removed<<" duplicate points detected in the fiber associated with edge "<<ei<<std::endl;
+    //        }
+
+    //        // test for duplicates between the edge fiber and its nodes
+    //        vertex<float> v0 = m_nodes[m_edges[ei].NodeIndex0()];
+    //        if (v0 == m_edges[ei][0]) {
+    //            m_edges[ei].erase(m_edges[ei].begin());
+    //            std::cout<<"tira::vascular WARNING: node 0 is duplicated with the fiber in edge "<<ei<<std::endl;
+    //        }
+    //        vertex<float> v1 = m_nodes[m_edges[ei].NodeIndex1()];
+    //        if (v1 == m_edges[ei].back()) {
+    //            m_edges[ei].pop_back();
+    //            std::cout<<"tira::vascular WARNING: node 1 is duplicated with the fiber in edge "<<ei<<std::endl;
+    //        }
+    //    }
+    //}
     void _remove_duplicate_points() {
-        for (size_t ei=0; ei< m_edges.size(); ei++) {
-            size_t removed = m_edges[ei].RemoveDuplicates();
-            if (removed != 0) {
-                std::cout<<"tira::vascular WARNING: "<<removed<<" duplicate points detected in the fiber associated with edge "<<ei<<std::endl;
+        for (size_t ei = 0; ei < m_edges.size(); ++ei) {
+            auto& fib = m_edges[ei];
+
+            // Intra fiber dup only if there are at least 2 points
+            if (fib.size() >= 2) {
+                size_t removed = fib.RemoveDuplicates();
+                if (removed != 0) {
+                    std::cout << "tira::vascular WARNING: " << removed << " duplicate points detected in the fiber associated with edge " << ei << std::endl;
+                }
             }
 
-            // test for duplicates between the edge fiber and its nodes
-            vertex<float> v0 = m_nodes[m_edges[ei].NodeIndex0()];
-            if (v0 == m_edges[ei][0]) {
-                m_edges[ei].erase(m_edges[ei].begin());
-                std::cout<<"tira::vascular WARNING: node 0 is duplicated with the fiber in edge "<<ei<<std::endl;
-            }
-            vertex<float> v1 = m_nodes[m_edges[ei].NodeIndex1()];
-            if (v1 == m_edges[ei].back()) {
-                m_edges[ei].pop_back();
-                std::cout<<"tira::vascular WARNING: node 1 is duplicated with the fiber in edge "<<ei<<std::endl;
+            // Node fiber duplicates, only check if the fiber is non empty
+            if (!fib.empty()) {
+                const vertex<float> v0 = m_nodes[fib.NodeIndex0()];
+                if (v0 == fib.front()) {
+                    fib.erase(fib.begin());
+                    std::cout << "tira::vascular WARNING: node 0 is duplicated with the fiber in edge " << ei << std::endl;
+                }
+
+                if (!fib.empty()) { // recheck after potential erase
+                    const vertex<float> v1 = m_nodes[fib.NodeIndex1()];
+                    if (v1 == fib.back()) {
+                        fib.pop_back();
+                        std::cout << "tira::vascular WARNING: node 1 is duplicated with the fiber in edge " << ei << std::endl;
+                    }
+                }
             }
         }
     }
