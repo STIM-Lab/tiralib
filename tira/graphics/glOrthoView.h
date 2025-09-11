@@ -72,6 +72,7 @@ namespace tira {
             // upload the current volume as a texture map
             if (this->Size() > 0)
                 _material.SetTexture("texmap", this->getTexture());
+
             glGetError();
 
             // generate the geometry representing three planes
@@ -179,7 +180,10 @@ namespace tira {
             if (axis == 2) {
                 T = glm::translate(T, glm::vec3(0.0f, 0.0f, _normalized_slices.z));
             }
+            _update_uniform_viewport_width();
+            this->_texture.SetFilter(GL_NEAREST);
             _material.Begin();
+            _material.SetTexture("texmap", this->getTexture());
 
             _material.SetUniformMat4f("MVP", MVP);
             _material.SetUniformMat4f("T", T);
