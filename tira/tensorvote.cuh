@@ -40,7 +40,7 @@ namespace tira::tensorvote {
         if (x0 >= s0 || x1 >= s1 || x2 >= s2)                                               // if not within bounds of image, return
             return;
 
-	    glm::mat3 Receiver = stickvote3(L, V, sigma, power, norm, w, s0, s1, s2, glm::ivec3(x0, x1, x2));
+        glm::mat3 Receiver(1.0f); //stickvote3(L, V, sigma, power, norm, w, s0, s1, s2, glm::ivec3(x0, x1, x2));
         VT[x0 * s1 * s2 + x1 * s2 + x2] += Receiver;
     }
 
