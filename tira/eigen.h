@@ -537,15 +537,15 @@ namespace tira::cpu {
         return evals;
     }
 
-    /// <summary>
-    /// CPU code for calculating eigenvectors of an array of 2x2 matrices given an
-    /// array of corresponding eigenvalues.
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="mats">is an array of 2x2 matrices</param>
-    /// <param name="evals">is an array of 2x1 eigenvalues</param>
-    /// <param name="n">is the number of matrices and eigenvalue pairs in the array</param>
-    /// <returns></returns>
+
+    /**
+	* CPU code for calculating eigenvectors of an array of 2x2 matrices given an
+	* array of corresponding eigenvalues.
+	* @tparam T data type for the matrix elements (ex. float)
+    * @param mats pointer to an array of N 2x2 matrices (2x2xN elements of type T)
+	* @param evals pointer to an array of eigenvalues (2xN elements of type T)
+	* @param n number of matrices in the array
+    */
     template<typename T>
     T* evecs2polar_symmetric(const T* mats, const T* evals, const size_t n) {
 
