@@ -72,19 +72,19 @@ namespace tira {
         bool m_buffers_valid;                // flag specifies that the buffers are up to date and accurately represent the fiber data
 
         inline static const std::string brewer_pts =
-        #include "src/vascuvis/brewer_pts.shader"
+        #include "shaders/brewer_pts.shader"
         ;
 
         inline static const std::string cmap_vertex_string =
-        #include "src/vascuvis/cmap_vertex.shader"
+        #include "shaders/cmap_vertex.shader"
         ;
 
         inline static const std::string cmap_fragment_string =
-        #include "src/vascuvis/cmap_fragment.shader"
+        #include "shaders/cmap_fragment.shader"
         ;
 
         inline static const std::string fiber_id_string =
-        #include "src/vascuvis/fiber_id.shader"
+        #include "shaders/fiber_id.shader"
         ;
 
         glShader m_shader;
