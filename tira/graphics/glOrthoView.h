@@ -76,9 +76,9 @@ namespace tira {
             glGetError();
 
             // generate the geometry representing three planes
-            _planes[0] = glGeometry::GenerateRectangle<float>();
-            _planes[1] = glGeometry::GenerateRectangle<float>();
-            _planes[2] = glGeometry::GenerateRectangle<float>();
+            _planes[0] = glGeometry::GenerateRectangle();
+            _planes[1] = glGeometry::GenerateRectangle();
+            _planes[2] = glGeometry::GenerateRectangle();
         }
 
         glm::vec3 dimensions() {

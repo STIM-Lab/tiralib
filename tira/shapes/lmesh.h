@@ -12,7 +12,7 @@
  */
 
 namespace tira{
-    template <typename T>
+    template <typename T = float>
     class linemesh {
     protected:
         std::vector<T> _vertices;

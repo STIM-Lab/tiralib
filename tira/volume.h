@@ -1603,7 +1603,7 @@ namespace tira {
 
 			tira::image<T> test(file_names[0]);
 
-			init(test.width(), test.height(), file_names.size(), test.channels());			// allocate space for the new shape					
+			m_Init(test.width(), test.height(), file_names.size(), test.channels());			// allocate space for the new shape					
 	
 			// copies data from each image file to the destination data
 			for (size_t zi = 0; zi < Z(); zi++) {											// iterate through each file

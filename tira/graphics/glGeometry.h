@@ -5,7 +5,7 @@
 #include "glVertexBufferLayout.h"
 #include "glIndexBuffer.h"
 #include "glVertexArray.h"
-#include "shapes.h"
+#include <tira/shapes.h>
 
 namespace tira {
 
@@ -60,15 +60,15 @@ namespace tira {
 
 		glGeometry() {}
 
-		template<typename T>
-		glGeometry(trimesh<T> mesh) {
-			std::vector<T> v = mesh.getInterleavedVertices();									// generate a vector of interleaved vertices
-			std::vector<unsigned int> i = mesh.getIndices();									// generate a vector of indices
+		glGeometry(tmesh mesh) {
+			std::vector<float> v = mesh.Interleave(2);									// generate a vector of interleaved vertices
+			std::vector<unsigned int> i = mesh.Indices();									// generate a vector of indices
 			glVertexBufferLayout layout;
-			layout.Push<T>(mesh.getVertexDim());													// add the number of vertex components to the layout
-			layout.Push<T>(mesh.getNormalDim());													// add the number of normal components to the layout
-			layout.Push<T>(mesh.getTextureDim());													// add the number of texture components to the layout
-			AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+			layout.Push<float>(3);													// add the number of vertex components to the layout
+			layout.Push<float>(3);													// add the number of normal components to the layout
+			layout.Push<float>(2);													// add the number of texture components to the layout
+			size_t stride = (3 + 3 + 2) * sizeof(float);
+			AddMesh(&v[0], mesh.NumVertices() * stride, layout, &i[0], i.size(), 0);
 		}
 
 
@@ -79,143 +79,147 @@ namespace tira {
 		/// </summary>
 		/// <typeparam name="T">Data type used to represent vertices, normals, and tetxure coordinates.</typeparam>
 		/// <returns></returns>
-		template <typename T>
 		static glGeometry GenerateRectangle() {
-			trimesh<T> r = rectangle<T>();
-			std::vector<T> v = r.getInterleavedVertices();									// generate a vector of interleaved vertices
-			const std::vector<unsigned int> i = r.getIndices();									// generate a vector of indices
+			tmesh r = rectangle();
+			std::vector<float> v = r.Interleave(2);									// generate a vector of interleaved vertices
+			const std::vector<unsigned int> i = r.Indices();									// generate a vector of indices
 			glGeometry rectangle;
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);																// add three vertex components to the layout
-			layout.Push<T>(3);																// add three normal components to the layout
-			layout.Push<T>(2);																// add two texture components to the layout
-			rectangle.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+			layout.Push<float>(3);																// add three vertex components to the layout
+			layout.Push<float>(3);																// add three normal components to the layout
+			layout.Push<float>(2);																// add two texture components to the layout
+			size_t stride = (3 + 3 + 2) * sizeof(float);
+			rectangle.AddMesh(&v[0], r.NumVertices() * stride, layout, &i[0], i.size(), 0);
 
 			return rectangle;
 		}
 
-		template <typename T>
 		static glGeometry GenerateCircle(unsigned int slices = 10) {
 
-			trimesh<T> c = circle<T>(slices);
+			tmesh c = circle(slices);
 
-			std::vector<T> v = c.getInterleavedVertices();									// generate a vector of interleaved vertices
-			std::vector<unsigned int> i = c.getIndices();									// generate a vector of indices
+			std::vector<float> v = c.Interleave(2);									// generate a vector of interleaved vertices
+			std::vector<unsigned int> i = c.Indices();									// generate a vector of indices
 
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);																// add three vertex components to the layout
-			layout.Push<T>(3);																// add three normal components to the layout
-			layout.Push<T>(2);																// add two texture components to the layout
+			layout.Push<float>(3);																// add three vertex components to the layout
+			layout.Push<float>(3);																// add three normal components to the layout
+			layout.Push<float>(2);																// add two texture components to the layout
+			size_t stride = (3 + 3 + 2) * sizeof(float);
 
 			glGeometry circle;
-			circle.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+			circle.AddMesh(&v[0], c.NumVertices() * stride, layout, &i[0], i.size(), 0);
 			return circle;
 		}
 
-	    template <typename T>
 		static glGeometry GenerateCube(){
-			trimesh<T> c = circle<T>();
+
+			tmesh c = cube();
 			//cube<T> c;
-			std::vector<T> v = c.getInterleavedVertices();
-			std::vector<unsigned int> i = c.getIndices();
+			std::vector<float> v = c.Interleave(2);
+			std::vector<unsigned int> i = c.Indices();
 
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);
-			layout.Push<T>(3);
-			layout.Push<T>(2);
+			layout.Push<float>(3);
+			layout.Push<float>(3);
+			layout.Push<float>(2);
+			size_t stride = (3 + 3 + 2) * sizeof(float);
 
 			glGeometry cube;
-			cube.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+			cube.AddMesh(&v[0], c.NumVertices() * stride, layout, &i[0], i.size(), 0);
 			return cube;
 		}
 
 		template <typename T>
 		static glGeometry GenerateSphere(unsigned int stacks, unsigned int slices) {
 			//sphere<T> s(stacks, slices);
-			trimesh<T> s = sphere<T>(slices, stacks);
-			std::vector<T> v = s.getInterleavedVertices();
-			std::vector<unsigned int> i = s.getIndices();
+			tmesh s = sphere(stacks, slices);
+			s = sphere(slices, stacks);
+			std::vector<float> v = s.Interleave(2);
+			std::vector<unsigned int> i = s.Indices();
 
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);
-			layout.Push<T>(3);
-			layout.Push<T>(2);
+			layout.Push<float>(3);
+			layout.Push<float>(3);
+			layout.Push<float>(2);
+			size_t stride = (3 + 3 + 2) * sizeof(float);
 
 			glGeometry sphere;
-			sphere.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+			sphere.AddMesh(&v[0], s.NumVertices() * stride, layout, &i[0], i.size(), 0);
 			return sphere;
 		}
 
-		template <typename T>
 		static glGeometry GenerateIcosahedron() {
 			//tira::icosahedron<T> ico(0.5f);
 			//
-			trimesh<T> ico = icosahedron<T>();
+			tira::tmesh ico = icosohedron();
+			std::vector<float> v = ico.Interleave(2);
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);
-			layout.Push<T>(3);
-			layout.Push<T>(2);
+			layout.Push<float>(3);
+			layout.Push<float>(3);
+			layout.Push<float>(2);
+			size_t stride = (3 + 3 + 2) * sizeof(float);
 
 			glGeometry icosahedron;
-			icosahedron.AddMesh(ico.getInterleavedVertices(), ico.getInterleavedVertexCount() * 8 * sizeof(T), layout, ico.getIndices(), ico.getIndexCount(), 0);
+			icosahedron.AddMesh(&v[0], ico.NumVertices() * stride, layout, &ico.Indices()[0], ico.NumIndices(), 0);
 			return icosahedron;
 		}
 
-		template <typename T>
 		static glGeometry GenerateIcosphere(unsigned int subdiv = 4, bool smooth = false) {
-			trimesh<T> ico = icosphere(0.5f, subdiv, smooth);
-
+			tmesh ico = icosphere(0.5f, subdiv, smooth);
+			std::vector<float> v = ico.Interleave(2);
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);
-			layout.Push<T>(3);
-			layout.Push<T>(2);
+			layout.Push<float>(3);
+			layout.Push<float>(3);
+			layout.Push<float>(2);
+			size_t stride = (3 + 3 + 2) * sizeof(float);
 
 			glGeometry icosphere;
-			icosphere.AddMesh(ico.getInterleavedVertices(), ico.getInterleavedVertexCount() * 8 * sizeof(T), layout, ico.getIndices(), ico.getIndexCount(), 0);
+			icosphere.AddMesh(&v[0], ico.NumVertices() * stride, layout, &ico.Indices()[0], ico.NumIndices(), 0);
 			return icosphere;
 		}
 
-		
 
+		static glGeometry GenerateSuperquadric(float l0, float l1, float l2, float gamma, unsigned int subdiv = 4, bool smooth = false) {
 
-		template <typename T>
-		static glGeometry GenerateSuperquadric(T l0, T l1, T l2, T gamma, unsigned int subdiv = 4, bool smooth = false) {
-
-			trimesh<T> sq = superquadric<T>(l0, l1, l2, gamma, subdiv, smooth);
+			tmesh sq = superquadric(l0, l1, l2, gamma, subdiv, smooth);
+			std::vector<float> v = sq.Interleave(2);
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);
-			layout.Push<T>(3);
-			layout.Push<T>(2);
+			layout.Push<float>(3);
+			layout.Push<float>(3);
+			layout.Push<float>(2);
+			size_t stride = (3 + 3 + 2) * sizeof(float);
+
 
 			glGeometry superquadric;
-			superquadric.AddMesh(sq.getInterleavedVertices(), sq.getInterleavedVertexCount() * 8 * sizeof(T), layout, sq.getIndices(), sq.getIndexCount(), 0);
+			superquadric.AddMesh(&v[0], sq.NumVertices() * stride, layout, &sq.Indices()[0], sq.NumIndices(), 0);
 			return superquadric;
 		}
 
-		template <typename T>
 		static glGeometry GenerateCylinder(unsigned int stacks, unsigned int slices) {
 
-			trimesh<T> c = cylinder<T>(slices, stacks);
+			tmesh c = cylinder(slices, stacks);
 
-			std::vector<T> v = c.getInterleavedVertices();
-			std::vector<unsigned int> i = c.getIndices();
+			std::vector<float> v = c.Interleave(2);
+			std::vector<unsigned int> i = c.Indices();
 
 
 
 			glVertexBufferLayout layout;
-			layout.Push<T>(3);
-			layout.Push<T>(3);
-			layout.Push<T>(2);
+			layout.Push<float>(3);
+			layout.Push<float>(3);
+			layout.Push<float>(2);
+			size_t stride = (3 + 3 + 2) * sizeof(float);
 
 			glGeometry cylinder;
-			cylinder.AddMesh(&v[0], v.size() * sizeof(T), layout, &i[0], i.size(), 0);
+			cylinder.AddMesh(&v[0], c.NumVertices() * stride, layout, &i[0], i.size(), 0);
 			return cylinder;
 		}
 	};
