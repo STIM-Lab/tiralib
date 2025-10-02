@@ -128,8 +128,8 @@ namespace tira{
 	template <typename T>
 	tmesh cube(std::vector<T> p, T s){
 		tmesh C = cube<T>();
-		C = C.scale({s, s, s});
-		C = C.translate(p);
+		C = C.Scale({s, s, s});
+		C = C.Translate(p);
 		return C;
 	}
 }

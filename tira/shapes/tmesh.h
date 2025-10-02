@@ -1,5 +1,6 @@
  #pragma once
 #include <vector>
+#include <cstring>
 #include <string>
 #include <fstream>
 #include <algorithm>
@@ -72,7 +73,7 @@ namespace tira{
 		 */
 		std::vector<float> RavelVertices() {
 			std::vector<float> result(m_vertices.size() * sizeof(glm::vec3));
-			memcpy(&result[0], &m_vertices[0], m_vertices.size() * sizeof(glm::vec3));
+			std::memcpy(&result[0], &m_vertices[0], m_vertices.size() * sizeof(glm::vec3));
 			return result;
 		}
 

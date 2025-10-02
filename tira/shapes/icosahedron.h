@@ -408,7 +408,7 @@ namespace tira {
 
     };
 
-    static tmesh icosohedron(float radius = 1.0f) {
+    static tmesh icosahedron(float radius = 1.0f) {
         tmesh S;
 
         Icosahedron s(radius);

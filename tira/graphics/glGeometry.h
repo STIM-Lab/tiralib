@@ -42,7 +42,16 @@ namespace tira {
 			vb.SetBuffer(vertices, bytes);
 			ib.SetBuffer(indices, count);
 			va.AddBuffer(vb, layout, offset);
+		}
 
+		void AddMesh(tmesh mesh, int texcoords) {
+			std::vector<float> v = mesh.Interleave(texcoords);									// generate a vector of interleaved vertices
+			std::vector<unsigned int> i = mesh.Indices();									// generate a vector of indices
+			glVertexBufferLayout layout;
+			layout.Push<float>(3);													// add the number of vertex components to the layout
+			layout.Push<float>(3);													// add the number of normal components to the layout
+			layout.Push<float>(texcoords);													// add the number of texture components to the layout
+			AddMesh(&v[0], v.size() * sizeof(float), layout, &i[0], i.size(), 0);
 		}
 
 		void Draw() {
@@ -60,15 +69,8 @@ namespace tira {
 
 		glGeometry() {}
 
-		glGeometry(tmesh mesh) {
-			std::vector<float> v = mesh.Interleave(2);									// generate a vector of interleaved vertices
-			std::vector<unsigned int> i = mesh.Indices();									// generate a vector of indices
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);													// add the number of vertex components to the layout
-			layout.Push<float>(3);													// add the number of normal components to the layout
-			layout.Push<float>(2);													// add the number of texture components to the layout
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-			AddMesh(&v[0], mesh.NumVertices() * stride, layout, &i[0], i.size(), 0);
+		glGeometry(tmesh mesh, int texcoords = 2) {
+			AddMesh(mesh, texcoords);
 		}
 
 
@@ -81,16 +83,8 @@ namespace tira {
 		/// <returns></returns>
 		static glGeometry GenerateRectangle() {
 			tmesh r = rectangle();
-			std::vector<float> v = r.Interleave(2);									// generate a vector of interleaved vertices
-			const std::vector<unsigned int> i = r.Indices();									// generate a vector of indices
 			glGeometry rectangle;
-
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);																// add three vertex components to the layout
-			layout.Push<float>(3);																// add three normal components to the layout
-			layout.Push<float>(2);																// add two texture components to the layout
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-			rectangle.AddMesh(&v[0], r.NumVertices() * stride, layout, &i[0], i.size(), 0);
+			rectangle.AddMesh(r, 2);
 
 			return rectangle;
 		}
@@ -98,90 +92,32 @@ namespace tira {
 		static glGeometry GenerateCircle(unsigned int slices = 10) {
 
 			tmesh c = circle(slices);
-
-			std::vector<float> v = c.Interleave(2);									// generate a vector of interleaved vertices
-			std::vector<unsigned int> i = c.Indices();									// generate a vector of indices
-
-
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);																// add three vertex components to the layout
-			layout.Push<float>(3);																// add three normal components to the layout
-			layout.Push<float>(2);																// add two texture components to the layout
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-
-			glGeometry circle;
-			circle.AddMesh(&v[0], c.NumVertices() * stride, layout, &i[0], i.size(), 0);
+			glGeometry circle(c, 2);
 			return circle;
 		}
 
 		static glGeometry GenerateCube(){
-
 			tmesh c = cube();
-			//cube<T> c;
-			std::vector<float> v = c.Interleave(2);
-			std::vector<unsigned int> i = c.Indices();
-
-
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);
-			layout.Push<float>(3);
-			layout.Push<float>(2);
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-
-			glGeometry cube;
-			cube.AddMesh(&v[0], c.NumVertices() * stride, layout, &i[0], i.size(), 0);
+			glGeometry cube(c, 2);
 			return cube;
 		}
 
-		template <typename T>
 		static glGeometry GenerateSphere(unsigned int stacks, unsigned int slices) {
-			//sphere<T> s(stacks, slices);
-			tmesh s = sphere(stacks, slices);
-			s = sphere(slices, stacks);
-			std::vector<float> v = s.Interleave(2);
-			std::vector<unsigned int> i = s.Indices();
-
-
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);
-			layout.Push<float>(3);
-			layout.Push<float>(2);
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-
-			glGeometry sphere;
-			sphere.AddMesh(&v[0], s.NumVertices() * stride, layout, &i[0], i.size(), 0);
+			tmesh s = sphere(slices, stacks);
+			glGeometry sphere(s, 2);
 			return sphere;
 		}
 
 		static glGeometry GenerateIcosahedron() {
-			//tira::icosahedron<T> ico(0.5f);
-			//
-			tira::tmesh ico = icosohedron();
-			std::vector<float> v = ico.Interleave(2);
 
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);
-			layout.Push<float>(3);
-			layout.Push<float>(2);
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-
-			glGeometry icosahedron;
-			icosahedron.AddMesh(&v[0], ico.NumVertices() * stride, layout, &ico.Indices()[0], ico.NumIndices(), 0);
+			tmesh ico = icosahedron();
+			glGeometry icosahedron(ico);
 			return icosahedron;
 		}
 
 		static glGeometry GenerateIcosphere(unsigned int subdiv = 4, bool smooth = false) {
 			tmesh ico = icosphere(0.5f, subdiv, smooth);
-			std::vector<float> v = ico.Interleave(2);
-
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);
-			layout.Push<float>(3);
-			layout.Push<float>(2);
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-
-			glGeometry icosphere;
-			icosphere.AddMesh(&v[0], ico.NumVertices() * stride, layout, &ico.Indices()[0], ico.NumIndices(), 0);
+			glGeometry icosphere(ico, 2);
 			return icosphere;
 		}
 
@@ -189,37 +125,14 @@ namespace tira {
 		static glGeometry GenerateSuperquadric(float l0, float l1, float l2, float gamma, unsigned int subdiv = 4, bool smooth = false) {
 
 			tmesh sq = superquadric(l0, l1, l2, gamma, subdiv, smooth);
-			std::vector<float> v = sq.Interleave(2);
-
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);
-			layout.Push<float>(3);
-			layout.Push<float>(2);
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-
-
-			glGeometry superquadric;
-			superquadric.AddMesh(&v[0], sq.NumVertices() * stride, layout, &sq.Indices()[0], sq.NumIndices(), 0);
+			glGeometry superquadric(sq);
 			return superquadric;
 		}
 
 		static glGeometry GenerateCylinder(unsigned int stacks, unsigned int slices) {
 
 			tmesh c = cylinder(slices, stacks);
-
-			std::vector<float> v = c.Interleave(2);
-			std::vector<unsigned int> i = c.Indices();
-
-
-
-			glVertexBufferLayout layout;
-			layout.Push<float>(3);
-			layout.Push<float>(3);
-			layout.Push<float>(2);
-			size_t stride = (3 + 3 + 2) * sizeof(float);
-
-			glGeometry cylinder;
-			cylinder.AddMesh(&v[0], c.NumVertices() * stride, layout, &i[0], i.size(), 0);
+			glGeometry cylinder(c, 2);
 			return cylinder;
 		}
 	};
