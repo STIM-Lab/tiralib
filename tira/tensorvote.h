@@ -263,6 +263,23 @@ namespace tira::tensorvote {
         for (unsigned i = 1; i < power; ++i) r *= t;
 		return r;
     }
+    CUDA_CALLABLE inline void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
+        // Calculate the contribution of (du,dv,dw) to (x,y,z)
+        const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
+        const float qTd2 = qTd * qTd;
+        float eta;
+        if (power == 1)
+            eta = n.c1 * (1 - qTd2) + n.c2 * qTd2;
+        else
+            eta = n.c1 * term_power(1 - qTd2, power) + n.c2 * term_power(qTd2, power);
+        const float rx = q.x - 2.0f * qTd * n.d.x;
+        const float ry = q.y - 2.0f * qTd * n.d.y;
+        const float rz = q.z - 2.0f * qTd * n.d.z;
+        const float term = scale * eta;
+        M[0][0] += term * rx * rx; M[0][1] += term * rx * ry; M[0][2] += term * rx * rz;
+        M[1][0] += term * ry * rx; M[1][1] += term * ry * ry; M[1][2] += term * ry * rz;
+        M[2][0] += term * rz * rx; M[2][1] += term * rz * ry; M[2][2] += term * rz * rz;
+    }
 
     /// <summary>
 	/// Accumulate the stick vote for a receiver at position x from the precomputed neighbor offsets and eigenvalues/vectors.
@@ -306,68 +323,46 @@ namespace tira::tensorvote {
 			// Calculate the contribution scale factor
 			const float scale = std::copysign(std::abs(l2) - std::abs(l1), l2) * norm;
 
-            // Calculate the contribution of (du,dv,dw) to (x,y,z)
-			const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
-			const float qTd2 = qTd * qTd;
-
-            float eta;
-            if (power == 1)
-                eta = n.c1 * (1 - qTd2) + n.c2 * qTd2;
-            else
-				eta = n.c1 * term_power(1 - qTd2, power) + n.c2 * term_power(qTd2, power);
-
-			const float rx = q.x - 2.0f * qTd * n.d.x;
-			const float ry = q.y - 2.0f * qTd * n.d.y;
-			const float rz = q.z - 2.0f * qTd * n.d.z;
-
-			const float term = scale * eta;
-			Votee[0][0] += term * rx * rx; Votee[0][1] += term * rx * ry; Votee[0][2] += term * rx * rz;
-			Votee[1][0] += term * ry * rx; Votee[1][1] += term * ry * ry; Votee[1][2] += term * ry * rz;
-			Votee[2][0] += term * rz * rx; Votee[2][1] += term * rz * ry; Votee[2][2] += term * rz * rz;
+            // Calculate the accumulated contribution of (du,dv,dw) to (x,y,z)
+			stickvote3_accumulate_kernel(Votee, n, q, power, scale);
         }
         return Votee;
     }
 
-    CUDA_CALLABLE  static glm::mat3 platevote3(glm::vec3 uvw, glm::vec2 sigma, const unsigned power) {
+    CUDA_CALLABLE  static glm::mat3 platevote3_analytic(const glm::vec3& d, float c1, float c2, unsigned power, double K0, double K1) {
 
-        // calculate the distance between voter and votee
-        const float length = sqrt(uvw[0] * uvw[0] + uvw[1] * uvw[1] + uvw[2] * uvw[2]);
-        glm::vec3 d(0.0f);
-        if (length != 0) d = glm::normalize(uvw);                 // normalize direction vector
+        // Calculate the distance between voter and votee
+        glm::vec3 dn = d;
+		float len = std::sqrt(dn.x * dn.x + dn.y * dn.y + dn.z * dn.z);
+		if (len != 0.0f) dn = dn / len;
+		else dn = glm::vec3(0.0f, 0.0f, 0.0f);
 
-        float dx = d.x;
-        float dy = d.y;
-        float dz = d.z;
+        const float dx = dn.x, dy = dn.y, dz = dn.z;
 
-        // calculate the length and angle of the reflected direction matrix on xy-plane
-        float alpha = sqrt(dx * dx + dy * dy);
-        float a2 = alpha * alpha;
-        float phi = std::atan2(dy, dx);
+        // Calculate the length and angle of the reflected direction matrix on XY plane
+        const float alpha = std::sqrt(dx * dx + dy * dy);
+        const float a2 = alpha * alpha;
+        const float phi = std::atan2(dy, dx);
 
-        // build the rotation matrix about the z-axis by phi degrees
+        // Build the rotation matrix around Z axis by +/- phi
         glm::mat3 Rz(0.0f);
-        Rz[0][0] = std::cos(phi);   Rz[0][1] = -std::sin(phi);
-        Rz[1][0] = std::sin(phi);   Rz[1][1] = std::cos(phi);
+		const float cph = std::cos(phi), sph = std::sin(phi);
+        Rz[0][0] = cph;   Rz[0][1] = -sph;
+        Rz[1][0] = sph;   Rz[1][1] = cph;
         Rz[2][2] = 1.0f;
+        const glm::mat3 Rz_rev = glm::transpose(Rz);
 
-        // build the rotation matrix about the z-axis by -phi degrees
-        glm::mat3 Rz_rev = glm::transpose(Rz);
-
-        // compute beta and hypergeometric integrals
-        double p_d = static_cast<double>(power);
-        double a2_d = static_cast<double>(a2);
-        double J0 = 0.5 * TV_PI * boost::math::hypergeometric_pFq(std::vector<double>{ -p_d, 1.5 },
-            std::vector<double>{ 2.0 }, a2_d);
-        double J1 = TV_PI * boost::math::hypergeometric_pFq(std::vector<double>{ -p_d, 0.5 },
+        // Compute beta and hypergeometric integrals
+        const double p_d = static_cast<double>(power);
+        const double a2_d = static_cast<double>(a2);
+        const double J0 = 0.5 * TV_PI * boost::math::hypergeometric_pFq(std::vector<double>{ -p_d, 1.5 },
+             std::vector<double>{ 2.0 }, a2_d);
+        const double J1 = TV_PI * boost::math::hypergeometric_pFq(std::vector<double>{ -p_d, 0.5 },
             std::vector<double>{ 1.0 }, a2_d);
-        double K0 = boost::math::beta(0.5, p_d + 1.5);
-        double K1 = boost::math::beta(0.5, p_d + 0.5);
 
-        // calcualte each term
-        glm::mat3 A(0.0f);
-        glm::mat3 B(0.0f);
-
-        float tmp_a2 = 1.0f - 2.0f * a2;
+        // Terms in the rotated frame
+        glm::mat3 A(0.0f), B(0.0f);
+        const float tmp_a2 = 1.0f - 2.0f * a2;
 
         A[0][0] = (tmp_a2 * tmp_a2) * static_cast<float>(J0);
         A[0][2] = -2.0f * alpha * dz * tmp_a2 * static_cast<float>(J0);
@@ -375,7 +370,7 @@ namespace tira::tensorvote {
         A[1][1] = static_cast<float>(J1 - J0);
         A[2][2] = 4.0f * a2 * (dz * dz) * static_cast<float>(J0);
 
-        float a2p = std::pow(a2, static_cast<float>(power));
+        const float a2p = std::pow(a2, static_cast<float>(power));
 
         B[0][0] = a2p * (tmp_a2 * tmp_a2) * static_cast<float>(K0);
         B[0][2] = -2.0f * alpha * a2p * dz * tmp_a2 * static_cast<float>(K0);
@@ -383,40 +378,56 @@ namespace tira::tensorvote {
         B[1][1] = a2p * static_cast<float>(K1 - K0);
         B[2][2] = 4.0f * a2p * a2 * (dz * dz) * static_cast<float>(K0);
 
-        // rotate back to original coordinates
-        glm::mat3 term_a = Rz * A * Rz_rev;
-        glm::mat3 term_b = Rz * B * Rz_rev;
+        // Rotate back to original coordinates
+        const glm::mat3 term_a = Rz * A * Rz_rev;
+        const glm::mat3 term_b = Rz * B * Rz_rev;
 
-        // calculate exponential terms
-        float e1 = 0.0f, e2 = 0.0f;
-        float l2 = length * length;
-        float s12 = sigma[0] * sigma[0];
-        float s22 = sigma[1] * sigma[1];
-        if (sigma[0] > 0)
-            e1 = std::exp(-l2 / s12);
-        if (sigma[1] > 0)
-            e2 = std::exp(-l2 / s22);
-
-        // final integral
-        glm::mat3 PlateVote = (e1 * term_a) + (e2 * term_b);
-
+        // Combine
+        glm::mat3 PlateVote(0.0f);
+		PlateVote[0][0] = c1 * term_a[0][0] + c2 * term_b[0][0];
+		PlateVote[0][1] = c1 * term_a[0][1] + c2 * term_b[0][1];
+		PlateVote[0][2] = c1 * term_a[0][2] + c2 * term_b[0][2];
+		PlateVote[1][0] = c1 * term_a[1][0] + c2 * term_b[1][0];
+		PlateVote[1][1] = c1 * term_a[1][1] + c2 * term_b[1][1];
+		PlateVote[1][2] = c1 * term_a[1][2] + c2 * term_b[1][2];
+		PlateVote[2][0] = c1 * term_a[2][0] + c2 * term_b[2][0];
+		PlateVote[2][1] = c1 * term_a[2][1] + c2 * term_b[2][1];
+		PlateVote[2][2] = c1 * term_a[2][2] + c2 * term_b[2][2];
         return PlateVote;
     }
 
-    CUDA_CALLABLE  static glm::mat3 platevote3_numerical(const glm::vec3 uvw, const glm::vec2 sigma, const unsigned power, const unsigned int n = 20) {
-
-        const float dbeta = TV_PI / static_cast<double>(n);
+    CUDA_CALLABLE inline glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power, unsigned samples = 20) {
         glm::mat3 V(0.0f);
-        for (unsigned int i = 0; i < n; i++) {
-            const float beta = dbeta * i;
-            V = V; //+ stickvote3(uvw, sigma, asin(1.0f), beta, 1);
+        if (samples == 0) return V;
+
+		// Build an orthonomal basis (u,v) spanning the plane perpendicular to d
+        glm::vec3 u(1, 0, 0), v(0, 1, 0);
+        if (d.x != 0.0f || d.y != 0.0f || d.z != 0.0f) {
+			// Choose any vector not colinear to d
+			glm::vec3 a = (std::fabs(d.z) < 0.999f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+			u = glm::normalize(glm::cross(a, d));
+			v = glm::cross(d, u);
+		}
+
+		// Integrate over [0, pi] to avoid double counting q and -q
+		// (the stick vote is symmetric along the stick axis)
+        const float dbeta = float(TV_PI) / float(samples);
+        for (unsigned i = 0; i < samples; ++i) {
+            const float beta = dbeta * float(i);
+			const glm::vec3 q = std::cos(beta) * u + std::sin(beta) * v;
+			stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,d,0.0f,c1,c2 }, q, power, 1.0f);
         }
-        const float norm = (float)1.0f / static_cast<float>(n);
-        return V * norm;
+
+		// Take the average
+        const float invN = 1.0f / float(samples);
+		V[0][0] *= invN; V[0][1] *= invN; V[0][2] *= invN;
+        V[1][0] *= invN; V[1][1] *= invN; V[1][2] *= invN;
+		V[2][0] *= invN; V[2][1] *= invN; V[2][2] *= invN;
+        return V;
     }
 
-    CUDA_CALLABLE static glm::mat3 platevote3(const glm::vec3* L, const glm::vec2 sigma, const unsigned power,
-        const int w, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x, const unsigned samples = 0) {
+    CUDA_CALLABLE static glm::mat3 platevote3(const glm::vec3* L, const std::vector<Neighbor3D>& NB, const unsigned power,
+        const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x, const unsigned samples = 0) {
 
         const int x0 = x[0];
         const int x1 = x[1];
@@ -424,39 +435,44 @@ namespace tira::tensorvote {
 
         glm::mat3 Receiver(0.0f);
 
-        const int hw = w / 2;
+        const double p_d = static_cast<double>(power);
+		const double K0 = boost::math::beta(0.5, p_d + 1.5);
+		const double K1 = boost::math::beta(0.5, p_d + 0.5);
 
-        for (int w = -hw; w < hw; w++) {                         // for each pixel in the window
-            const int r0 = static_cast<int>(x0) + w;
-            if (r0 >= 0 && r0 < s0) {
-                for (int v = -hw; v < hw; v++) {
-                    const int r1 = static_cast<int>(x1) + v;
-                    if (r1 >= 0 && r1 < s1) {
-                        for (int u = -hw; u < hw; u++) {
-                            const int r2 = static_cast<int>(x2) + u;
-                            if (r2 >= 0 && r2 < s2) {
-                                unsigned base = r0 * s1 * s2 + r1 * s2 + r2;
-                                const float l1 = L[base][1];
-                                const float l2 = L[base][2];
-                                float scale = std::copysign(std::abs(l2) - std::abs(l1), l2);
-                                if (scale != 0.0) {
-                                    const glm::vec3 uvw(u, v, w);
-                                    if (samples > 0)             // if a sample number is provided, use numerical integration
-                                        Receiver += scale * platevote3_numerical(uvw, sigma, power, samples);
-                                    else                         // otherwise use analytical integration (in progress)
-                                        Receiver += scale * platevote3(uvw, sigma, power);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        for (const auto& n : NB) {                         // For each pixel in the window
+            const int r0 = x0 + n.dw;
+            if ((unsigned)r0 >= s0) continue;
+            const int r1 = x1 + n.dv;
+            if ((unsigned)r1 >= s1) continue;
+            const int r2 = x2 + n.du;
+			if ((unsigned)r2 >= s2) continue;
+
+            const unsigned base = (unsigned)r0 * s1 * s2 + (unsigned)r1 * s2 + (unsigned)r2;
+        
+            const float l0 = L[base].x;
+            const float l1 = L[base].y;
+            float scale = std::copysign(std::abs(l1) - std::abs(l0), l1);
+            if (scale == 0.0f) continue;
+            
+            const glm::vec3 d = n.d;
+			const float c1 = n.c1, c2 = n.c2;
+            glm::mat3 V;
+            if (samples > 0)
+                // Numerical integration of stick votes to form a plate vote
+                V = platevote3_numerical(d, c1, c2, power, samples);
+            else
+				// Analytical closed form solution from direction d
+                V = platevote3_analytic(d, c1, c2, power, K0, K1);
+            
+			Receiver[0][0] += scale * V[0][0]; Receiver[0][1] += scale * V[0][1]; Receiver[0][2] += scale * V[0][2];
+			Receiver[1][0] += scale * V[1][0]; Receiver[1][1] += scale * V[1][1]; Receiver[1][2] += scale * V[1][2];
+			Receiver[2][0] += scale * V[2][0]; Receiver[2][1] += scale * V[2][1]; Receiver[2][2] += scale * V[2][2];
         }
         return Receiver;
     }
 
     static void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q, glm::vec2 sigma, unsigned int power, const unsigned w,
-        const unsigned s0, const unsigned s1, const unsigned s2, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
+        const unsigned s0, const unsigned s1, const unsigned s2, const bool STICK = true, const bool PLATE = true, const unsigned samples = 20) {
         const float sticknorm = 1.0;    // not yet implemented
 
         // Pre-compute the neighbor offsets and Gaussian factors once for (w, sigmas)
@@ -468,9 +484,9 @@ namespace tira::tensorvote {
                 for (int x2 = 0; x2 < s2; x2++) {
                     glm::mat3 Vote(0.0f);
                     if (STICK)
-                        Vote = Vote + stickvote3(L, Q, NB, power, sticknorm, s0, s1, s2, glm::ivec3(x0, x1, x2));
+                        Vote += stickvote3(L, Q, NB, power, sticknorm, s0, s1, s2, glm::ivec3(x0, x1, x2));
                     if (PLATE)
-                        Vote = Vote + platevote3(L, sigma, power, (int)w, s0, s1, s2, glm::ivec3(x0, x1, x2));
+                        Vote += platevote3(L, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
                     VT[x0 * s1 * s2 + x1 * s2 + x2] = Vote;
                 }
             }
