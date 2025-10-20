@@ -52,7 +52,7 @@ namespace tira::tensorvote {
 	template <typename T>
     CUDA_CALLABLE static T sticknorm3(const T sigma1, const T sigma2, const unsigned p) {
         T num1 = (sigma1 * sigma1) * 2.0 * TV_PI;
-        T num2 = (sigma2 * sigma2) * TV_PI * std::pow(-2, 2 * p + 1) * factorial(p) * factorial(p);
+        T num2 = (sigma2 * sigma2) * TV_PI * std::pow(2, 2 * p + 1) * factorial(p) * factorial(p);
         T den1 = 2 * p + 1;
 		T den2 = factorial(2 * p + 1);
 		return (num1 / den1) + (num2 / den2);
@@ -248,9 +248,10 @@ namespace tira::tensorvote {
 		const float invsig1 = (sigma.x > 0) ? 1.0f / (sigma.x * sigma.x) : 0.0f;
 		const float invsig2 = (sigma.y > 0) ? 1.0f / (sigma.y * sigma.y) : 0.0f;
 
-        for (int dw = -hw; dw <= hw; dw++) {                         // For each pixel in the window
-            for (int dv = -hw; dv <= hw; dv++) {
-                for (int du = -hw; du <= hw; du++) {
+        for (int dw = -hw; dw < hw; dw++) {                         // For each pixel in the window
+            for (int dv = -hw; dv < hw; dv++) {
+                for (int du = -hw; du < hw; du++) {
+                    if (du == 0 && dv == 0 && dw == 0)  continue;       // No self-contribution
                     Neighbor3D n;
 					n.du = du; n.dv = dv; n.dw = dw;
 					n.l2 = float(du * du + dv * dv + dw * dw);
@@ -330,7 +331,7 @@ namespace tira::tensorvote {
 			const float l2 = L[base].z;
             
 			// Calculate the contribution scale factor
-			const float scale = std::copysign(std::abs(l2) - std::abs(l1), l2) * norm;
+			const float scale = std::copysign(std::abs(l2) - std::abs(l1), l2);
 
             // Calculate the accumulated contribution of (du,dv,dw) to (x,y,z)
 			stickvote3_accumulate_kernel(Votee, n, q, power, scale, norm);
