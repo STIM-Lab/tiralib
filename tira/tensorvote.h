@@ -49,6 +49,14 @@ namespace tira::tensorvote {
         return trig_int * (sigma1 * sigma1 + sigma2 * sigma2);
     }
 
+	template <typename T>
+    CUDA_CALLABLE static T sticknorm3(const T sigma1, const T sigma2, const unsigned p) {
+        T num1 = (sigma1 * sigma1) * 2.0 * TV_PI;
+        T num2 = (sigma2 * sigma2) * TV_PI * std::pow(-2, 2 * p + 1) * factorial(p) * factorial(p);
+        T den1 = 2 * p + 1;
+		T den2 = factorial(2 * p + 1);
+		return (num1 / den1) + (num2 / den2);
+	}
     /// <summary>
     /// Calculate the stick vote for the relative position (u, v) given the voter eigenvales and eigenvectors
     /// </summary>
@@ -263,7 +271,7 @@ namespace tira::tensorvote {
         for (unsigned i = 1; i < power; ++i) r *= t;
 		return r;
     }
-    CUDA_CALLABLE inline void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
+    CUDA_CALLABLE inline void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale, const float norm) {
         // Calculate the contribution of (du,dv,dw) to (x,y,z)
         const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
         const float qTd2 = qTd * qTd;
@@ -275,7 +283,7 @@ namespace tira::tensorvote {
         const float rx = q.x - 2.0f * qTd * n.d.x;
         const float ry = q.y - 2.0f * qTd * n.d.y;
         const float rz = q.z - 2.0f * qTd * n.d.z;
-        const float term = scale * eta;
+        const float term = norm * scale * eta;
         M[0][0] += term * rx * rx; M[0][1] += term * rx * ry; M[0][2] += term * rx * rz;
         M[1][0] += term * ry * rx; M[1][1] += term * ry * ry; M[1][2] += term * ry * rz;
         M[2][0] += term * rz * rx; M[2][1] += term * rz * ry; M[2][2] += term * rz * rz;
@@ -294,7 +302,8 @@ namespace tira::tensorvote {
     /// <param name="s1">size of the L and V images along the second dimension</param>
     /// <param name="x">position of the receiver</param>
     /// <returns></returns>
-    CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3* L, const glm::vec3* Q, const std::vector<Neighbor3D>& NB, const unsigned power, const float norm,
+    CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3* L, const glm::vec3* Q, const std::vector<Neighbor3D>& NB,
+        const unsigned power, const float norm,
         const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
 
         const int x0 = x[0];
@@ -324,7 +333,7 @@ namespace tira::tensorvote {
 			const float scale = std::copysign(std::abs(l2) - std::abs(l1), l2) * norm;
 
             // Calculate the accumulated contribution of (du,dv,dw) to (x,y,z)
-			stickvote3_accumulate_kernel(Votee, n, q, power, scale);
+			stickvote3_accumulate_kernel(Votee, n, q, power, scale, norm);
         }
         return Votee;
     }
@@ -400,13 +409,17 @@ namespace tira::tensorvote {
         glm::mat3 V(0.0f);
         if (samples == 0) return V;
 
+		glm::vec3 dn = d;
+		float len = std::sqrt(dn.x * dn.x + dn.y * dn.y + dn.z * dn.z);
+		if (len != 0.0f) dn /= len; else dn = glm::vec3(0.0f, 0.0f, 0.0f);
+
 		// Build an orthonomal basis (u,v) spanning the plane perpendicular to d
         glm::vec3 u(1, 0, 0), v(0, 1, 0);
         if (d.x != 0.0f || d.y != 0.0f || d.z != 0.0f) {
 			// Choose any vector not colinear to d
-			glm::vec3 a = (std::fabs(d.z) < 0.999f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-			u = glm::normalize(glm::cross(a, d));
-			v = glm::cross(d, u);
+			glm::vec3 a = (std::fabs(dn.z) < 0.999f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+			u = glm::normalize(glm::cross(a, dn));
+			v = glm::cross(dn, u);
 		}
 
 		// Integrate over [0, pi] to avoid double counting q and -q
@@ -415,7 +428,7 @@ namespace tira::tensorvote {
         for (unsigned i = 0; i < samples; ++i) {
             const float beta = dbeta * float(i);
 			const glm::vec3 q = std::cos(beta) * u + std::sin(beta) * v;
-			stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,d,0.0f,c1,c2 }, q, power, 1.0f);
+			stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,dn,0.0f,c1,c2 }, q, power, 1.0f, 1.0f);
         }
 
 		// Take the average
@@ -473,7 +486,7 @@ namespace tira::tensorvote {
 
     static void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q, glm::vec2 sigma, unsigned int power, const unsigned w,
         const unsigned s0, const unsigned s1, const unsigned s2, const bool STICK = true, const bool PLATE = true, const unsigned samples = 20) {
-        const float sticknorm = 1.0;    // not yet implemented
+		const float sticknorm = 1.0 / sticknorm3(sigma.x, sigma.y, power);
 
         // Pre-compute the neighbor offsets and Gaussian factors once for (w, sigmas)
         const auto NB = build_neighbors3d((int)w, sigma);
