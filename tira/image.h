@@ -846,7 +846,8 @@ namespace tira {
 			}
 
 			std::vector<size_t> border_size = { static_cast<size_t>(w_sigma / 2), static_cast<size_t>(w_sigma2 / 2) };
-			image<T> result1 = field<T>::border(border_size);
+			//image<T> result1 = field<T>::border(border_size);
+			image<T> result1 = field<T>::Border(border_size);
 			image<T> result2 = result1.convolve2(blur);
 			image<T> result3 = result2.convolve2(blur2);
 
