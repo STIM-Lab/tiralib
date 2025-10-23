@@ -231,8 +231,7 @@ namespace tira::tensorvote {
             // Read eigenvalues at vote (only l1 and l2)
 			const float l1 = L[base_voter].y;
 			const float l2 = L[base_voter].z;
-            float scale = std::copysignf(fabsf(l2) - fabsf(l1), l2) * norm;
-			if (scale == 0.0f) continue;  // no vote from isotropic or zero tensors
+            float scale = std::copysignf(fabsf(l2) - fabsf(l1), l2);
 
             // Eigenvector at voter in spherical angles
             const glm::vec3 q = Q[base_voter];
@@ -265,7 +264,7 @@ namespace tira::tensorvote {
         Receiver[0][0] = m00; Receiver[0][1] = m01; Receiver[0][2] = m02;
         Receiver[1][0] = m01; Receiver[1][1] = m11; Receiver[1][2] = m12;
         Receiver[2][0] = m02; Receiver[2][1] = m12; Receiver[2][2] = m22;
-		VT[base_recv] += Receiver;
+		VT[base_recv] += Receiver * norm;
     }
 
     __global__ static void global_platevote3(glm::mat3* VT, glm::vec3* L, glm::vec2 sigma, unsigned int power,
@@ -350,7 +349,7 @@ namespace tira::tensorvote {
             (unsigned)((s1 + threads.y - 1) / threads.y),
             (unsigned)((s0 + threads.z - 1) / threads.z)
         );
-        float sn = 1.0f;          // Not implemented
+		float sn = 1.0f / sticknorm3(sigma, sigma2, power);
 
         start = std::chrono::high_resolution_clock::now();
         if (STICK)

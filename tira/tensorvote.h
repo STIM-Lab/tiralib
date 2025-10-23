@@ -274,7 +274,7 @@ namespace tira::tensorvote {
         for (unsigned i = 1; i < power; ++i) r *= t;
 		return r;
     }
-    CUDA_CALLABLE inline void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale, const float norm) {
+    CUDA_CALLABLE inline void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
         // Calculate the contribution of (du,dv,dw) to (x,y,z)
         const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
         const float qTd2 = qTd * qTd;
@@ -286,7 +286,7 @@ namespace tira::tensorvote {
         const float rx = q.x - 2.0f * qTd * n.d.x;
         const float ry = q.y - 2.0f * qTd * n.d.y;
         const float rz = q.z - 2.0f * qTd * n.d.z;
-        const float term = norm * scale * eta;
+        const float term = scale * eta;
         M[0][0] += term * rx * rx; M[0][1] += term * rx * ry; M[0][2] += term * rx * rz;
         M[1][0] += term * ry * rx; M[1][1] += term * ry * ry; M[1][2] += term * ry * rz;
         M[2][0] += term * rz * rx; M[2][1] += term * rz * ry; M[2][2] += term * rz * rz;
@@ -306,8 +306,7 @@ namespace tira::tensorvote {
     /// <param name="x">position of the receiver</param>
     /// <returns></returns>
     CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3* L, const glm::vec3* Q, const std::vector<Neighbor3D>& NB,
-        const unsigned power, const float norm,
-        const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
+        const unsigned power, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
 
         const int x0 = x[0];
         const int x1 = x[1];
@@ -336,7 +335,7 @@ namespace tira::tensorvote {
 			const float scale = std::copysign(std::abs(l2) - std::abs(l1), l2);
 
             // Calculate the accumulated contribution of (du,dv,dw) to (x,y,z)
-			stickvote3_accumulate_kernel(Votee, n, q, power, scale, norm);
+			stickvote3_accumulate_kernel(Votee, n, q, power, scale);
         }
         return Votee;
     }
@@ -431,7 +430,7 @@ namespace tira::tensorvote {
         for (unsigned i = 0; i < samples; ++i) {
             const float beta = dbeta * float(i);
 			const glm::vec3 q = std::cos(beta) * u + std::sin(beta) * v;
-			stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,dn,0.0f,c1,c2 }, q, power, 1.0f, 1.0f);
+			stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,dn,0.0f,c1,c2 }, q, power, 1.0f);
         }
 
 		// Take the average
@@ -468,7 +467,6 @@ namespace tira::tensorvote {
             const float l0 = L[base].x;
             const float l1 = L[base].y;
             float scale = std::copysign(std::abs(l1) - std::abs(l0), l1);
-            if (scale == 0.0f) continue;
             
             const glm::vec3 d = n.d;
 			const float c1 = n.c1, c2 = n.c2;
@@ -490,7 +488,7 @@ namespace tira::tensorvote {
     static void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q, glm::vec2 sigma, unsigned int power, const unsigned w,
         const unsigned s0, const unsigned s1, const unsigned s2, const bool STICK = true, const bool PLATE = true, const unsigned samples = 20) {
 		const float sticknorm = 1.0 / sticknorm3(sigma.x, sigma.y, power);
-
+        const float platenorm = 1.0 / TV_PI;
         // Pre-compute the neighbor offsets and Gaussian factors once for (w, sigmas)
         const auto NB = build_neighbors3d((int)w, sigma);
 
@@ -500,10 +498,10 @@ namespace tira::tensorvote {
                 for (int x2 = 0; x2 < s2; x2++) {
                     glm::mat3 Vote(0.0f);
                     if (STICK)
-                        Vote += stickvote3(L, Q, NB, power, sticknorm, s0, s1, s2, glm::ivec3(x0, x1, x2));
+                        Vote += stickvote3(L, Q, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2));
                     if (PLATE)
                         Vote += platevote3(L, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
-                    VT[x0 * s1 * s2 + x1 * s2 + x2] = Vote;
+                    VT[x0 * s1 * s2 + x1 * s2 + x2] = sticknorm * Vote;
                 }
             }
         }
