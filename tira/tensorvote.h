@@ -51,11 +51,14 @@ namespace tira::tensorvote {
 
 	template <typename T>
     CUDA_CALLABLE static T sticknorm3(const T sigma1, const T sigma2, const unsigned p) {
-        T num1 = (sigma1 * sigma1) * 2.0 * TV_PI;
-        T num2 = (sigma2 * sigma2) * TV_PI * std::pow(2, 2 * p + 1) * factorial(p) * factorial(p);
-        T den1 = 2 * p + 1;
-		T den2 = factorial(2 * p + 1);
-		return (num1 / den1) + (num2 / den2);
+        T pi_term = TV_PI * sqrt(TV_PI) / 2.0;
+		T sig1_3 = sigma1 * sigma1 * sigma1;
+		T sig2_3 = sigma2 * sigma2 * sigma2;
+        T num1 = std::pow(2, 2 * p + 1) * factorial(p) * factorial(p);
+        T num2 = 2.0;
+        T den1 = factorial(2 * p + 1);
+        T den2 = 2 * p + 1;
+		return pi_term * ((sig1_3 * num1 / den1) + (sig2_3 * num2 / den2));
 	}
     /// <summary>
     /// Calculate the stick vote for the relative position (u, v) given the voter eigenvales and eigenvectors
@@ -251,7 +254,6 @@ namespace tira::tensorvote {
         for (int dw = -hw; dw < hw; dw++) {                         // For each pixel in the window
             for (int dv = -hw; dv < hw; dv++) {
                 for (int du = -hw; du < hw; du++) {
-                    if (du == 0 && dv == 0 && dw == 0)  continue;       // No self-contribution
                     Neighbor3D n;
 					n.du = du; n.dv = dv; n.dw = dw;
 					n.l2 = float(du * du + dv * dv + dw * dw);
