@@ -519,8 +519,8 @@ namespace tira {
 		/// <typeparam name="V"></typeparam>
 		template<typename V>
 		operator volume<V>() {
-			volume<V> r(this->shape());					//create a new image
-			std::copy(&field<T>::m_data[0], &field<T>::m_data[0] + field<T>::size(), r.data());		//copy and cast the data
+			volume<V> r(this->Shape());					//create a new image
+			std::copy(this->m_data.begin(), this->m_data.begin() + this->m_data.size(), r.Data());		//copy and cast the data
 			return r;									//return the new image
 		}
 
