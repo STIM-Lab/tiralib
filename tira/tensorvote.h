@@ -274,7 +274,7 @@ namespace tira::tensorvote {
         for (unsigned i = 1; i < power; ++i) r *= t;
 		return r;
     }
-    CUDA_CALLABLE inline void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
+    CUDA_CALLABLE void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
         // Calculate the contribution of (du,dv,dw) to (x,y,z)
         const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
         const float qTd2 = qTd * qTd;
@@ -407,7 +407,7 @@ namespace tira::tensorvote {
         return PlateVote;
     }
 
-    CUDA_CALLABLE inline glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power, unsigned samples = 20) {
+    CUDA_CALLABLE glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power, unsigned samples = 20) {
         glm::mat3 V(0.0f);
         if (samples == 0) return V;
 

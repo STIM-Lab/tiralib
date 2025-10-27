@@ -116,26 +116,6 @@ protected:
      * Removes duplicated vertices within fibers and between fibers and nodes. These shouldn't occur, so a warning
      * is output whenever it happens.
      */
-    //void _remove_duplicate_points() {
-    //    for (size_t ei=0; ei< m_edges.size(); ei++) {
-    //        size_t removed = m_edges[ei].RemoveDuplicates();
-    //        if (removed != 0) {
-    //            std::cout<<"tira::vascular WARNING: "<<removed<<" duplicate points detected in the fiber associated with edge "<<ei<<std::endl;
-    //        }
-
-    //        // test for duplicates between the edge fiber and its nodes
-    //        vertex<float> v0 = m_nodes[m_edges[ei].NodeIndex0()];
-    //        if (v0 == m_edges[ei][0]) {
-    //            m_edges[ei].erase(m_edges[ei].begin());
-    //            std::cout<<"tira::vascular WARNING: node 0 is duplicated with the fiber in edge "<<ei<<std::endl;
-    //        }
-    //        vertex<float> v1 = m_nodes[m_edges[ei].NodeIndex1()];
-    //        if (v1 == m_edges[ei].back()) {
-    //            m_edges[ei].pop_back();
-    //            std::cout<<"tira::vascular WARNING: node 1 is duplicated with the fiber in edge "<<ei<<std::endl;
-    //        }
-    //    }
-    //}
     void _remove_duplicate_points() {
         for (size_t ei = 0; ei < m_edges.size(); ++ei) {
             auto& fib = m_edges[ei];
@@ -259,6 +239,10 @@ public:
     }
 
     vascular() : fibernet() {}
+
+    vascular(std::string filename) : fibernet() {
+        Load(filename);
+    }
 
     void Save(std::string filename) {
         std::ofstream out(filename, std::ios::binary);                       // create an input file stream
@@ -671,10 +655,16 @@ public:
     }
 
 
-    vascular Smooth(float sigma) {
-        fibernet new_fibernet = fibernet::Smooth(sigma);
-        vascular new_vascular(new_fibernet);
-        return new_vascular;
+    vascular Gaussian(float sigma) {
+        fibernet new_fibernet = fibernet::Gaussian(sigma);      // create a smoothed fibernet using the fibernet Gaussian() function
+        vascular new_vascular(new_fibernet);                    // cast the fibernet to a vascular structure
+        return new_vascular;                                    // return the vascular structure
+    }
+
+    vascular Subdivide(float sigma) {
+        fibernet new_fibernet = fibernet::Subdivide();          // create a subdivided fibernet using the fibernet Gaussian() function
+        vascular new_vascular(new_fibernet);                    // cast the fibernet to a vascular structure
+        return new_vascular;                                    // return the vascular structure
     }
 };
 

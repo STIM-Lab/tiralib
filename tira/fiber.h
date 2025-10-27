@@ -112,11 +112,6 @@ namespace tira {
 			return d_dt;
 		}
 
-		/*bool m_TestDuplicates(vertex<VertexAttribute> a, vertex<VertexAttribute> b) {
-			if (a.x == b.x && a.y == b.y && a.z == b.z)
-				return true;
-			return false;
-		}*/
 
 	public:
 
@@ -182,7 +177,7 @@ namespace tira {
 		 * @param sigma is the standard deviation for the smoothing kernel
 		 * @return a smoothed version of the current fiber
 		 */
-		fiber Smooth(float sigma) {
+		fiber Gaussian(float sigma) {
 
 			fiber smoothed_fiber;
 
@@ -219,8 +214,54 @@ namespace tira {
 
 			// return the smoothed version of the fiber
 			return smoothed_fiber;
-
 		}
+
+		fiber Average(float center_weight = 0.5f) {
+
+			fiber averaged_fiber;
+
+			float edge_weight = (1.0f - center_weight) / 2.0f;
+
+			int num_vertices = (int)this->size();
+
+			// add the first vertex to the smoothed fiber unchanged - the end points will remain the same
+			averaged_fiber.AddLastVertex(this->at(0));
+
+			// for each internal vertex of the fiber
+			for (int vi = 1; vi < num_vertices - 1; vi++) {
+
+				glm::vec3 weighted_point = edge_weight * this->at(vi - 1) +
+					center_weight * this->at(vi) +
+					edge_weight * this->at(vi + 1);
+				float gaussian_integral = 0.0f;
+
+				averaged_fiber.AddLastVertex(weighted_point, this->at(vi).Attribute());
+			}
+
+			// add the last point to the smoothed fiber unchanged
+			averaged_fiber.AddLastVertex((this->at(0)));
+
+			// return the smoothed version of the fiber
+			return averaged_fiber;
+		}
+
+		fiber Subdivide() {
+			fiber subdivided_fiber;
+			int num_vertices = (int)this->size();
+
+			// add the first vertex in the fiber to the new subdivided fiber
+			subdivided_fiber.AddLastVertex(this->at(0));
+
+			// iterate through the remaining vertices, adding additional vertices between them
+			for (int vi = 1; vi < num_vertices; vi++) {
+				glm::vec3 new_vertex = 0.5f * this->at(vi - 1) + 0.5f * this->at(vi);
+				subdivided_fiber.AddLastVertex(new_vertex);
+				subdivided_fiber.AddLastVertex(this->at(vi));
+			}
+			return subdivided_fiber;
+		}
+
+
 
 		size_t RemoveDuplicates() {
 			size_t size_before = this->size();
@@ -278,6 +319,14 @@ namespace tira {
 				kappa.push_back(num / denom);
 			}
 			return kappa;
+		}
+
+		std::vector<glm::vec3> Centerline() {
+			std::vector<glm::vec3> centerline(this->size());			// create a vector to store all of the centerline points
+			for (size_t i = 0; i < this->size(); i++) {					// for every vertex
+				centerline[i] = (glm::vec3)this->at(i);					// store the centerline position
+			}
+			return centerline;											// return the centerline
 		}
 
 

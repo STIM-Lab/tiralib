@@ -107,14 +107,37 @@ namespace tira {
          * 5) Creating a new edge from the internal nodes of the smoothed fiber
          *
          * @param sigma the standard deviation of the smoothing kernel (in the position units of the vertices)
+         * @param node_v0 is the starting node for the edge
+         * @param node_v1 is the ending node for the edge
          * @return a new edge with a smoothed fiber component
          */
-        edge Smooth(float sigma, vertex<VertexAttributeType> node_v0, vertex<VertexAttributeType> node_v1) {
+        edge Gaussian(float sigma, vertex<VertexAttributeType> node_v0, vertex<VertexAttributeType> node_v1) {
             fiber<VertexAttributeType> original_fiber = *this;
 
             original_fiber.insert(original_fiber.begin(), node_v0);
             original_fiber.push_back(node_v1);
-            fiber<VertexAttributeType> smoothed_fiber = original_fiber.Smooth(sigma);
+            fiber<VertexAttributeType> smoothed_fiber = original_fiber.Gaussian(sigma);
+            smoothed_fiber.erase(smoothed_fiber.begin());
+            smoothed_fiber.pop_back();
+
+            edge smoothed_edge(smoothed_fiber, m_node_indices[0], m_node_indices[1]);
+            return smoothed_edge;
+        }
+
+        /**
+         * Subdivide an edge to account for the node positions
+         *
+         * @param sigma the standard deviation of the smoothing kernel (in the position units of the vertices)
+         * @param node_v0 is the starting node for the edge
+         * @param node_v1 is the ending node for the edge
+         * @return a new edge with a subdivided fiber component
+         */
+        edge Subdivide(vertex<VertexAttributeType> node_v0, vertex<VertexAttributeType> node_v1) {
+            fiber<VertexAttributeType> original_fiber = *this;
+
+            original_fiber.insert(original_fiber.begin(), node_v0);
+            original_fiber.push_back(node_v1);
+            fiber<VertexAttributeType> smoothed_fiber = original_fiber.Subdivide();
             smoothed_fiber.erase(smoothed_fiber.begin());
             smoothed_fiber.pop_back();
 
@@ -330,7 +353,24 @@ namespace tira {
 
             aabb_min = glm::min(m_nodes[n1i], aabb_min);
             aabb_max = glm::max(m_nodes[n1i], aabb_max);
+        }
 
+        void BoundingBox(glm::vec3& aabb_min, glm::vec3& aabb_max) {
+            
+            aabb_min = m_nodes[0];
+            aabb_max = m_nodes[0];
+
+            for (size_t ei = 0; ei < m_edges.size(); ei++) {
+                glm::vec3 edge_aabb_min, edge_aabb_max;
+                BoundingBox(ei, edge_aabb_min, edge_aabb_max);
+                aabb_min[0] = std::min(edge_aabb_min[0], aabb_min[0]);
+                aabb_min[1] = std::min(edge_aabb_min[1], aabb_min[1]);
+                aabb_min[2] = std::min(edge_aabb_min[2], aabb_min[2]);
+
+                aabb_max[0] = std::max(edge_aabb_max[0], aabb_max[0]);
+                aabb_max[1] = std::max(edge_aabb_max[1], aabb_max[1]);
+                aabb_max[2] = std::max(edge_aabb_max[2], aabb_max[2]);
+            }
         }
 
         /**
@@ -405,14 +445,29 @@ namespace tira {
          * @param sigma standard deviation of the Gaussian kernel
          * @return a new fibernet with all of the fibers smoothed by the kernel
          */
-        fibernet Smooth(float sigma) {
+        fibernet Gaussian(float sigma) {
             fibernet smoothed;                                  // create a new fiber network to store the smoothed fibers
             smoothed.m_nodes = m_nodes;                           // store all nodes (their positions will be unchanged)
             for (size_t ei=0; ei< m_edges.size(); ei++) {
-                edge smoothed_edge = m_edges[ei].Smooth(sigma, m_nodes[m_edges[ei].NodeIndex0()], m_nodes[m_edges[ei].NodeIndex1()]);
+                edge smoothed_edge = m_edges[ei].Gaussian(sigma, m_nodes[m_edges[ei].NodeIndex0()], m_nodes[m_edges[ei].NodeIndex1()]);
                 smoothed.m_edges.push_back(smoothed_edge);
             }
             return smoothed;
+        }
+
+        /**
+         * @brief Subdivides the fiber geometry representing each edge
+         * @param sigma standard deviation of the Gaussian kernel
+         * @return a new fibernet with all of the fibers smoothed by the kernel
+         */
+        fibernet Subdivide() {
+            fibernet subdivided;                                  // create a new fiber network to store the smoothed fibers
+            subdivided.m_nodes = m_nodes;                           // store all nodes (their positions will be unchanged)
+            for (size_t ei = 0; ei < m_edges.size(); ei++) {
+                edge subdivided_edge = m_edges[ei].Subdivide(m_nodes[m_edges[ei].NodeIndex0()], m_nodes[m_edges[ei].NodeIndex1()]);
+                subdivided.m_edges.push_back(subdivided_edge);
+            }
+            return subdivided;
         }
 
         ////////////////////Delete and merge implementation ////////////////////////////
@@ -1026,6 +1081,33 @@ namespace tira {
             std::sort(connected_edges.begin(), connected_edges.end());
             connected_edges.erase( std::unique(connected_edges.begin(), connected_edges.end()), connected_edges.end() );
             return connected_edges;
+        }
+
+        std::vector<glm::vec3> CenterlinePoints() {
+            size_t num_node_pts = m_nodes.size();               // calculate the number of node points (equal to the number of nodes)
+            size_t num_edge_pts = 0;                            // initialize the number of edge points to zero
+            for (size_t ei = 0; ei < m_edges.size(); ei++) {
+                num_edge_pts += m_edges[ei].size();             // sum the number of edge vertices
+            }
+
+            // allocate a vector to store all of the centerline points
+            std::vector<glm::vec3> centerline_points(num_node_pts + num_edge_pts);      // pre-allocate a vector to store all centerline points
+
+
+            // copy the centerline points for all edges
+            size_t start = 0;
+            for (size_t ei = 0; ei < m_edges.size(); ei++) {                            // for each edge
+                std::vector<glm::vec3> edge_centerline = m_edges[ei].Centerline();      // get the centerline for the current edge
+                std::copy(edge_centerline.begin(), edge_centerline.end(), centerline_points.begin() + start);       // copy the edge centerline into the fibernet centerline
+                start += edge_centerline.size();
+            }
+
+            // copy the centerline points for all nodes
+            for (size_t ni = 0; ni < m_nodes.size(); ni++) {
+                centerline_points[start + ni] = (glm::vec3)m_nodes[ni];
+            }
+
+            return centerline_points;
         }
 
 	};

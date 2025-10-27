@@ -39,28 +39,29 @@ namespace tira {
 
 		}
 
-		/// <summary>
-		/// Evaluates the grid status of a given coordinate (used to generate grids)
-		/// </summary>
-		/// <param name="x"></param>
-		/// <param name="y"></param>
-		/// <param name="z"></param>
-		/// <param name="boxes"></param>
-		/// <returns></returns>
-		bool m_Grid(float x, float y, float z, unsigned int boxes) {
+		/**
+		 * @brief Evaluates the value at a specified z position for a grid of boxes. This function is used
+		 *			to generate a basic "dummy" volume for testing.
+		 * @param xi is the x index of the volume to test
+		 * @param yi is the y index of the volume to test
+		 * @param zi is the z index of the volume to test
+		 * @param boxes is the number of boxes along a dimension
+		 * @return is a binary value specifying whether or not a box exists at the current location
+		 */
+		static bool m_Grid(const float xi, const float yi, const float zi, const unsigned int boxes) {
 			bool x_box, y_box, z_box;
-			float box_size = 1.0f / (float)boxes;
-			if ((unsigned int)(z / box_size) % 2)
+			const float box_size = 1.0f / (float)boxes;
+			if ((unsigned int)(zi / box_size) % 2)
 				z_box = false;
 			else
 				z_box = true;
 
-			if ((unsigned int)(y / box_size) % 2)
+			if ((unsigned int)(yi / box_size) % 2)
 				y_box = false;
 			else
 				y_box = true;
 
-			if ((unsigned int)(x / box_size) % 2)
+			if ((unsigned int)(xi / box_size) % 2)
 				x_box = false;
 			else
 				x_box = true;
@@ -242,7 +243,7 @@ namespace tira {
 		 * @param filemask is a mask used to glob a list of files to construct the volume
 		 */
 		volume(std::string filemask) {
-			load(filemask);
+			Load(filemask);
 			_spacing = { 1.0f, 1.0f, 1.0f };
 		}
 
@@ -337,9 +338,9 @@ namespace tira {
 
 		/**
 		 * @brief Run the fast sweeping algorithm to expand a distance field through an entire volume
-		 * @param dist is the initial distance field (usually specified near the surface boundaries)
+		 * @param contour_distance is the initial distance field (usually specified near the contour surface)
 		 */
-		void FastSweep(volume<float>& dist) {
+		void FastSweep(volume<float>& contour_distance) {
 
 			// Get volume dimensions
 			int x = X();  // Number of voxels in x-direction
@@ -355,7 +356,7 @@ namespace tira {
 			for (int j = 0; j < y; j++) {
 				for (int i = 0; i < x; i++) {
 					for (int k = 0; k < z; k++) {
-						dist1d[k * (x * y) + j * x + i] = dist(i, j, k);
+						dist1d[k * (x * y) + j * x + i] = contour_distance(i, j, k);
 					}
 				}
 			}
@@ -1595,11 +1596,11 @@ namespace tira {
 			}
 		}
 
-		/// <summary>
-		/// Loads a volume from a stack of images specified by a file mask
-		/// </summary>
-		/// <param name="file_mask"></param>
-		void load(std::vector<std::string> file_names) {
+		/**
+		 * @brief Load a list of files and assemble them as a volume
+		 * @param file_names is a vector containing all of the file names to load
+		 */
+		void Load(std::vector<std::string> file_names, const bool progress = true) {
 
 			tira::image<T> test(file_names[0]);
 
@@ -1618,12 +1619,13 @@ namespace tira {
 						}
 					}
 				}
-				progressbar((float)zi / (float)Z());
+				if (progress)															// write a progress bar to the console
+					progressbar((float)zi / (float)Z());
 			}
 			std::cout << std::endl;
 		}
 
-		void load(std::string file_mask) {
+		void LoadStack(std::string directory) {
 			if (field<T>::m_shape.size() != 0) {							// if a volume is already allocated, clear it
 				field<T>::m_shape.clear();
 				field<T>::m_data.clear();
@@ -1633,7 +1635,7 @@ namespace tira {
 			// ------------- using filesystem ---------------------- //
 			
 			// obtaining the path string from input
-			std::size_t pos = file_mask.rfind("*");												// position of * in file_mask
+			/*std::size_t pos = file_mask.rfind("*");												// position of * in file_mask
 			if (pos == std::string::npos) {
 				std::cout << "Cannot compose a volume from a single image." << std::endl;
 				exit(1);
@@ -1649,20 +1651,20 @@ namespace tira {
 
 				std::cout << "File format not valid" << std::endl;
 			}
-
+			*/
 			std::set<std::filesystem::path> sorted_files;
-			for (auto& p : std::filesystem::directory_iterator(path))							// iterate through each file and stores the ones with 
+			for (auto& p : std::filesystem::directory_iterator(directory))							// iterate through each file and stores the ones with
 			{																					// desired extension in file_name vector
-				if (p.path().extension() == ext) {
-					sorted_files.insert(path + p.path().filename().string());
-				}
+				//if (p.path().extension() == ext) {
+				sorted_files.insert(directory + "/" + p.path().filename().string());
+				//}
 			}
 			std::vector<std::string> file_names;
 			for(auto &filename : sorted_files) {
 				file_names.push_back(filename.string());
 			}
 			if(file_names.size() != 0)
-				load(file_names);
+				Load(file_names);
 			else {
 				std::cout << "ERROR: No valid files found." << std::endl;
 			}
