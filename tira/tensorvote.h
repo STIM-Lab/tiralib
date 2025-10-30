@@ -404,8 +404,8 @@ namespace tira::tensorvote {
         const glm::mat3 Rz_rev = glm::transpose(Rz);
 
         // Rotate back to original coordinates in the local frame
-        const glm::mat3 term_a = Rz * A * Rz_rev;
-        const glm::mat3 term_b = Rz * B * Rz_rev;
+        const glm::mat3 term_a = Rz_rev * A * Rz;
+        const glm::mat3 term_b = Rz_rev * B * Rz;
 
         // Rotate from local back to global frame
         const glm::mat3 term_a_global = Z * term_a * Z_trans;
