@@ -349,14 +349,14 @@ namespace tira::tensorvote {
             (unsigned)((s1 + threads.y - 1) / threads.y),
             (unsigned)((s0 + threads.z - 1) / threads.z)
         );
-		float sn = 1.0f / sticknorm3(sigma, sigma2, power);
+		float sticknorm = 1.0f / sticknorm3(sigma, sigma2, power);
 
         start = std::chrono::high_resolution_clock::now();
         if (STICK)
             global_stickvote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (const glm::vec3*)gpuL, (const glm::vec3*)dQ, 
-                d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0, power, sn, (int)s0, (int)s1, (int)s2);
+                d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0, power, sticknorm, (int)s0, (int)s1, (int)s2);
         if (PLATE)
-            global_platevote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (glm::vec3*)gpuL, sig, power, sn, w, s0, s1, s2);
+            global_platevote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (glm::vec3*)gpuL, sig, power, 1.0, w, s0, s1, s2);
         cudaDeviceSynchronize();
         end = std::chrono::high_resolution_clock::now();
         float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
