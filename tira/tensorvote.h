@@ -60,6 +60,7 @@ namespace tira::tensorvote {
         T den2 = 2 * p + 1;
 		return pi_term * ((sig1_3 * num1 / den1) + (sig2_3 * num2 / den2));
 	}
+    
     /// <summary>
     /// Calculate the stick vote for the relative position (u, v) given the voter eigenvales and eigenvectors
     /// </summary>
@@ -274,6 +275,7 @@ namespace tira::tensorvote {
         for (unsigned i = 1; i < power; ++i) r *= t;
 		return r;
     }
+
     CUDA_CALLABLE void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
         // Calculate the contribution of (du,dv,dw) to (x,y,z)
         const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
@@ -425,7 +427,6 @@ namespace tira::tensorvote {
         return PlateVote;
     }
 
-
     CUDA_CALLABLE glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power, 
         const glm::vec3& evec0, unsigned samples = 20) {
         glm::mat3 V(0.0f);
@@ -445,7 +446,6 @@ namespace tira::tensorvote {
             u = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), evec0));
 		}
 		v = glm::cross(evec0, u);
-		
 
 		// Integrate over [0, pi] to avoid double counting q and -q
 		// (the stick vote is symmetric along the stick axis)

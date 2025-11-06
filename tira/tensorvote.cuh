@@ -188,13 +188,30 @@ namespace tira::tensorvote {
         dn.used_const = false;
     }
 
+    __device__ static inline float term_power_device(float t, unsigned power) {
+        float r = t;
+        for (unsigned i = 1; i < power; ++i)
+			r *= t;
+        return r;
+    }
+
     __global__ static void spherical_to_cart3_kernel(float* Qout,
-        const float* V6, size_t N)
-    {
+        const float* V6, bool evec_largest, size_t N) {
         size_t i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= N) return;
-		float theta = V6[i * 6 + 4];
-        float phi = V6[i * 6 + 5];
+
+        float theta, phi;
+        // Stick vote uses the largest eigenvector (evec2)
+        if (evec_largest) {
+            theta = V6[i * 6 + 4];
+            phi   = V6[i * 6 + 5];
+        }
+		// Plate vote uses the smallest eigenvector (evec0)
+        else {
+			theta = V6[i * 6 + 0];
+			phi   = V6[i * 6 + 1];
+        }
+
         float st, ct; sincosf(theta, &st, &ct);
 		float sp, cp; sincosf(phi, &sp, &cp);
 
@@ -267,9 +284,117 @@ namespace tira::tensorvote {
 		VT[base_recv] += Receiver * norm;
     }
 
-    __global__ static void global_platevote3(glm::mat3* VT, glm::vec3* L, glm::vec2 sigma, unsigned int power,
-        int w, int s0, int s1, int s2, unsigned samples) {
-	    return; // Not implemented yet
+    __device__ static inline void stickvote3_accumulate_kernel_device(float& m00, float& m01, float& m02,
+                                                                      float& m11, float& m12, float& m22,
+                                                                      const float3 d, const float c1, const float c2,
+                                                                      const glm::vec3 q, const float scale, const unsigned power) 
+    {
+		const float qTd = q.x * d.x + q.y * d.y + q.z * d.z;
+		const float qTd2 = qTd * qTd;
+        float eta;
+        if (power == 1)
+            eta = c1 * (1.0f - qTd2) + c2 * qTd2;
+        else
+			eta = c1 * term_power_device(1.0f - qTd2, power) + c2 * term_power_device(qTd2, power);
+
+		const float rx = q.x - 2.0f * qTd * d.x;
+		const float ry = q.y - 2.0f * qTd * d.y;
+		const float rz = q.z - 2.0f * qTd * d.z;
+        const float term = scale * eta;
+
+		m00 += term * rx * rx; m01 += term * rx * ry; m02 += term * rx * rz;
+		m11 += term * ry * ry; m12 += term * ry * rz; m22 += term * rz * rz;
+	}
+    __device__ static inline void platevote3_numerical_device(float& m00, float& m01, float& m02,
+        float& m11, float& m12, float& m22,
+        const float3 d, const float c1, const float c2,
+        const glm::vec3 evec0, float scale, const unsigned samples)
+    {
+		if (samples == 0) return;
+
+        float3 dn = d;
+		float len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+        if (len != 0.0f) {
+            dn.x /= len; dn.y /= len; dn.z /= len;
+        }
+        else {
+            dn.x = dn.y = dn.z = 0.0f;
+        }
+
+        glm::vec3 u, v;
+        if (fabsf(evec0.z) < 0.999f) {
+            u = glm::normalize(glm::cross(evec0, glm::vec3(0.0f, 0.0f, 1.0f)));
+        }
+        else {
+            u = glm::normalize(glm::cross(evec0, glm::vec3(1.0f, 0.0f, 0.0f)));
+		}
+        v = glm::cross(evec0, u);
+
+		const float dbeta = float(TV_PI) / float(samples);
+
+		float v00 = 0.0f, v01 = 0.0f, v02 = 0.0f;
+        float v11 = 0.0f, v12 = 0.0f, v22 = 0.0f;
+
+        for (unsigned i = 0; i < samples; ++i) {
+            float beta = dbeta * (float(i));
+            float cb, sb;
+            sincosf(beta, &sb, &cb);
+            glm::vec3 q = cb * u + sb * v;
+
+            stickvote3_accumulate_kernel_device(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, scale, 1.0f);
+        }
+
+		m00 += scale * v00 * dbeta; m01 += scale * v01 * dbeta; m02 += scale * v02 * dbeta;
+		m11 += scale * v11 * dbeta; m12 += scale * v12 * dbeta; m22 += scale * v22 * dbeta;
+    }
+
+
+    __global__ static void global_platevote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_small, const Neighbor3D_CUDA* d_neigbors_glob,
+        int nb_count, int usedConst, unsigned int power, float norm, int s0, int s1, int s2, unsigned samples) {
+        int x2 = blockDim.x * blockIdx.x + threadIdx.x;
+        int x1 = blockDim.y * blockIdx.y + threadIdx.y;
+        int x0 = blockDim.z * blockIdx.z + threadIdx.z;
+        if (x0 >= s0 || x1 >= s1 || x2 >= s2)
+            return;
+
+        const unsigned base_recv = (unsigned)x0 * s1 * s2 + (unsigned)x1 * s2 + (unsigned)x2;
+
+        // Accumulator for the receiver voxel (symmetric 3x3 matrix)
+        float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
+        float m11 = 0.0f, m12 = 0.0f, m22 = 0.0f;
+
+        // Loop over neighbors
+        for (int k = 0; k < nb_count; ++k) {
+            const Neighbor3D_CUDA& nb = (usedConst ? d_neighbors_const[k] : d_neigbors_glob[k]);
+            const int r0 = x0 + nb.dw;
+            const int r1 = x1 + nb.dv;
+            const int r2 = x2 + nb.du;
+            if ((unsigned)r0 >= s0 || (unsigned)r1 >= s1 || (unsigned)r2 >= s2) continue;   // out of bounds
+            const unsigned base_voter = (unsigned)r0 * s1 * s2 + (unsigned)r1 * s2 + (unsigned)r2;
+
+            // Read eigenvalues at vote (only l0 and l1 for plate)
+            const float l0 = L[base_voter].x;
+			const float l1 = L[base_voter].y;
+            float scale = std::copysignf(fabsf(l1) - fabsf(l0), l1);
+
+            // Eigenvector at voter in spherical angles
+            const glm::vec3 evec0 = Q_small[base_voter];
+
+			// Numerical integration (analytical is not implemented yet)
+            if (samples > 0)
+                platevote3_numerical_device(m00, m01, m02, m11, m12, m22,
+                    nb.d, nb.c1, nb.c2, evec0, scale, samples);
+            else {
+				// Not implemented
+                return;
+            }
+
+			glm::mat3 Receiver;
+			Receiver[0][0] = m00; Receiver[0][1] = m01; Receiver[0][2] = m02;
+			Receiver[1][0] = m01; Receiver[1][1] = m11; Receiver[1][2] = m12;
+			Receiver[2][0] = m02; Receiver[2][1] = m12; Receiver[2][2] = m22;
+			VT[base_recv] += Receiver * norm;
+        }
     }
 
     static void tensorvote3_cuda(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float sigma,
@@ -327,14 +452,20 @@ namespace tira::tensorvote {
 		float t_host2device = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
         // Convert spherical angles to cartesian Q
-        float* dQ = nullptr;
-        HANDLE_ERROR(cudaMalloc(&dQ, 3 * n_voxels * sizeof(float)));
+        float* dQ_large = nullptr;
+		float* dQ_small = nullptr;
+		const size_t cartesian_bytes = sizeof(float) * 3 * n_voxels;
+        if (STICK) HANDLE_ERROR(cudaMalloc(&dQ_large, cartesian_bytes));
+        if (PLATE) HANDLE_ERROR(cudaMalloc(&dQ_small, cartesian_bytes));
         {
             int t = 256; int g = (int)((n_voxels + t - 1) / t);
-            spherical_to_cart3_kernel << <g, t >> > (dQ, (const float*)gpuV, n_voxels);
+            if (STICK)
+                spherical_to_cart3_kernel << <g, t >> > (dQ_large, (const float*)gpuV, true, n_voxels);
+            if (PLATE)
+				spherical_to_cart3_kernel << <g, t >> > (dQ_small, (const float*)gpuV, false, n_voxels);
             HANDLE_ERROR(cudaDeviceSynchronize());
         }
-
+        
         // Allocate output on device
         start = std::chrono::high_resolution_clock::now();
         HANDLE_ERROR(cudaMalloc(&gpuOutputField, tensorField_bytes));
@@ -350,13 +481,14 @@ namespace tira::tensorvote {
             (unsigned)((s0 + threads.z - 1) / threads.z)
         );
 		float sticknorm = 1.0f / sticknorm3(sigma, sigma2, power);
-
+		float platenorm = 1.0f; // Not implemented yet
         start = std::chrono::high_resolution_clock::now();
         if (STICK)
-            global_stickvote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (const glm::vec3*)gpuL, (const glm::vec3*)dQ, 
+            global_stickvote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (const glm::vec3*)gpuL, (const glm::vec3*)dQ_large,
                 d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0, power, sticknorm, (int)s0, (int)s1, (int)s2);
         if (PLATE)
-            global_platevote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (glm::vec3*)gpuL, sig, power, 1.0, w, s0, s1, s2);
+            global_platevote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (const glm::vec3*)gpuL, (const glm::vec3*)dQ_small, 
+                d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0, power, platenorm, (int)s0, (int)s1, (int)s2, samples);
         cudaDeviceSynchronize();
         end = std::chrono::high_resolution_clock::now();
         float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
