@@ -3,7 +3,7 @@
 #include <tira/cuda/callable.h>
 
 #define PI 3.14159265358979323846
-
+#define TIRA_EPSILON 1e-12
 
 namespace tira {
 
@@ -28,6 +28,7 @@ namespace tira {
         // | b0  b1  b2 |
         return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 	}
+    
     template <typename T>
     CUDA_CALLABLE T determinant3(const T a, const T b, const T c, const T d,
         const T e, const T f) {
@@ -155,7 +156,7 @@ namespace tira {
 	    // | d  e  f |
 
         const T upper_diagonal_norm = b * b + d * d + e * e;
-        if (upper_diagonal_norm == T(0)) {
+        if (upper_diagonal_norm < T(TIRA_EPSILON)) {
             evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
             return;
         }
@@ -304,7 +305,7 @@ namespace tira {
 
         // determine if the matrix is diagonal
         const T p1 = b * b + d * d + e * e;
-        if (p1 == T(0)) {
+        if (p1 < T(TIRA_EPSILON)) {
             eval0 = a;  eval1 = c;  eval2 = f;
             if (eval0 > eval1) std::swap(eval0, eval1);
             if (eval1 > eval2) std::swap(eval1, eval2);
@@ -464,7 +465,7 @@ namespace tira {
 
 		// test to see if this matrix is diagonal, return basis vectors if it is
         const T upper_diagonal_norm = b * b + d * d + e * e;
-        if (upper_diagonal_norm == T(0)) {
+        if (upper_diagonal_norm < T(TIRA_EPSILON)) {
             evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
             evec1[0] = T(0);    evec1[1] = T(1);    evec1[2] = T(0);
             evec2[0] = T(0);    evec2[1] = T(0);    evec2[2] = T(1);
@@ -474,7 +475,12 @@ namespace tira {
         const T q = (a + c + f) / T(3);
         const T p2 = pow(a - q, 2) + pow(c - q, 2) + pow(f - q, 2) + T(2) * upper_diagonal_norm;
         const T p = sqrt(p2 / T(6));
-        T halfDet = determinant3(a - q, b, c - q, d, e, f - q) / T(2) * pow(p, 3);
+        T halfDet;
+        if (p == T(0))
+            halfDet = T(0);
+        else
+            // formula is det(A-qI) / (2 * p^3)
+            halfDet = determinant3(a - q, b, c - q, d, e, f - q) / (T(2) * pow(p, 3));
         halfDet = (halfDet < T(-1)) ? T(-1) : ((halfDet > T(1)) ? T(1) : halfDet);
 
         if (halfDet >= T(0)) {
