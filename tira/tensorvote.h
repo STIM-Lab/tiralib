@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 
 #define TV_PI 3.14159265358979323846
+#define TIRA_VOTE_EPSILON 1e-12
 
 namespace tira::tensorvote {
     template <typename T>
@@ -429,8 +430,11 @@ namespace tira::tensorvote {
 
     CUDA_CALLABLE glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power, 
         const glm::vec3& evec0, unsigned samples = 20) {
+
+        // A zero-vector has no orientation and cannot vote
+        const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
         glm::mat3 V(0.0f);
-        if (samples == 0) return V;
+        if (samples == 0 or evec_len2 < TIRA_VOTE_EPSILON) return V;
 
 		glm::vec3 dn = d;
 		float len = std::sqrt(dn.x * dn.x + dn.y * dn.y + dn.z * dn.z);
@@ -446,7 +450,7 @@ namespace tira::tensorvote {
             u = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), evec0));
 		}
 		v = glm::cross(evec0, u);
-
+        
 		// Integrate over [0, pi] to avoid double counting q and -q
 		// (the stick vote is symmetric along the stick axis)
         const float dbeta = float(TV_PI) / float(samples);
@@ -463,7 +467,7 @@ namespace tira::tensorvote {
         return V;
     }
 
-    CUDA_CALLABLE static glm::mat3 platevote3(const glm::vec3* L, const glm::vec3* Q_samll, const std::vector<Neighbor3D>& NB, const unsigned power,
+    CUDA_CALLABLE static glm::mat3 platevote3(const glm::vec3* L, const glm::vec3* Q_small, const std::vector<Neighbor3D>& NB, const unsigned power,
         const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x, const unsigned samples = 0) {
 
         const int x0 = x[0];
@@ -486,7 +490,7 @@ namespace tira::tensorvote {
 
             const unsigned base = (unsigned)r0 * s1 * s2 + (unsigned)r1 * s2 + (unsigned)r2;
             
-			const glm::vec3 evec0 = Q_samll[base];
+			const glm::vec3 evec0 = Q_small[base];
             const float l0 = L[base].x;
             const float l1 = L[base].y;
             float scale = std::copysign(std::abs(l1) - std::abs(l0), l1);

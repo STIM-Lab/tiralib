@@ -3,7 +3,7 @@
 #include <tira/cuda/callable.h>
 
 #define PI 3.14159265358979323846
-#define TIRA_EPSILON 1e-12
+#define TIRA_EIGEN_EPSILON 1e-12
 
 namespace tira {
 
@@ -93,7 +93,6 @@ namespace tira {
         T l0, l1;
         quad_root(-tr, det, l0, l1);    // find the roots of the quadratic equation - these are the eigenvalues
 
-
         eval0 = std::abs(l0) < std::abs(l1) ? l0 : l1;  // sort the eigenvalues based on their magnitude
         eval1 = std::abs(l0) > std::abs(l1) ? l0 : l1;
     }
@@ -156,7 +155,7 @@ namespace tira {
 	    // | d  e  f |
 
         const T upper_diagonal_norm = b * b + d * d + e * e;
-        if (upper_diagonal_norm < T(TIRA_EPSILON)) {
+        if (upper_diagonal_norm < T(TIRA_EIGEN_EPSILON)) {
             evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
             return;
         }
@@ -305,7 +304,7 @@ namespace tira {
 
         // determine if the matrix is diagonal
         const T p1 = b * b + d * d + e * e;
-        if (p1 < T(TIRA_EPSILON)) {
+        if (p1 < T(TIRA_EIGEN_EPSILON)) {
             eval0 = a;  eval1 = c;  eval2 = f;
             if (eval0 > eval1) std::swap(eval0, eval1);
             if (eval1 > eval2) std::swap(eval1, eval2);
@@ -317,6 +316,10 @@ namespace tira {
         const T q = tr / T(3);
         const T p2 = pow(a-q, 2) + pow(c-q, 2) + pow(f-q, 2) + T(2) * p1;
         T p = sqrt(p2 / T(6));
+        if (std::isnan(p)) {
+            eval0 = -111.0; eval1 = -111.0; eval2 = -111.0;
+            return; // Exit and report "error -111"
+        }
 
         // The matrix C = A - q*I is represented by the following, where
         // b00, b11 and b22 are computed after these comments,
@@ -326,6 +329,10 @@ namespace tira {
         //       | Bd  Be  Bf  |      p  | d     e     f-q |
         //       +-           -+         +-               -+
         const T p_inv = T(1) / p;
+        if (std::isnan(p_inv)) {
+            eval0 = -222.0; eval1 = -222.0; eval2 = -222.0;
+            return; // Exit and report "error -222"
+        }
         const T Ba = p_inv * (a - q);
         const T Bb = p_inv * b;
         const T Bc = p_inv * (c - q);
@@ -341,10 +348,22 @@ namespace tira {
         if (r < T(-1)) phi = T(PI) / T(3);
         else if (r >= T(1)) phi = T(0);
         else phi = acos(r) / T(3);
+        if (std::isnan(phi)) {
+            eval0 = -333.0; eval1 = -333.0; eval2 = -333.0;
+            return; // Exit and report "error -333"
+        }
 
         eval2 = q + T(2) * p * cos(phi);
         eval0 = q + T(2) * p * cos(phi + (T(2) * T(PI) / T(3)));
         eval1 = tr - eval0 - eval2;
+        if (std::isnan(eval0)) {
+            eval0 = -444.0; eval1 = -444.0; eval2 = -444.0;
+            return; // Exit and report "error -444"
+		}
+        if (std::isnan(eval2)) {
+            eval0 = -555.0; eval1 = -555.0; eval2 = -555.0;
+			return; // Exit and report "error -555"
+        }
     }
 
     /**
@@ -465,7 +484,7 @@ namespace tira {
 
 		// test to see if this matrix is diagonal, return basis vectors if it is
         const T upper_diagonal_norm = b * b + d * d + e * e;
-        if (upper_diagonal_norm < T(TIRA_EPSILON)) {
+        if (upper_diagonal_norm < T(TIRA_EIGEN_EPSILON)) {
             evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
             evec1[0] = T(0);    evec1[1] = T(1);    evec1[2] = T(0);
             evec2[0] = T(0);    evec2[1] = T(0);    evec2[2] = T(1);
@@ -589,7 +608,16 @@ namespace tira::cpu {
 			T f = mats[i * 9 + 8];
 
             eval3_symmetric(a,b,c,d,e,f, eval0, eval1, eval2);
-
+            /*if (eval0 == -111 || eval0 == -222 || eval0 == -333 || eval0 == -444 
+                || eval0 == -555 and func_vote) {
+                std::cout << "----------------------------------------------" << std::endl;
+                std::cout << "Wrong evals at " << i << std::endl;
+                std::cout << "eval0: " << eval0 << " eval1: " << eval1 << " eval2: " << eval2 << std::endl;
+				std::cout << "Matrix: " << std::endl;
+				std::cout << a << " " << b << " " << d << std::endl;
+				std::cout << b << " " << c << " " << e << std::endl;
+                std::cout << d << " " << e << " " << f << std::endl;
+            }*/
 			// The new eigenvalues are scaled. Revert the scaling
             evals[i * 3 + 0] = eval0;
             evals[i * 3 + 1] = eval1;
