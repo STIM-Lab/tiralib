@@ -428,7 +428,8 @@ namespace tira::tensorvote {
         return PlateVote;
     }
 
-    CUDA_CALLABLE glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power, 
+
+    CUDA_CALLABLE glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power,
         const glm::vec3& evec0, unsigned samples = 20) {
 
         // A zero-vector has no orientation and cannot vote
@@ -437,8 +438,8 @@ namespace tira::tensorvote {
         if (samples == 0 or evec_len2 < TIRA_VOTE_EPSILON) return V;
 
 		glm::vec3 dn = d;
-		float len = std::sqrt(dn.x * dn.x + dn.y * dn.y + dn.z * dn.z);
-		if (len != 0.0f) dn /= len; else dn = glm::vec3(0.0f, 0.0f, 0.0f);
+		//float len = std::sqrt(dn.x * dn.x + dn.y * dn.y + dn.z * dn.z);
+		//if (len != 0.0f) dn /= len; else dn = glm::vec3(0.0f, 0.0f, 0.0f);
 
 		// Build an orthonomal basis (u,v) spanning the plane perpendicular to d
         glm::vec3 u, v;

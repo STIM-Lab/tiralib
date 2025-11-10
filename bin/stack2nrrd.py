@@ -24,11 +24,11 @@ output_file = sys.argv[2]
 # store the spacing based on user input (default is isotropic)
 spacing = [1.0, 1.0, 1.0]
 if(nargs > 3):
-    spacing[0] = float(sys.argv[3])
+    spacing[2] = float(sys.argv[3])
 if(nargs > 4):
     spacing[1] = float(sys.argv[4])
 if(nargs > 5):
-    spacing[2] = float(sys.argv[5])
+    spacing[0] = float(sys.argv[5])
 
 # load the file list and provide the user with information about the stack
 fnames = os.listdir(input_path)
@@ -46,7 +46,7 @@ data_type = proto_image.dtype
 
 print(str(nfiles) + " images detected for processing into a " + str(stack_size[0]) + "x" + str(stack_size[1]) + "x" + str(stack_size[2]) + " nrrd file")
 print("output file: " + output_file)
-print("voxel spacing: " + str(spacing[0]) + " x " + str(spacing[1]) + " x " + str(spacing[2]))
+print("voxel spacing: " + "x = " + str(spacing[2]) + ", y = " + str(spacing[1]) + ", z = " + str(spacing[0]))
 confirm_yn = input("continue [Y/n] ")
 
 if(confirm_yn != 'Y'):
@@ -59,7 +59,7 @@ S = np.zeros(stack_size, dtype=data_type)
 for fi in tqdm(range(nfiles)):
     f = os.path.join(input_path, fnames[fi])
     image = ski.io.imread(f)
-    S[:, :, fi] = np.transpose(image)
+    S[fi, :, :] = np.transpose(image)
     
 # generate the header file
 output_header = OrderedDict()
