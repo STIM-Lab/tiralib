@@ -373,7 +373,7 @@ namespace tira::tensorvote {
 
         // Compute beta and hypergeometric integrals
         const double p_d = static_cast<double>(power);
-        const double a2_d = static_cast<double>(a2);
+        const double a2_d = std::min(static_cast<double>(a2), 1.0);
         const double J0 = 0.5 * TV_PI * boost::math::hypergeometric_pFq(std::vector<double>{ -p_d, 1.5 },
              std::vector<double>{ 2.0 }, a2_d);
         const double J1 = TV_PI * boost::math::hypergeometric_pFq(std::vector<double>{ -p_d, 0.5 },
