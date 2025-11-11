@@ -435,11 +435,9 @@ namespace tira::tensorvote {
         // A zero-vector has no orientation and cannot vote
         const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
         glm::mat3 V(0.0f);
-        if (samples == 0 or evec_len2 < TIRA_VOTE_EPSILON) return V;
+        if (samples == 0 or !(evec_len2 > TIRA_VOTE_EPSILON)) return V;
 
 		glm::vec3 dn = d;
-		//float len = std::sqrt(dn.x * dn.x + dn.y * dn.y + dn.z * dn.z);
-		//if (len != 0.0f) dn /= len; else dn = glm::vec3(0.0f, 0.0f, 0.0f);
 
 		// Build an orthonomal basis (u,v) spanning the plane perpendicular to d
         glm::vec3 u, v;

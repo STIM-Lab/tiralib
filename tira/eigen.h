@@ -513,6 +513,11 @@ namespace tira {
             cross3(evec0, evec1, evec2);        // evec2 = evec0 x evec1
             normalize3(evec2);
         }
+
+		// Clamp to [-1,1] to avoid NaNs from acos in case of numerical drift
+		evec0[2] = (evec0[2] < T(-1)) ? T(-1) : ((evec0[2] > T(1)) ? T(1) : evec0[2]);
+		evec1[2] = (evec1[2] < T(-1)) ? T(-1) : ((evec1[2] > T(1)) ? T(1) : evec1[2]);
+		evec2[2] = (evec2[2] < T(-1)) ? T(-1) : ((evec2[2] > T(1)) ? T(1) : evec2[2]);
     }
 
     template <typename T>
