@@ -166,12 +166,15 @@ namespace tira::cuda {
         if (device < 0)                                                     // if the device is < zero, run the CPU version
             return cpu::evals3_symmetric(mats, n);
 
+        // Set up sizes for GPU storage
+        const size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
+        const size_t evals_bytes = sizeof(T) * 3 * n;                             // required bytes for storing eigenvalues
+
+		// Set up pointers
         const T* gpu_mats;
         T* temp_gpu_mats;
-        size_t mats_bytes = sizeof(T) * 9 * n;                              // required bytes for storing the tensor
-        size_t evals_bytes = sizeof(T) * 3 * n;                             // required bytes for storing eigenvalues
 
-        // determine if the source volume is provided on the CPU or GPU
+        // Determine if the source volume is provided on the CPU or GPU
         cudaPointerAttributes attribs;										// create a pointer attribute structure
         HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			    // get the attributes for the source pointer
 
