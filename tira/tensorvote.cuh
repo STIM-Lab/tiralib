@@ -296,7 +296,6 @@ namespace tira::tensorvote {
             eta = c1 * (1.0f - qTd2) + c2 * qTd2;
         else
 			eta = c1 * term_power_device(1.0f - qTd2, power) + c2 * term_power_device(qTd2, power);
-
 		const float rx = q.x - 2.0f * qTd * d.x;
 		const float ry = q.y - 2.0f * qTd * d.y;
 		const float rz = q.z - 2.0f * qTd * d.z;
@@ -310,16 +309,11 @@ namespace tira::tensorvote {
         const float3 d, const float c1, const float c2,
         const glm::vec3 evec0, float scale, const unsigned samples)
     {
-		if (samples == 0) return;
+        // A zero-vector has no orientation and cannot vote
+        const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
+		if (samples == 0 or !(evec_len2 > TIRA_VOTE_EPSILON)) return;
 
         float3 dn = d;
-		float len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
-        if (len != 0.0f) {
-            dn.x /= len; dn.y /= len; dn.z /= len;
-        }
-        else {
-            dn.x = dn.y = dn.z = 0.0f;
-        }
 
         glm::vec3 u, v;
         if (fabsf(evec0.z) < 0.999f) {
@@ -331,21 +325,19 @@ namespace tira::tensorvote {
         v = glm::cross(evec0, u);
 
 		const float dbeta = float(TV_PI) / float(samples);
-
 		float v00 = 0.0f, v01 = 0.0f, v02 = 0.0f;
         float v11 = 0.0f, v12 = 0.0f, v22 = 0.0f;
 
         for (unsigned i = 0; i < samples; ++i) {
             float beta = dbeta * (float(i));
-            float cb, sb;
-            sincosf(beta, &sb, &cb);
+			float cb = cosf(beta);
+			float sb = sinf(beta);
             glm::vec3 q = cb * u + sb * v;
-
             stickvote3_accumulate_kernel_device(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, scale, 1.0f);
         }
 
-		m00 += scale * v00 * dbeta; m01 += scale * v01 * dbeta; m02 += scale * v02 * dbeta;
-		m11 += scale * v11 * dbeta; m12 += scale * v12 * dbeta; m22 += scale * v22 * dbeta;
+		m00 += v00 * dbeta; m01 += v01 * dbeta; m02 += v02 * dbeta;
+		m11 += v11 * dbeta; m12 += v12 * dbeta; m22 += v22 * dbeta;
     }
 
 
@@ -388,13 +380,12 @@ namespace tira::tensorvote {
 				// Not implemented
                 return;
             }
-
-			glm::mat3 Receiver;
-			Receiver[0][0] = m00; Receiver[0][1] = m01; Receiver[0][2] = m02;
-			Receiver[1][0] = m01; Receiver[1][1] = m11; Receiver[1][2] = m12;
-			Receiver[2][0] = m02; Receiver[2][1] = m12; Receiver[2][2] = m22;
-			VT[base_recv] += Receiver * norm;
         }
+        glm::mat3 Receiver;
+        Receiver[0][0] = m00; Receiver[0][1] = m01; Receiver[0][2] = m02;
+        Receiver[1][0] = m01; Receiver[1][1] = m11; Receiver[1][2] = m12;
+        Receiver[2][0] = m02; Receiver[2][1] = m12; Receiver[2][2] = m22;
+        VT[base_recv] += Receiver * norm;
     }
 
     static void tensorvote3_cuda(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float sigma,
