@@ -346,11 +346,7 @@ namespace tira::tensorvote {
     CUDA_CALLABLE  static glm::mat3 platevote3_analytic(const glm::vec3& d, float c1, float c2, unsigned power, 
         const glm::vec3& evec0, double K0, double K1) {
 
-        // Calculate the distance between voter and votee
         glm::vec3 dn = d;
-		float len = std::sqrt(dn.x * dn.x + dn.y * dn.y + dn.z * dn.z);
-		if (len != 0.0f) dn = dn / len;
-		else dn = glm::vec3(0.0f, 0.0f, 0.0f);
 
 		// Building the local coordinate system (rotate so that plate normal aligns with z-axis)
         glm::vec3 u, v;
