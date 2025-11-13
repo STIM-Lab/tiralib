@@ -359,8 +359,12 @@ namespace tira{
             std::ofstream ofs(filename);
             ofs.write(ss.str().c_str(), ss.str().size());
             ofs.close();
+        }
 
-            
+        void Load(const std::string& filename) {
+
+            std::ifstream infile(filename);
+
         }
 
         
