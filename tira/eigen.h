@@ -23,6 +23,11 @@ namespace tira {
     }
     
     template <typename T>
+    CUDA_CALLABLE T abs(T a) {
+        return (a < (T)0) ? -a : a;
+	}
+
+    template <typename T>
     CUDA_CALLABLE T dot3(const T* a, const T* b) {
         // | a0  a1  a2 |
         // | b0  b1  b2 |
@@ -93,8 +98,8 @@ namespace tira {
         T l0, l1;
         quad_root(-tr, det, l0, l1);    // find the roots of the quadratic equation - these are the eigenvalues
 
-        eval0 = std::abs(l0) < std::abs(l1) ? l0 : l1;  // sort the eigenvalues based on their magnitude
-        eval1 = std::abs(l0) > std::abs(l1) ? l0 : l1;
+        eval0 = abs(l0) < abs(l1) ? l0 : l1;  // sort the eigenvalues based on their magnitude
+        eval1 = abs(l0) > abs(l1) ? l0 : l1;
     }
 
     /// Calculate the eigenvectors of a 2x2 matrix associated with the two eigenvalues stored in lambdas.
@@ -111,9 +116,7 @@ namespace tira {
         T a_l0 = a - l0;
         T a_l1 = a - l1;
 
-        T abs_a_l0 = std::abs(a_l0);
-        T abs_a_l1 = std::abs(a_l1);
-        if (abs_a_l0 >= abs_a_l1) {
+        if (abs(a_l0) >= abs(a_l1)) {
             theta1 = std::atan2(b, a_l0);
             theta0 = theta1 + (PI / 2.0);
             if (theta0 > PI) theta0 -= 2 * PI;
@@ -134,7 +137,7 @@ namespace tira {
     CUDA_CALLABLE void ComputeOrthogonalComplement(const T* evec, T* U, T* V) {
         // Compute a right-handed orthonormal set { U, V, evec }
         T inv;
-        if (std::fabs(evec[0]) > std::fabs(evec[1])) {
+        if (abs(evec[0]) > abs(evec[1])) {
             // The component of maximum absolute value is either evec[0] or evec[2]
 		    inv = T(1) / sqrt(evec[0] * evec[0] + evec[2] * evec[2]);
             U[0] = -evec[2] * inv;  U[1] = T(0);    U[2] = evec[0] * inv; // U is orthogonal to evec
@@ -226,9 +229,9 @@ namespace tira {
 	    T m11 = dot3(V, AV) - eval1;
 
         // Choose the largest-length row of M to compute the eigenvector
-        T absM00 = std::fabs(m00);
-        T absM01 = std::fabs(m01);
-        T absM11 = std::fabs(m11);
+        T absM00 = abs(m00);
+        T absM01 = abs(m01);
+        T absM11 = abs(m11);
         T maxAbsComp;
 
         if (absM00 >= absM11) {
@@ -314,7 +317,12 @@ namespace tira {
         
 		const T tr = a + c + f; // trace of the matrix
         const T q = tr / T(3);
-        const T p2 = pow(a-q, 2) + pow(c-q, 2) + pow(f-q, 2) + T(2) * p1;
+
+		const T aq = a - q;
+		const T cq = c - q;
+		const T fq = f - q;
+
+        const T p2 = aq * aq + cq * cq + fq * fq + T(2) * p1;
         T p = sqrt(p2 / T(6));
 
         // The matrix C = A - q*I is represented by the following, where
@@ -326,12 +334,12 @@ namespace tira {
         //       +-           -+         +-               -+
         const T p_inv = T(1) / p;
 
-        const T Ba = p_inv * (a - q);
+        const T Ba = p_inv * aq;
         const T Bb = p_inv * b;
-        const T Bc = p_inv * (c - q);
+        const T Bc = p_inv * cq;
         const T Bd = p_inv * d;
         const T Be = p_inv * e;
-        const T Bf = p_inv * (f - q);
+        const T Bf = p_inv * fq;
 
         // calculate the determinant of B
         const T det_B = Ba * (Bc * Bf - Be * Be) - Bb * (Bb * Bf - Bd * Be) + Bd * (Bb * Be - Bd * Bc);
@@ -346,111 +354,6 @@ namespace tira {
         eval0 = q + T(2) * p * cos(phi + (T(2) * T(PI) / T(3)));
         eval1 = tr - eval0 - eval2;
     }
-
-    /**
-     * Calculate the eigenvalues of a 3x3 symmetric matrix. This code is adapted from a paper by David Eberly
-     * available here:
-     * https://www.geometrictools.com/Documentation/RobustEigenSymmetric3x3.pdf
-     *
-     * Links to the adopted code are provided and Eberly's comments are appended in the adopted code for the function.
-     *
-     * @tparam T
-     * @param a
-     * @param b
-     * @param c
-     * @param d
-     * @param e
-     * @param f
-     * @param eval0
-     * @param eval1
-     * @param eval2
-     */
-    /*template<typename T>
-    CUDA_CALLABLE void eval3_symmetric(T a, T b, T c, T d, T e, T f,
-        T& eval0, T& eval1, T& eval2) {
-
-        eval3_symmetric_wikipedia(a, b, c, d, e, f, eval0, eval1, eval2);
-        return;
-	    // | a   b   d |
-	    // | b   c   e |
-	    // | d   e   f |
-
-        // To guard against floating-point overflow, we precondition the matrix by normalizing by the largest value
-        T max0 = (fabs(a) > fabs(b)) ? fabs(a) : fabs(b);              // calculate the largest absolute value in the matrix
-        T max1 = (fabs(d) > fabs(c)) ? fabs(d) : fabs(c);
-        T max2 = (fabs(e) > fabs(f)) ? fabs(e) : fabs(f);
-        T maxElement = (max0 > max1) ? ((max0 > max2) ? max0 : max2) : ((max1 > max2) ? max1 : max2);
-        if (maxElement == 0.0) {
-            eval0 = 0.0; eval1 = 0.0; eval2 = 0.0; // if the matrix is zero, return zero eigenvalues
-            return;
-        }
-
-        T invMaxElement = 1.0 / maxElement;                            // normalize the matrix
-        a *= invMaxElement; b *= invMaxElement; d *= invMaxElement;
-        c *= invMaxElement; e *= invMaxElement; f *= invMaxElement;
-
-        // Case: matrix is diagonal
-        T p1 = b * b + d * d + e * e;
-        if (p1 == 0.0) {
-            eval0 = a * maxElement;
-            eval1 = c * maxElement;
-            eval2 = f * maxElement;
-            if (eval0 > eval2) swap(eval0, eval2);
-            if (eval0 > eval1) swap(eval0, eval1);
-            if (eval1 > eval2) swap(eval1, eval2);
-            return;
-        }
-
-        // The PDF defines the matrix B = (A - q*I)/p, where:
-        // q = tr(A)/3
-        // p = sqrt(tr((A - q*I)^2)/6)
-
-        T q = (a + c + f) / 3.0;            // calculate q = tr(A) / 3
-
-        // The matrix C = A - q*I is represented by the following, where
-        // b00, b11 and b22 are computed after these comments,
-        //   +-           -+        +-               -+
-        //   | b00 a01 a02 |        | a-q   b     d   |
-        //   | a01 b11 a12 |    =   | b     c-q   e   |
-        //   | a02 a12 b22 |        | d     b     f-q |
-        //   +-           -+        +-               -+
-        //T tr_C = (a - q) + (c - q) + (f - q);
-        //T tr_C2 = pow(a - q, 2) + pow(c - q, 2) + pow(f - q, 2);            // calculate the tr(C^2)
-        T p2 = (a - q) * (a - q) + (c - q) * (c - q) + (f - q) * (f - q) + 2.0 * p1;
-        T p = sqrt(p2 / 6.0);
-        T pinv = 1.0 / p;
-        T B[3][3];
-        B[0][0] = pinv * (a - q);
-        B[1][1] = pinv * (c - q);
-        B[2][2] = pinv * (f - q);
-        B[0][1] = pinv * b;
-        B[0][2] = pinv * d;
-        B[1][2] = pinv * e;
-        B[1][0] = B[0][1];
-        B[2][0] = B[0][2];
-        B[2][1] = B[1][2];
-        T detB = B[0][0] * (B[1][1] * B[2][2] - B[1][2] * B[2][1]) -
-            B[0][1] * (B[1][0] * B[2][2] - B[1][2] * B[2][0]) +
-            B[0][2] * (B[1][0] * B[2][1] - B[1][1] * B[2][0]);
-        T r = detB / 2.0;
-
-        // In exact arithmetic for a symmetric matrix - 1 <= r <= 1
-        // but computation error can leave it slightly outside this range.
-
-        T phi = 0.0;
-        if (r <= -1.0)
-            phi = PI / 3.0;
-        else if (r > 1.0)
-            phi = 0.0;
-        else
-            phi = acos(r) / 3.0;
-
-        // The eigenvalues satisfy l[0] <= l[1] <= l[2]
-        eval2 = (q + 2.0 * p * cos(phi))                    * maxElement;
-        eval0 = (q + 2.0 * p * cos(phi + (2.0 * PI / 3.0))) * maxElement;
-        eval1 = (3.0 * q - eval2 - eval0)                   * maxElement;                // since trace(A) = eig1 + eig2 + eig3
-    }
-    */
 
     /// Calculate the eigenvector of a 3x3 matrix associated with the eigenvalue lambda.
     /// The result is returned in polar coordinates (theta, phi).
@@ -473,14 +376,14 @@ namespace tira {
         }
         
         const T q = (a + c + f) / T(3);
-        const T p2 = pow(a - q, 2) + pow(c - q, 2) + pow(f - q, 2) + T(2) * upper_diagonal_norm;
+        const T p2 = (a - q) * (a - q) + (c - q) * (c - q) + (f - q) * (f - q) + T(2) * upper_diagonal_norm;
         const T p = sqrt(p2 / T(6));
         T halfDet;
         if (p == T(0))
             halfDet = T(0);
         else
             // formula is det(A-qI) / (2 * p^3)
-            halfDet = determinant3(a - q, b, c - q, d, e, f - q) / (T(2) * pow(p, 3));
+            halfDet = determinant3(a - q, b, c - q, d, e, f - q) / (T(2) * (p*p*p));
         halfDet = (halfDet < T(-1)) ? T(-1) : ((halfDet > T(1)) ? T(1) : halfDet);
 
         if (halfDet >= T(0)) {
