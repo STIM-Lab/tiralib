@@ -122,8 +122,8 @@ namespace tira {
 
 			unsigned int window_size_w = (unsigned int)(sigma1 * 6 + 1);		// calculate the window sizes for each kernel
 			unsigned int window_size_h = (unsigned int)(sigma2 * 6 + 1);
-			out_width = width - window_size_w;									// calculate the size of the output image
-			out_height = height - window_size_h;
+			out_width = width - (window_size_w - 1);									// calculate the size of the output image
+			out_height = height - (window_size_h - 1);
 
 			size_t bytes = sizeof(T) * width * height;							// calculate the number of bytes in the image
 
@@ -219,8 +219,6 @@ namespace tira {
 
 		}
 
-
-		
 		/// <summary>
 		/// Convolve a 3D image by a separable Gaussian kernel
 		/// </summary>
@@ -240,19 +238,32 @@ namespace tira {
 			float sigma_w, float sigma_h, float sigma_d,
 			unsigned int& out_width, unsigned int& out_height, unsigned int& out_depth) {
 
-			unsigned int window_size_w = (unsigned int)(sigma_w * 6 + 1);		// calculate the window sizes for each kernel
-			unsigned int window_size_h = (unsigned int)(sigma_h * 6 + 1);
-			unsigned int window_size_d = (unsigned int)(sigma_d * 6 + 1);
-			out_width = width - window_size_w;									// calculate the size of the output image
-			out_height = height - window_size_h;
-			out_depth = depth - window_size_d;
+			// Calculate the window sizes for each kernel
+			unsigned int radius_w = static_cast<unsigned int>(std::ceil(6.0f * sigma_w));
+			unsigned int window_size_w = (radius_w % 2 == 0) ? radius_w : radius_w + 1;
 
-			size_t bytes = sizeof(T) * width * height * depth;							// calculate the number of bytes in the image
+			unsigned int radius_h = static_cast<unsigned int>(std::ceil(6.0f * sigma_h));
+			unsigned int window_size_h = (radius_h % 2 == 0) ? radius_h : radius_h + 1;
 
-			const T* gpu_source;														// create a pointer for the GPU source image
-			T* temp_source;
+			unsigned int radius_d = static_cast<unsigned int>(std::ceil(6.0f * sigma_d));
+			unsigned int window_size_d = (radius_d % 2 == 0) ? radius_d : radius_d + 1;
 
-			// determine if the source image is provided on the CPU or GPU
+			// Avoid degenerate kernels
+			if (window_size_w < 1) window_size_w = 1;
+			if (window_size_h < 1) window_size_h = 1;
+			if (window_size_d < 1) window_size_d = 1;
+
+			out_width  = width  - (window_size_w - 1);							// calculate the size of the output image (valid convolution)
+			out_height = height - (window_size_h - 1);
+			out_depth  = depth  - (window_size_d - 1);
+
+			// Calculate the number of bytes in the image
+			size_t bytes = sizeof(T) * static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(depth);							
+
+			const T* gpu_source = nullptr;										// create a pointer for the GPU source image
+			T* temp_source = nullptr;
+
+			// Determine if the source pointer is on CPU or GPU
 			cudaPointerAttributes attribs;										// create a pointer attribute structure
 			HANDLE_ERROR(cudaPointerGetAttributes(&attribs, source));			// get the attributes for the source pointer
 
@@ -265,88 +276,137 @@ namespace tira {
 				gpu_source = static_cast<const T*>(temp_source);
 			}
 
-			/////////////// Calculate Convolution Kernels for each axis
-			float* kernel_h = (float*)malloc(sizeof(float) * window_size_h);	// allocate space for the y kernel
-			int xh = -(int)(window_size_h / 2);									// calculate the starting coordinate for the kernel
-			for (int j = 0; j < window_size_h; j++) {							// for each pixel in the kernel
-				kernel_h[j] = normal(xh + j, 0, sigma_h);						// calculate the Gaussian value
+			// -----  Build 1D Gaussian kernels (host), normalize, then upload to GPU -----
+
+			// Y kernel (height)
+			float* kernel_h = static_cast<float*>(malloc(sizeof(float) * window_size_h));
+			float sum_h = 0.0f;
+			int xh = -static_cast<int>(window_size_h / 2);									// calculate the starting coordinate for the kernel
+			for (unsigned int j = 0; j < window_size_h; ++j) {								// for each pixel in the kernel
+				float x = static_cast<float>(xh + static_cast<int>(j));
+				kernel_h[j] = normal(x, 0.0f, sigma_h);										// calculate the Gaussian value
+				sum_h += kernel_h[j];
 			}
-			// allocate space on the GPU for the y-axis kernel and copy it
-			float* gpu_kernel_h;
+			if (sum_h > 0.0f) {																// nomalize
+				float inv = 1.0f / sum_h;
+				for (unsigned int j = 0; j < window_size_h; ++j) kernel_h[j] *= inv;
+			}
+			float* gpu_kernel_h = nullptr;
 			HANDLE_ERROR(cudaMalloc(&gpu_kernel_h, sizeof(float) * window_size_h));
 			HANDLE_ERROR(cudaMemcpy(gpu_kernel_h, kernel_h, sizeof(float) * window_size_h, cudaMemcpyHostToDevice));
 
-			float* kernel_w = (float*)malloc(sizeof(float) * window_size_w);	// allocate space for the x kernel
-			int xw = -(int)(window_size_w / 2);									// calculate the starting coordinate for the kernel
-			for (int i = 0; i < window_size_w; i++) {							// for each pixel in the kernel
-				kernel_w[i] = normal(xw + i, 0, sigma_w);						// calculate the Gaussian value
+			// X kernel (width)
+			float* kernel_w = static_cast<float*>(malloc(sizeof(float) * window_size_w));	// allocate space for the x kernel
+			float sum_w = 0.0f;
+			int xw = -static_cast<int>(window_size_w / 2);									// calculate the starting coordinate for the kernel
+			for (unsigned int i = 0; i < window_size_w; ++i) {										// for each pixel in the kernel
+				float x = static_cast<float>(xw + static_cast<int>(i));
+				kernel_w[i] = normal(x, 0.0f, sigma_w);									// calculate the Gaussian value
+				sum_w += kernel_w[i];
 			}
-			// allocate space on the GPU for the x-axis kernel and copy it
-			float* gpu_kernel_w;
+			if (sum_w > 0.0f) {																// nomalize
+				float inv = 1.0f / sum_w;
+				for (unsigned int i = 0; i < window_size_w; ++i) kernel_w[i] *= inv;
+			}
+			float* gpu_kernel_w = nullptr;
 			HANDLE_ERROR(cudaMalloc(&gpu_kernel_w, sizeof(float) * window_size_w));
 			HANDLE_ERROR(cudaMemcpy(gpu_kernel_w, kernel_w, sizeof(float) * window_size_w, cudaMemcpyHostToDevice));
 
-			float* kernel_d = (float*)malloc(sizeof(float) * window_size_d);	// allocate space for the z kernel
-			int xd = -(int)(window_size_d / 2);									// calculate the starting coordinate for the kernel
-			for (int k = 0; k < window_size_d; k++) {							// for each pixel in the kernel
-				kernel_d[k] = normal(xd + k, 0, sigma_d);						// calculate the Gaussian value
+			// Z kernel (depth)
+			float* kernel_d = static_cast<float*>(malloc(sizeof(float) * window_size_d));	// allocate space for the z kernel
+			float sum_d = 0.0f;
+			int xd = -static_cast<int>(window_size_d / 2);									// calculate the starting coordinate for the kernel
+			for (unsigned int k = 0; k < window_size_d; ++k) {							// for each pixel in the kernel
+				float x = static_cast<float>(xd + static_cast<int>(k));
+				kernel_d[k] = normal(x, 0, sigma_d);						// calculate the Gaussian value
+				sum_d += kernel_d[k];
 			}
-			// allocate space on the GPU for the z-axis kernel and copy it
-			float* gpu_kernel_d;
+			if (sum_d > 0.0f) {																// nomalize
+				float inv = 1.0f / sum_d;
+				for (unsigned int k = 0; k < window_size_d; ++k) kernel_d[k] *= inv;
+			}
+			float* gpu_kernel_d = nullptr;
 			HANDLE_ERROR(cudaMalloc(&gpu_kernel_d, sizeof(float) * window_size_d));
 			HANDLE_ERROR(cudaMemcpy(gpu_kernel_d, kernel_d, sizeof(float) * window_size_d, cudaMemcpyHostToDevice));
-			/////////////// End Calculate Convolution Kernels
-			///
-			///// get the active device properties to calculate the optimal the block size
-			int device;
+			// -------------------- End Build Kernels ----------------------
+			 
+			// ----- Launch configuration (separable convolution in 3 passes) -----
+			int device = 0;
 			HANDLE_ERROR(cudaGetDevice(&device));
-			cudaDeviceProp props;
+			cudaDeviceProp props{};
 			HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
 			unsigned int max_threads = props.maxThreadsPerBlock;
-			dim3 blockDim = {(unsigned int) std::sqrt(max_threads), (unsigned int) std::sqrt(max_threads)};
+			unsigned int block_xy = static_cast<unsigned int>(std::sqrt(static_cast<float>(max_threads)));
+			dim3 blockDim(block_xy, block_xy, 1);
 
-			// This is a separable convolution and will be done in three passes
-			T* gpu_firstpass;															// allocate space on the GPU for the first pass
-			size_t bytes_firstpass = sizeof(T) * width * height * out_depth;			// calculate the number of bytes in the first pass output
+
+			// --- First pass: Z convolution (reduces depth to out_depth) ---
+			T* gpu_firstpass = nullptr;															// allocate space on the GPU for the first pass
+			const size_t bytes_firstpass = sizeof(T) * static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(out_depth);
 			HANDLE_ERROR(cudaMalloc(&gpu_firstpass, bytes_firstpass));
 
-			// First pass - Z convolution
-			dim3 gridDim = { width / blockDim.x + 1, height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_convolve3_z << <gridDim, blockDim >> > (gpu_source, gpu_firstpass, width, height, out_depth, gpu_kernel_d, window_size_d);
+			dim3 gridDimZ(
+				(width + blockDim.x - 1) / blockDim.x,
+				(height + blockDim.y - 1) / blockDim.y,
+				(out_depth + blockDim.z - 1) / blockDim.z
+			);
+			kernel_convolve3_z << <gridDimZ, blockDim >> > (gpu_source, gpu_firstpass, width, height, out_depth, gpu_kernel_d, window_size_d);
+			HANDLE_ERROR(cudaGetLastError());
+			HANDLE_ERROR(cudaDeviceSynchronize());
 
-			if (attribs.type != cudaMemoryTypeDevice)
+			if (attribs.type != cudaMemoryTypeDevice) {
 				HANDLE_ERROR(cudaFree(temp_source));
+				temp_source = nullptr;
+			}
 
-			T* gpu_secondpass;															// allocate space on the GPU for the second pass
-			size_t bytes_secondpass = sizeof(T) * width * out_height * out_depth;
+			// --- Second pass: Y convolution (reduces height to out_height) ---
+			T* gpu_secondpass = nullptr;															// allocate space on the GPU for the second pass
+			const size_t bytes_secondpass = sizeof(T) * static_cast<size_t>(width) * static_cast<size_t>(out_height) * static_cast<size_t>(out_depth);
 			HANDLE_ERROR(cudaMalloc(&gpu_secondpass, bytes_secondpass));
 
 			// Second pass - Y convolution
-			gridDim = { width / blockDim.x + 1, out_height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_convolve3_y << <gridDim, blockDim >> > (gpu_firstpass, gpu_secondpass, width, height, out_height, out_depth, gpu_kernel_h, window_size_h);
+			dim3 gridDimY(
+				(width + blockDim.x - 1) / blockDim.x,
+				(out_height + blockDim.y - 1) / blockDim.y,
+				(out_depth + blockDim.z - 1) / blockDim.z
+			);
+			kernel_convolve3_y << <gridDimY, blockDim >> > (gpu_firstpass, gpu_secondpass, width, height, out_height, out_depth, gpu_kernel_h, window_size_h);
+			HANDLE_ERROR(cudaGetLastError());
+			HANDLE_ERROR(cudaDeviceSynchronize());
 			HANDLE_ERROR(cudaFree(gpu_firstpass));
+			gpu_firstpass = nullptr;
 
-			T* gpu_out;																	// calculate the size of the final output image
-			size_t out_bytes = sizeof(T) * out_width * out_height * out_depth;
+			// --- Third pass: X convolution (reduces width to out_width) ---
+			T* gpu_out = nullptr;																	// calculate the size of the final output image
+			const size_t out_bytes = sizeof(T) * static_cast<size_t>(out_width) * static_cast<size_t>(out_height) * static_cast<size_t>(out_depth);
 			HANDLE_ERROR(cudaMalloc(&gpu_out, out_bytes));								// allocate space on the GPU for the final output
 
 			// Third/Last pass - X convolution
-			gridDim = { out_width / blockDim.x + 1, out_height / blockDim.y + 1, out_depth / blockDim.z + 1 };
-			kernel_convolve3_x << <gridDim, blockDim >> > (gpu_secondpass, gpu_out, width, out_width, out_height, out_depth, gpu_kernel_w, window_size_w);
-
+			dim3 gridDimX(
+				(out_width + blockDim.x - 1) / blockDim.x,
+				(out_height + blockDim.y - 1) / blockDim.y,
+				(out_depth + blockDim.z - 1) / blockDim.z
+			);
+			kernel_convolve3_x << <gridDimX, blockDim >> > (gpu_secondpass, gpu_out, width, out_width, out_height, out_depth, gpu_kernel_w, window_size_w);
+			HANDLE_ERROR(cudaGetLastError());
+			HANDLE_ERROR(cudaDeviceSynchronize());
 			HANDLE_ERROR(cudaFree(gpu_secondpass));
+			gpu_secondpass = nullptr;
 
-			// allocate space for the output volume on the CPU and copy the final result
-			T* out;
-			if (attribs.type == cudaMemoryTypeDevice) {				// if the source was on the device, return an output on the device
+			// ----- Copy back or return device pointer
+			T* out = nullptr;
+			if (attribs.type == cudaMemoryTypeDevice) {				// caller gave a device pointer, return a device pointer
 				out = gpu_out;
 			}
 			else {													// otherwise copy the output to the host
-				out = (T*)malloc(out_bytes);
+				out = static_cast<T*>(malloc(out_bytes));
 				HANDLE_ERROR(cudaMemcpy(out, gpu_out, out_bytes, cudaMemcpyDeviceToHost));
 				HANDLE_ERROR(cudaFree(gpu_out));
+				gpu_out = nullptr;
 			}
 
+
+			// ----- Clean up kernels -----
 			HANDLE_ERROR(cudaFree(gpu_kernel_w));
 			HANDLE_ERROR(cudaFree(gpu_kernel_h));
 			HANDLE_ERROR(cudaFree(gpu_kernel_d));
@@ -356,7 +416,6 @@ namespace tira {
 			free(kernel_d);
 
 			return out;
-
 		}
 	}
 }
