@@ -235,18 +235,18 @@ namespace tira {
 		/// <returns></returns>
 		template<typename T>
 		T* gaussian_filter3d(const T* source, unsigned int width, unsigned int height, unsigned int depth,
-			float sigma_w, float sigma_h, float sigma_d,
+			float sigma_w, float sigma_h, float sigma_d, glm::vec3 pixel_size,
 			unsigned int& out_width, unsigned int& out_height, unsigned int& out_depth) {
 
 			// Calculate the window sizes for each kernel
 			unsigned int radius_w = static_cast<unsigned int>(std::ceil(6.0f * sigma_w));
-			unsigned int window_size_w = (radius_w % 2 == 0) ? radius_w : radius_w + 1;
+			unsigned int window_size_w = (radius_w % 2 == 0) ? radius_w + 1 : radius_w;
 
 			unsigned int radius_h = static_cast<unsigned int>(std::ceil(6.0f * sigma_h));
-			unsigned int window_size_h = (radius_h % 2 == 0) ? radius_h : radius_h + 1;
+			unsigned int window_size_h = (radius_h % 2 == 0) ? radius_h + 1 : radius_h;
 
 			unsigned int radius_d = static_cast<unsigned int>(std::ceil(6.0f * sigma_d));
-			unsigned int window_size_d = (radius_d % 2 == 0) ? radius_d : radius_d + 1;
+			unsigned int window_size_d = (radius_d % 2 == 0) ? radius_d + 1 : radius_d;
 
 			// Avoid degenerate kernels
 			if (window_size_w < 1) window_size_w = 1;
@@ -281,10 +281,13 @@ namespace tira {
 			// Y kernel (height)
 			float* kernel_h = static_cast<float*>(malloc(sizeof(float) * window_size_h));
 			float sum_h = 0.0f;
+			const float dy = pixel_size.y;
+			const float startx_h = -(static_cast<float>(window_size_h) / 2.0f) + (dy / 2.0f);
+
 			int xh = -static_cast<int>(window_size_h / 2);									// calculate the starting coordinate for the kernel
 			for (unsigned int j = 0; j < window_size_h; ++j) {								// for each pixel in the kernel
-				float x = static_cast<float>(xh + static_cast<int>(j));
-				kernel_h[j] = normal(x, 0.0f, sigma_h);										// calculate the Gaussian value
+				const float y = startx_h + static_cast<float>(j) * dy;
+				kernel_h[j] = normal(y, 0.0f, sigma_h);										// calculate the Gaussian value
 				sum_h += kernel_h[j];
 			}
 			if (sum_h > 0.0f) {																// nomalize
@@ -298,9 +301,12 @@ namespace tira {
 			// X kernel (width)
 			float* kernel_w = static_cast<float*>(malloc(sizeof(float) * window_size_w));	// allocate space for the x kernel
 			float sum_w = 0.0f;
+			const float dx = pixel_size.x;
+			const float startx_w = -(static_cast<float>(window_size_w) / 2.0f) + (dx / 2.0f);
+
 			int xw = -static_cast<int>(window_size_w / 2);									// calculate the starting coordinate for the kernel
 			for (unsigned int i = 0; i < window_size_w; ++i) {										// for each pixel in the kernel
-				float x = static_cast<float>(xw + static_cast<int>(i));
+				const float x = startx_w + static_cast<float>(i) * dx;
 				kernel_w[i] = normal(x, 0.0f, sigma_w);									// calculate the Gaussian value
 				sum_w += kernel_w[i];
 			}
@@ -315,10 +321,13 @@ namespace tira {
 			// Z kernel (depth)
 			float* kernel_d = static_cast<float*>(malloc(sizeof(float) * window_size_d));	// allocate space for the z kernel
 			float sum_d = 0.0f;
+			const float dz = pixel_size.z;
+			const float startx_d = -(static_cast<float>(window_size_d) / 2.0f) + (dz / 2.0f);
+
 			int xd = -static_cast<int>(window_size_d / 2);									// calculate the starting coordinate for the kernel
 			for (unsigned int k = 0; k < window_size_d; ++k) {							// for each pixel in the kernel
-				float x = static_cast<float>(xd + static_cast<int>(k));
-				kernel_d[k] = normal(x, 0, sigma_d);						// calculate the Gaussian value
+				const float z = startx_d + static_cast<float>(k) * dz;
+				kernel_d[k] = normal(z, 0, sigma_d);						// calculate the Gaussian value
 				sum_d += kernel_d[k];
 			}
 			if (sum_d > 0.0f) {																// nomalize
