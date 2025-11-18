@@ -6,8 +6,6 @@
 #define TIRA_EIGEN_EPSILON 1e-12
 
 namespace tira {
-
-    // function used to quickly swap two values
     template <typename T>
     CUDA_CALLABLE void swap(T& a, T& b) {
         T temp = a;
@@ -47,7 +45,12 @@ namespace tira {
     CUDA_CALLABLE void normalize3(T* v) {
         // | v0  v1  v2 |
         T n = sqrt(dot3(v, v));
-        if (n > T(0)) { v[0] /= n; v[1] /= n;   v[2] /= n;  }
+        if (n > T(TIRA_EIGEN_EPSILON)) {
+			T inv_n = T(1) / n;
+            v[0] *= inv_n; 
+			v[1] *= inv_n;
+			v[2] *= inv_n;
+        }
 	}
 
     template <typename T>
@@ -136,18 +139,31 @@ namespace tira {
     template<typename T>
     CUDA_CALLABLE void ComputeOrthogonalComplement(const T* evec, T* U, T* V) {
         // Compute a right-handed orthonormal set { U, V, evec }
-        T inv;
-        if (abs(evec[0]) > abs(evec[1])) {
-            // The component of maximum absolute value is either evec[0] or evec[2]
-		    inv = T(1) / sqrt(evec[0] * evec[0] + evec[2] * evec[2]);
-            U[0] = -evec[2] * inv;  U[1] = T(0);    U[2] = evec[0] * inv; // U is orthogonal to evec
+		const T absX = abs(evec[0]);
+		const T absY = abs(evec[1]);
+		const T absZ = abs(evec[2]);
+
+        T temp[3];
+        if (absY - absX > TIRA_EIGEN_EPSILON) {
+            if (absZ - absX > TIRA_EIGEN_EPSILON) {
+                temp[0] = 1.0f; temp[1] = 0.0f; temp[2] = 0.0f;         // X is smallest
+            }
+            else {
+            temp[0] = 0.0f; temp[1] = 0.0f; temp[2] = 1.0f;         // Z is smallest
+            }
         }
         else {
-		    // The component of maximum absolute value is either evec[1] or evec[2]
-		    inv = T(1) / sqrt(evec[1] * evec[1] + evec[2] * evec[2]);
-            U[0] = T(0);    U[1] = evec[2] * inv;   U[2] = -evec[1] * inv;
+            if (absZ - absY > TIRA_EIGEN_EPSILON) {
+                temp[0] = 0.0f; temp[1] = 1.0f; temp[2] = 0.0f;          // Y is smallest
+            }
+            else {
+                temp[0] = 0.0f; temp[1] = 0.0f; temp[2] = 1.0f;         // Z is smallest
+            }
         }
-		cross3(evec, U, V); // V = evec x U
+		cross3(evec, temp, U);  // U = evec x temp
+        normalize3(U);
+
+		cross3(evec, U, V);     // V = evec x U
     }
 
     template <typename T>
@@ -157,54 +173,40 @@ namespace tira {
 	    // | b  c  e |
 	    // | d  e  f |
 
-        const T upper_diagonal_norm = b * b + d * d + e * e;
-        if (upper_diagonal_norm < T(TIRA_EIGEN_EPSILON)) {
-            evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
-            return;
+        // M = A - eval0 * I
+        T m00 = a - eval0; T m01 = b;       T m02 = d;
+        T m10 = b;       T m11 = c - eval0; T m12 = e;
+        T m20 = d;       T m21 = e;       T m22 = f - eval0;
+
+        // Compute cofactors of M
+        T c00 = m11 * m22 - m12 * m21;
+        T c01 = m12 * m20 - m10 * m22;
+        T c02 = m10 * m21 - m11 * m20;
+        T c10 = m02 * m21 - m01 * m22;
+        T c11 = m00 * m22 - m02 * m20;
+        T c12 = m01 * m20 - m00 * m21;
+        T c20 = m01 * m12 - m02 * m11;
+        T c21 = m02 * m10 - m00 * m12;
+        T c22 = m00 * m11 - m01 * m10;
+
+        // Find the row of cofactors with the largest L2 norm
+        T r0sqr = c00 * c00 + c01 * c01 + c02 * c02;
+        T r1sqr = c10 * c10 + c11 * c11 + c12 * c12;
+        T r2sqr = c20 * c20 + c21 * c21 + c22 * c22;
+
+        if (r0sqr >= r1sqr && r0sqr >= r2sqr)
+        {
+            evec0[0] = c00; evec0[1] = c01; evec0[2] = c02;
         }
-
-        // Solve (A - LI) v = 0 via cross products of two rows with largest area
-	    T r0[3] = { a - eval0,  b,          d           };
-	    T r1[3] = { b,          c - eval0,  e           };
-	    T r2[3] = { d,          e,          f - eval0   };
-
-        // calculate the cross-product of each two rows
-        T r0xr1[3], r0xr2[3], r1xr2[3];
-        cross3(r0, r1, r0xr1);
-	    cross3(r0, r2, r0xr2);
-	    cross3(r1, r2, r1xr2);
-
-        // dot products - to find out which cross-product has the largest length
-		const T d01 = dot3(r0xr1, r0xr1);
-		const T d02 = dot3(r0xr2, r0xr2);
-		const T d12 = dot3(r1xr2, r1xr2);
-
-        T dmax = d01;
-        int imax = 0;
-        if (d02 > dmax) { dmax = d02; imax = 1; }
-        if (d12 > dmax) { imax = 2; }
-        if (imax == 0) {
-            // r0xr1 is the largest cross product
-			T norm = sqrt(d01);
-            evec0[0] = r0xr1[0] / norm;
-            evec0[1] = r0xr1[1] / norm;
-            evec0[2] = r0xr1[2] / norm;
+        else if (r1sqr >= r0sqr && r1sqr >= r2sqr)
+        {
+            evec0[0] = c10; evec0[1] = c11; evec0[2] = c12;
         }
-        else if (imax == 1) {
-            T norm = sqrt(d02);
-            // r0xr2 is the largest cross product
-            evec0[0] = r0xr2[0] / norm;
-            evec0[1] = r0xr2[1] / norm;
-            evec0[2] = r0xr2[2] / norm;
+        else
+        {
+            evec0[0] = c20; evec0[1] = c21; evec0[2] = c22;
         }
-        else {
-            // r1xr2 is the largest cross product
-            T norm = sqrt(d12);
-            evec0[0] = r1xr2[0] / norm;
-            evec0[1] = r1xr2[1] / norm;
-            evec0[2] = r1xr2[2] / norm;
-		}
-		normalize3(evec0); // ensure that the eigenvector is unit-length
+        normalize3(evec0); // ensure that the eigenvector is unit-length
     }
 
     template <typename T>
@@ -223,7 +225,7 @@ namespace tira {
 		                    b * V[0] + c * V[1] + e * V[2],
 		                    d * V[0] + e * V[1] + f * V[2]  };
 	    
-        // 2x2 projected (A - LI) matrix on {U,V}
+        // 2x2 projected (A - eval1*I) matrix on {U,V}
         T m00 = dot3(U, AU) - eval1;
 	    T m01 = dot3(U, AV);
 	    T m11 = dot3(V, AV) - eval1;
@@ -232,52 +234,59 @@ namespace tira {
         T absM00 = abs(m00);
         T absM01 = abs(m01);
         T absM11 = abs(m11);
-        T maxAbsComp;
 
-        if (absM00 >= absM11) {
-            maxAbsComp = (absM00 >= absM01) ? absM00 : absM01;
-            if (maxAbsComp > T(0)) {
-                if (absM00 >= absM01) {
+        if (absM00 >= absM11)
+        {
+            if (absM00 > T(TIRA_EIGEN_EPSILON) || absM01 > T(TIRA_EIGEN_EPSILON))
+            {
+                if (absM00 >= absM01)
+                {
                     m01 /= m00;
-                    m00 = T(1) / std::sqrt(T(1) + m01 * m01);
-                    m01 *= m00;
+                    T invLen = (T)1 / sqrt((T)1 + m01 * m01);
+                    m00 = invLen;
+                    m01 *= invLen;
                 }
-                else {
+                else
+                {
                     m00 /= m01;
-                    m01 = T(1) / std::sqrt(T(1) + m00 * m00);
-                    m00 *= m01;
+                    T invLen = (T)1 / sqrt((T)1 + m00 * m00);
+                    m01 = invLen;
+                    m00 *= invLen;
                 }
-				//evec1 = subtract3(multiply3(m01, U), multiply3(m00, V));
                 evec1[0] = m01 * U[0] - m00 * V[0];
                 evec1[1] = m01 * U[1] - m00 * V[1];
                 evec1[2] = m01 * U[2] - m00 * V[2];
             }
-            else {
-                evec1[0] = U[0];    evec1[1] = U[1];    evec1[2] = U[2];
+            else
+            {
+                evec1[0] = U[0]; evec1[1] = U[1]; evec1[2] = U[2];
             }
         }
-        else {
-            maxAbsComp = (absM11 >= absM01) ? absM11 : absM01;
-            if (maxAbsComp > T(0)) {
-                if (absM11 >= absM01) {
+        else
+        {
+            if (absM11 > T(TIRA_EIGEN_EPSILON) || absM01 > T(TIRA_EIGEN_EPSILON))
+            {
+                if (absM11 >= absM01)
+                {
                     m01 /= m11;
-                    m11 = T(1) / std::sqrt(T(1) + m01 * m01);
-                    m01 *= m11;
+                    T invLen = (T)1 / sqrt((T)1 + m01 * m01);
+                    m11 = invLen;
+                    m01 *= invLen;
                 }
-                else {
+                else
+                {
                     m11 /= m01;
-                    m01 = T(1) / std::sqrt(T(1) + m11 * m11);
-                    m11 *= m01;
+                    T invLen = (T)1 / sqrt((T)1 + m11 * m11);
+                    m01 = invLen;
+                    m11 *= invLen;
                 }
-                // Subtract(Multiply(m11, U), Multiply(m01, V))
-				// evec1 = subtract3(multiply3(m11, U), multiply3(m01, V));
                 evec1[0] = m11 * U[0] - m01 * V[0];
                 evec1[1] = m11 * U[1] - m01 * V[1];
                 evec1[2] = m11 * U[2] - m01 * V[2];
-
             }
-            else {
-                evec1[0] = U[0];    evec1[1] = U[1];    evec1[2] = U[2];
+            else
+            {
+                evec1[0] = U[0]; evec1[1] = U[1]; evec1[2] = U[2];
             }
         }
     }
@@ -366,12 +375,38 @@ namespace tira {
         // | b  c  e |
         // | d  e  f |
 
-		// test to see if this matrix is diagonal, return basis vectors if it is
+		// Test to see if this matrix is diagonal
         const T upper_diagonal_norm = b * b + d * d + e * e;
         if (upper_diagonal_norm < T(TIRA_EIGEN_EPSILON)) {
-            evec0[0] = T(1);    evec0[1] = T(0);    evec0[2] = T(0);
-            evec1[0] = T(0);    evec1[1] = T(1);    evec1[2] = T(0);
-            evec2[0] = T(0);    evec2[1] = T(0);    evec2[2] = T(1);
+			// The evals are pre-sorted, we must find which diagonal element corresponds to which eigenvalue
+            // and assign the correct basis vector
+            
+            // Create pairs of (evals, evec_idx)
+			T val_idx[3][2] = { {a, 0} , {c, 1}, {f, 2} };
+			T basis[3][3] = { {1,0,0}, {0,1,0}, {0,0,1} };
+
+			// Bubble sort on the pairs based on evals
+            if (val_idx[0][0] > val_idx[1][0]) {
+                swap(val_idx[0][0], val_idx[1][0]);
+                swap(val_idx[0][1], val_idx[1][1]);
+			}
+            if (val_idx[1][0] > val_idx[2][0]) {
+                swap(val_idx[1][0], val_idx[2][0]);
+                swap(val_idx[1][1], val_idx[2][1]);
+            }
+            if (val_idx[0][0] > val_idx[1][0]) {
+                swap(val_idx[0][0], val_idx[1][0]);
+                swap(val_idx[0][1], val_idx[1][1]);
+			}
+
+			// Assign the eigenvectors based on the sorted order
+			int idx0 = (int)val_idx[0][1];
+			int idx1 = (int)val_idx[1][1];
+			int idx2 = (int)val_idx[2][1];
+
+			evec0[0] = basis[idx0][0]; evec0[1] = basis[idx0][1]; evec0[2] = basis[idx0][2];
+			evec1[0] = basis[idx1][0]; evec1[1] = basis[idx1][1]; evec1[2] = basis[idx1][2];
+			evec2[0] = basis[idx2][0]; evec2[1] = basis[idx2][1]; evec2[2] = basis[idx2][2];
             return;
         }
         
@@ -397,11 +432,6 @@ namespace tira {
             cross3(evec0, evec1, evec2);        // evec2 = evec0 x evec1
             normalize3(evec2);
         }
-
-		// Clamp to [-1,1] to avoid NaNs from acos in case of numerical drift
-		evec0[2] = (evec0[2] < T(-1)) ? T(-1) : ((evec0[2] > T(1)) ? T(1) : evec0[2]);
-		evec1[2] = (evec1[2] < T(-1)) ? T(-1) : ((evec1[2] > T(1)) ? T(1) : evec1[2]);
-		evec2[2] = (evec2[2] < T(-1)) ? T(-1) : ((evec2[2] > T(1)) ? T(1) : evec2[2]);
     }
 
     template <typename T>
@@ -412,6 +442,11 @@ namespace tira {
         T cart_evec1[3];
         T cart_evec2[3];
         evec3_symmetric(a, b, c, d, e, f, evals, cart_evec0, cart_evec1, cart_evec2);
+
+        // Clamp to [-1,1] to avoid NaNs from acos in case of numerical drift
+        cart_evec0[2] = (cart_evec0[2] < T(-1)) ? T(-1) : ((cart_evec0[2] > T(1)) ? T(1) : cart_evec0[2]);
+        cart_evec1[2] = (cart_evec1[2] < T(-1)) ? T(-1) : ((cart_evec1[2] > T(1)) ? T(1) : cart_evec1[2]);
+        cart_evec2[2] = (cart_evec2[2] < T(-1)) ? T(-1) : ((cart_evec2[2] > T(1)) ? T(1) : cart_evec2[2]);
 
         evec0[0] = std::atan2(cart_evec0[1], cart_evec0[0]);
         evec0[1] = std::acos(cart_evec0[2]);
