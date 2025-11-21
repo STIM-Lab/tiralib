@@ -3,17 +3,19 @@
 #include <numbers>
 #include <vector>
 #include<memory>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace tira::cpu {
 
 	template <typename T>
 	static T normaldist(T mu, T sigma, T x) {
-		
 		T sigma_sq = sigma * sigma;
-		T pi = static_cast<T>(3.14159265358979323846);
-		T n = static_cast<T>(1) / sqrt(static_cast<T>(2) * pi * sigma_sq);
+		T pi = static_cast<T>(M_PI);
+		T n = static_cast<T>(1) / std::sqrt(static_cast<T>(2) * pi * sigma_sq);
 
-		T exponent = -pow(x - mu, static_cast<T>(2)) / (static_cast<T>(2) * sigma_sq);
+		T exponent = -((x - mu) * (x - mu)) / (static_cast<T>(2) * sigma_sq);
 		return n * exp(exponent);
 	}
 	
@@ -32,23 +34,23 @@ namespace tira::cpu {
 		std::vector<T> kernel(ksize);
 
 		// Physical length of the kernel
-		const T sx = static_cast<T>(ksize) * dx;
-		const T halfwidth = sx / static_cast<T>(2);
+		const T halfwidth = static_cast<T>(ksize) * dx / static_cast<T>(2);
 
 		// First sample is centered at -halfwidth + dx/2 so the grid is symmetric around mu
 		const T startx = -halfwidth + (dx / static_cast<T>(2));
 
 		// Sample the Gaussian at regularly spaced positions
+		T sum = static_cast<T>(0);
 		for (unsigned int xi = 0; xi < ksize; ++xi) {
 			const T x = startx + static_cast<T>(xi) * dx;
 			kernel[xi] = normaldist(mu, sigma, x);
+			sum += kernel[xi];
 		}
 
 		// Normalize the kernel to have sum 1
-		T sum = static_cast<T>(0);
-		for (auto v : kernel) sum += v;
-		if (sum != static_cast<T>(0)) {
-			for (auto& v : kernel) v /= sum;
+		if (sum > static_cast<T>(0)) {
+			T inv_sum = static_cast<T>(1) / sum;
+			for (auto& v : kernel) v *= inv_sum;
 		}
 
 		return kernel;
