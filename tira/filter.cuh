@@ -14,9 +14,29 @@ namespace tira {
 	namespace cuda {
 
 		CUDA_CALLABLE float normal(float x, float mean, float sigma) {
-			float c = 1.0f / std::sqrt(2.0f * 3.14159 * sigma * sigma);
-			float e = std::exp(-((x - mean) * (x - mean)) / (2.0f * sigma * sigma));
+			float c = 1.0f / sqrtf(2.0f * M_PI * sigma * sigma);
+			float e = expf(-((x - mean) * (x - mean)) / (2.0f * sigma * sigma));
 			return c * e;
+		}
+
+		inline std::vector<float> kernel_gaussian_cuda(unsigned int ksize, float sigma) {
+			std::vector<float> kernel(ksize);
+
+			const float dx = 1.0f;
+			const float halfwidth = static_cast<float>(ksize) * dx / 2.0f;
+			const float startx = -halfwidth + (dx / static_cast<float>(2));
+
+			float sum = 0.0f;
+			for (unsigned int xi = 0; xi < ksize; ++xi) {
+				const float x = startx + static_cast<float>(xi) * dx;
+				kernel[xi] = normal(x, 0.0f, sigma);
+				sum += kernel[xi];
+			}
+			if (sum > 0.0f) {
+				float inv = 1.0f / sum;
+				for (float& v : kernel) v *= inv;
+			}
+			return kernel;
 		}
 
 		/// 1D convolution along the Y (slow) axis
@@ -235,23 +255,9 @@ namespace tira {
 		/// <returns></returns>
 		template<typename T>
 		T* gaussian_filter3d(const T* source, unsigned int width, unsigned int height, unsigned int depth,
-			float sigma_w, float sigma_h, float sigma_d, glm::vec3 pixel_size,
+			float sigma_w, float sigma_h, float sigma_d,
+			unsigned int window_size_w, unsigned int window_size_h, unsigned int window_size_d,
 			unsigned int& out_width, unsigned int& out_height, unsigned int& out_depth) {
-
-			// Calculate the window sizes for each kernel
-			unsigned int radius_w = static_cast<unsigned int>(std::ceil(6.0f * sigma_w));
-			unsigned int window_size_w = (radius_w % 2 == 0) ? radius_w + 1 : radius_w;
-
-			unsigned int radius_h = static_cast<unsigned int>(std::ceil(6.0f * sigma_h));
-			unsigned int window_size_h = (radius_h % 2 == 0) ? radius_h + 1 : radius_h;
-
-			unsigned int radius_d = static_cast<unsigned int>(std::ceil(6.0f * sigma_d));
-			unsigned int window_size_d = (radius_d % 2 == 0) ? radius_d + 1 : radius_d;
-
-			// Avoid degenerate kernels
-			if (window_size_w < 1) window_size_w = 1;
-			if (window_size_h < 1) window_size_h = 1;
-			if (window_size_d < 1) window_size_d = 1;
 
 			out_width  = width  - (window_size_w - 1);							// calculate the size of the output image (valid convolution)
 			out_height = height - (window_size_h - 1);
@@ -277,66 +283,25 @@ namespace tira {
 			}
 
 			// -----  Build 1D Gaussian kernels (host), normalize, then upload to GPU -----
-
-			// Y kernel (height)
-			float* kernel_h = static_cast<float*>(malloc(sizeof(float) * window_size_h));
-			float sum_h = 0.0f;
-			const float dy = pixel_size.y;
-			const float startx_h = -(static_cast<float>(window_size_h) / 2.0f) + (dy / 2.0f);
-
-			int xh = -static_cast<int>(window_size_h / 2);									// calculate the starting coordinate for the kernel
-			for (unsigned int j = 0; j < window_size_h; ++j) {								// for each pixel in the kernel
-				const float y = startx_h + static_cast<float>(j) * dy;
-				kernel_h[j] = normal(y, 0.0f, sigma_h);										// calculate the Gaussian value
-				sum_h += kernel_h[j];
-			}
-			if (sum_h > 0.0f) {																// nomalize
-				float inv = 1.0f / sum_h;
-				for (unsigned int j = 0; j < window_size_h; ++j) kernel_h[j] *= inv;
-			}
-			float* gpu_kernel_h = nullptr;
-			HANDLE_ERROR(cudaMalloc(&gpu_kernel_h, sizeof(float) * window_size_h));
-			HANDLE_ERROR(cudaMemcpy(gpu_kernel_h, kernel_h, sizeof(float) * window_size_h, cudaMemcpyHostToDevice));
-
-			// X kernel (width)
-			float* kernel_w = static_cast<float*>(malloc(sizeof(float) * window_size_w));	// allocate space for the x kernel
-			float sum_w = 0.0f;
-			const float dx = pixel_size.x;
-			const float startx_w = -(static_cast<float>(window_size_w) / 2.0f) + (dx / 2.0f);
-
-			int xw = -static_cast<int>(window_size_w / 2);									// calculate the starting coordinate for the kernel
-			for (unsigned int i = 0; i < window_size_w; ++i) {										// for each pixel in the kernel
-				const float x = startx_w + static_cast<float>(i) * dx;
-				kernel_w[i] = normal(x, 0.0f, sigma_w);									// calculate the Gaussian value
-				sum_w += kernel_w[i];
-			}
-			if (sum_w > 0.0f) {																// nomalize
-				float inv = 1.0f / sum_w;
-				for (unsigned int i = 0; i < window_size_w; ++i) kernel_w[i] *= inv;
-			}
-			float* gpu_kernel_w = nullptr;
-			HANDLE_ERROR(cudaMalloc(&gpu_kernel_w, sizeof(float) * window_size_w));
-			HANDLE_ERROR(cudaMemcpy(gpu_kernel_w, kernel_w, sizeof(float) * window_size_w, cudaMemcpyHostToDevice));
-
+			
 			// Z kernel (depth)
-			float* kernel_d = static_cast<float*>(malloc(sizeof(float) * window_size_d));	// allocate space for the z kernel
-			float sum_d = 0.0f;
-			const float dz = pixel_size.z;
-			const float startx_d = -(static_cast<float>(window_size_d) / 2.0f) + (dz / 2.0f);
-
-			int xd = -static_cast<int>(window_size_d / 2);									// calculate the starting coordinate for the kernel
-			for (unsigned int k = 0; k < window_size_d; ++k) {							// for each pixel in the kernel
-				const float z = startx_d + static_cast<float>(k) * dz;
-				kernel_d[k] = normal(z, 0, sigma_d);						// calculate the Gaussian value
-				sum_d += kernel_d[k];
-			}
-			if (sum_d > 0.0f) {																// nomalize
-				float inv = 1.0f / sum_d;
-				for (unsigned int k = 0; k < window_size_d; ++k) kernel_d[k] *= inv;
-			}
+			auto kernel_d = kernel_gaussian_cuda(window_size_d, sigma_d);
 			float* gpu_kernel_d = nullptr;
 			HANDLE_ERROR(cudaMalloc(&gpu_kernel_d, sizeof(float) * window_size_d));
-			HANDLE_ERROR(cudaMemcpy(gpu_kernel_d, kernel_d, sizeof(float) * window_size_d, cudaMemcpyHostToDevice));
+			HANDLE_ERROR(cudaMemcpy(gpu_kernel_d, kernel_d.data(), sizeof(float) * window_size_d, cudaMemcpyHostToDevice));
+
+			// Y kernel (height)
+			auto kernel_h = kernel_gaussian_cuda(window_size_h, sigma_h);
+			float* gpu_kernel_h = nullptr;
+			HANDLE_ERROR(cudaMalloc(&gpu_kernel_h, sizeof(float) * window_size_h));
+			HANDLE_ERROR(cudaMemcpy(gpu_kernel_h, kernel_h.data(), sizeof(float) * window_size_h, cudaMemcpyHostToDevice));
+
+			// X kernel (width)
+			auto kernel_w = kernel_gaussian_cuda(window_size_w, sigma_w);
+			float* gpu_kernel_w = nullptr;
+			HANDLE_ERROR(cudaMalloc(&gpu_kernel_w, sizeof(float) * window_size_w));
+			HANDLE_ERROR(cudaMemcpy(gpu_kernel_w, kernel_w.data(), sizeof(float) * window_size_w, cudaMemcpyHostToDevice));
+
 			// -------------------- End Build Kernels ----------------------
 			 
 			// ----- Launch configuration (separable convolution in 3 passes) -----
@@ -383,7 +348,6 @@ namespace tira {
 			HANDLE_ERROR(cudaGetLastError());
 			HANDLE_ERROR(cudaDeviceSynchronize());
 			HANDLE_ERROR(cudaFree(gpu_firstpass));
-			gpu_firstpass = nullptr;
 
 			// --- Third pass: X convolution (reduces width to out_width) ---
 			T* gpu_out = nullptr;																	// calculate the size of the final output image
@@ -400,7 +364,6 @@ namespace tira {
 			HANDLE_ERROR(cudaGetLastError());
 			HANDLE_ERROR(cudaDeviceSynchronize());
 			HANDLE_ERROR(cudaFree(gpu_secondpass));
-			gpu_secondpass = nullptr;
 
 			// ----- Copy back or return device pointer
 			T* out = nullptr;
@@ -411,18 +374,12 @@ namespace tira {
 				out = static_cast<T*>(malloc(out_bytes));
 				HANDLE_ERROR(cudaMemcpy(out, gpu_out, out_bytes, cudaMemcpyDeviceToHost));
 				HANDLE_ERROR(cudaFree(gpu_out));
-				gpu_out = nullptr;
 			}
-
 
 			// ----- Clean up kernels -----
 			HANDLE_ERROR(cudaFree(gpu_kernel_w));
 			HANDLE_ERROR(cudaFree(gpu_kernel_h));
 			HANDLE_ERROR(cudaFree(gpu_kernel_d));
-
-			free(kernel_w);
-			free(kernel_h);
-			free(kernel_d);
 
 			return out;
 		}
