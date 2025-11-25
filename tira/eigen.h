@@ -570,6 +570,11 @@ namespace tira::cpu {
             T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
             evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
 
+            // Clamp to [-1,1] to avoid NaNs from acos in case of numerical drift
+            evec0[2] = (evec0[2] < T(-1)) ? T(-1) : ((evec0[2] > T(1)) ? T(1) : evec0[2]);
+            evec1[2] = (evec1[2] < T(-1)) ? T(-1) : ((evec1[2] > T(1)) ? T(1) : evec1[2]);
+            evec2[2] = (evec2[2] < T(-1)) ? T(-1) : ((evec2[2] > T(1)) ? T(1) : evec2[2]);
+
             evecs[i * 6 + 0] = std::atan2(evec0[1], evec0[0]);
             evecs[i * 6 + 1] = std::acos(evec0[2]);
 
