@@ -50,6 +50,15 @@ namespace tira::tensorvote {
         return trig_int * (sigma1 * sigma1 + sigma2 * sigma2);
     }
 
+    /**
+     * @brief Normalization constant for 3D stick voting
+     * 
+	 * @tparam T        Floating point type
+     * @param sigma1    Stick-vote sigma along first axis.
+     * @param sigma2    Stick-vote sigma along second axis.
+     * @param p         Stick-vote power (refinement exponent).
+     * @return          Normalization factor for 3D stick votes.
+    */
 	template <typename T>
     CUDA_CALLABLE static T sticknorm3(const T sigma1, const T sigma2, const unsigned p) {
         T pi_term = TV_PI * sqrt(TV_PI) / 2.0;
@@ -236,7 +245,9 @@ namespace tira::tensorvote {
         }
     }
 
-
+    /**
+     * @brief Precomputed 3D neighbor offset and weights for voting.
+     */
     struct Neighbor3D {
 		int du, dv, dw;                 // index offsets along x2 (u), x1 (v), and x0 (w)
 		glm::vec3 d;                    // normalized direction from sender to receiver (du, dv, dw)
@@ -245,6 +256,13 @@ namespace tira::tensorvote {
 		float c2;                       // exp(-l2 / sigma2^2)
     };
 
+    /**
+     * @brief Build all 3D neighbor offsets and Gaussian weights for a window.
+     *
+     * @param w         Side length of cubic voting window.
+     * @param sigma     (sigma1, sigma2) for orthogonal and lateral decay.
+     * @return          Vector of precomputed 3D neighbors.
+     */
     inline std::vector<Neighbor3D> build_neighbors3d(int w, glm::vec2 sigma) {
         std::vector<Neighbor3D> neighbors;
         neighbors.reserve(static_cast<size_t>(w) * w * w);
@@ -271,12 +289,28 @@ namespace tira::tensorvote {
         return neighbors;
 	}
 
+    /**
+     * @brief Raise a scalar to an integer power (power >= 1).
+     *
+     * @param t      Base scalar.
+     * @param power  Exponent.
+     * @return       t^power.
+     */
 	inline float term_power(float t, unsigned power) {
         float r = t;
         for (unsigned i = 1; i < power; ++i) r *= t;
 		return r;
     }
 
+    /**
+     * @brief Accumulate one 3D stick vote contribution into a tensor.
+     *
+     * @param M      3x3 tensor accumulator (modified in place).
+     * @param n      Precomputed neighbor direction and decay factors.
+     * @param q      Local stick direction (largest eigenvector).
+     * @param power  Stick-vote power (refinement exponent).
+     * @param scale  Scale from eigenvalues at the voter.
+     */
     CUDA_CALLABLE void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
         // Calculate the contribution of (du,dv,dw) to (x,y,z)
         const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
@@ -295,19 +329,22 @@ namespace tira::tensorvote {
         M[2][0] += term * rz * rx; M[2][1] += term * rz * ry; M[2][2] += term * rz * rz;
     }
 
-    /// <summary>
-	/// Accumulate the stick vote for a receiver at position x from the precomputed neighbor offsets and eigenvalues/vectors.
-    /// </summary>
-    /// <param name="L">pointer to a volume of eigenvalues</param>
-    /// <param name="Q">pointer to a volume of largest eigenvectors in cartesian coordinates</param>
-	/// <param name="NB">precomputed neighbor offsets and direction vectors</param>
-    /// <param name="power">refinement term</param>
-    /// <param name="norm"></param>
-    /// <param name="w">width of the vote region</param>
-    /// <param name="s0">size of the L and V images along the first dimension</param>
-    /// <param name="s1">size of the L and V images along the second dimension</param>
-    /// <param name="x">position of the receiver</param>
-    /// <returns></returns>
+    /**
+     * @brief Compute 3D stick vote tensor at a receiver voxel.
+     *
+     * Uses precomputed 3D neighbors and largest eigenvectors to accumulate
+     * stick votes around a receiver location.
+     *
+     * @param L      Volume of eigenvalues (L0, L1, L2) per voxel.
+     * @param Q      Volume of largest eigenvectors (stick direction) per voxel.
+     * @param NB     Precomputed neighbor offsets and decay factors.
+     * @param power  Stick-vote power (refinement exponent).
+     * @param s0     Volume size along first dimension.
+     * @param s1     Volume size along second dimension.
+     * @param s2     Volume size along third dimension.
+     * @param x      Receiver voxel location index (x0, x1, x2).
+     * @return       3x3 stick vote tensor at the receiver.
+     */
     CUDA_CALLABLE static glm::mat3 stickvote3(const glm::vec3* L, const glm::vec3* Q, const std::vector<Neighbor3D>& NB,
         const unsigned power, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
 
@@ -343,6 +380,21 @@ namespace tira::tensorvote {
         return Votee;
     }
 
+    /**
+     * @brief Closed-form 3D plate vote from a single neighbor direction.
+     *
+     * Uses hypergeometric and beta integrals to analytically integrate
+     * stick votes around a plate normal.
+     *
+     * @param d      Normalized direction from voter to receiver.
+     * @param c1     Gaussian weight for sigma1 (exponential term).
+     * @param c2     Gaussian weight for sigma2 (exponential term).
+     * @param power  Plate-vote power (refinement exponent).
+     * @param evec0  Plate normal (smallest eigenvector).
+     * @param K0     Precomputed beta integral for J0-like term.
+     * @param K1     Precomputed beta integral for J1-like term.
+     * @return       3x3 plate vote tensor contribution.
+     */
     CUDA_CALLABLE  static glm::mat3 platevote3_analytic(const glm::vec3& d, float c1, float c2, unsigned power, 
         const glm::vec3& evec0, double K0, double K1) {
 
@@ -424,7 +476,20 @@ namespace tira::tensorvote {
         return PlateVote;
     }
 
-
+    /**
+     * @brief Numerical 3D plate vote via sampled stick integration.
+     *
+     * Integrates stick votes on a great circle around the plate normal
+     * to approximate a plate vote tensor.
+     *
+     * @param d        Direction from voter to receiver.
+     * @param c1       Gaussian weight for sigma1 (exponential term).
+     * @param c2       Gaussian weight for sigma2 (exponential term).
+     * @param power    Plate-vote power (refinement exponent).
+     * @param evec0    Plate normal (smallest eigenvector).
+     * @param samples  Number of angular samples for integration.
+     * @return         Approximate 3x3 plate vote tensor.
+     */
     CUDA_CALLABLE glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power,
         const glm::vec3& evec0, unsigned samples = 20) {
 
@@ -462,6 +527,23 @@ namespace tira::tensorvote {
         return V;
     }
 
+    /**
+     * @brief 3D plate vote tensor at a receiver voxel.
+     *
+     * Combines either analytical or numerical plate votes from all
+     * neighbors, scaled by (L1 - L0) at each voter.
+     *
+     * @param L        Volume of eigenvalues (L0, L1, L2) per voxel.
+     * @param Q_small  Volume of smallest eigenvectors (plate normals) per voxel.
+     * @param NB       Precomputed neighbor offsets and decay factors.
+     * @param power    Plate-vote power (refinement exponent).
+     * @param s0       Volume size along first dimension.
+     * @param s1       Volume size along second dimension.
+     * @param s2       Volume size along third dimension.
+     * @param x        Receiver voxel index (x0, x1, x2).
+     * @param samples  >0 for numerical integration, 0 for analytic form.
+     * @return         3x3 plate vote tensor at the receiver.
+     */
     CUDA_CALLABLE static glm::mat3 platevote3(const glm::vec3* L, const glm::vec3* Q_small, const std::vector<Neighbor3D>& NB, const unsigned power,
         const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x, const unsigned samples = 0) {
 
@@ -506,7 +588,27 @@ namespace tira::tensorvote {
         }
         return Receiver;
     }
-
+    
+    /**
+     * @brief CPU implementation of full 3D tensor voting (stick + plate).
+     *
+     * For each voxel, accumulates stick and/or plate votes from a cubic
+     * neighborhood using precomputed neighbors and eigen-frames.
+     *
+     * @param VT        Output volume of 3x3 vote tensors.
+     * @param L         Volume of eigenvalues (L0, L1, L2) per voxel.
+     * @param Q_large   Volume of largest eigenvectors (stick directions).
+     * @param Q_small   Volume of smallest eigenvectors (plate normals).
+     * @param sigma     (sigma1, sigma2) for stick/plate decay.
+     * @param power     Voting power (refinement exponent).
+     * @param w         Side length of cubic voting window.
+     * @param s0        Volume size along first dimension.
+     * @param s1        Volume size along second dimension.
+     * @param s2        Volume size along third dimension.
+     * @param STICK     If true, include stick votes.
+     * @param PLATE     If true, include plate votes.
+     * @param samples   Samples for numerical plate (0 = analytic).
+     */
     static void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small, 
         glm::vec2 sigma, unsigned int power, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2, 
         const bool STICK = true, const bool PLATE = true, const unsigned samples = 20) {
@@ -523,7 +625,7 @@ namespace tira::tensorvote {
                     if (STICK)
                         Vote += sticknorm * stickvote3(L, Q_large, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2));
                     if (PLATE)
-                        Vote += sticknorm * platevote3(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
+                        Vote += platenorm * platevote3(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
                     VT[x0 * s1 * s2 + x1 * s2 + x2] = Vote;
                 }
             }
