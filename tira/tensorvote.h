@@ -92,12 +92,9 @@ namespace tira::tensorvote {
 
         const float qTd = glm::dot(q, d);
 
-        float eta1 = 0;
-        float eta2 = 0;
-        if (sigma[0] > 0)
-            eta1 = decay(1 - qTd * qTd, l, sigma[0], power);                       // calculate the decay function
-        if (sigma[1] > 0)
-            eta2 = decay(qTd * qTd, l, sigma[1], power);
+		// Calculate the decay terms
+		float eta1 = sigma[0] == 0.0f ? (l > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : decay(1 - qTd * qTd, l, sigma[0], power);
+		float eta2 = sigma[1] == 0.0f ? (l > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : decay(qTd * qTd, l, sigma[1], power);
 
         const glm::mat2 R = glm::mat2(1.0f) - 2.0f * glm::outerProduct(d, d);
         const glm::vec2 Rq = R * q;
@@ -280,8 +277,8 @@ namespace tira::tensorvote {
                     if (n.l2 == 0.0f) n.d = glm::vec3(0.0f, 0.0f, 0.0f);
 					else n.d = glm::vec3(float(du), float(dv), float(dw)) / sqrtf(n.l2);
                     
-					n.c1 = sigma.x > 0 ? expf(-n.l2 * invsig1) : 0.0f;
-                    n.c2 = sigma.y > 0 ? expf(-n.l2 * invsig2) : 0.0f;
+					n.c1 = sigma.x == 0.0f ? (n.l2 > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : expf(-n.l2 * invsig1);
+					n.c2 = sigma.y == 0.0f ? (n.l2 > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : expf(-n.l2 * invsig2);
 					neighbors.push_back(n);
                 }
             }
