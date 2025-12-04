@@ -5,7 +5,8 @@
 #define PI 3.14159265358979323846
 #define TIRA_EIGEN_EPSILON 1e-12
 
-namespace tira {
+
+namespace tira::shared {
     template <typename T>
     CUDA_CALLABLE void swap(T& a, T& b) {
         T temp = a;
@@ -460,25 +461,27 @@ namespace tira {
 }
 
 
-
+/**
+ * CPU namespace contains functions that are run completely on the host. All input and output pointers
+ * are allocated on the host.
+ */
 namespace tira::cpu {
+    /**
+     *
+     * @tparam Type is the data type used to represent the input matrices
+     * @param mats is a pointer to the start of the matrix array in DRAM
+     * @param n is the number of matrices in the array
+     * @return a dynamically-allocated array of eigenvalue pairs (bytes = n * 2 * sizeof(Type))
+     */
+    template<typename Type>
+    Type* evals2_symmetric(const Type* mats, const size_t n) {
 
-    /// <summary>
-    /// CPU code for calculating eigenvalues of a 2D matrix array
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="mats"></param>
-    /// <param name="n"></param>
-    /// <returns></returns>
-    template<typename T>
-    T* evals2_symmetric(const T* mats, const size_t n) {
-
-        T* evals = new T[2*n];
-        T eval0, eval1;
+        Type* evals = new Type[2*n];
+        Type eval0, eval1;
         for (size_t i = 0; i < n; i++) {
-            T a = mats[i * 4 + 0];
-            T b = mats[i * 4 + 1];
-            T c = mats[i * 4 + 3];
+            Type a = mats[i * 4 + 0];
+            Type b = mats[i * 4 + 1];
+            Type c = mats[i * 4 + 3];
             eval2_symmetric(a, b, c, eval0, eval1);
             evals[i * 2 + 0] = eval0;
             evals[i * 2 + 1] = eval1;
@@ -588,3 +591,53 @@ namespace tira::cpu {
     }
 }
 
+/**
+ * The CUDA namespace runs everything on the GPU. Input and output pointers can be on either the host or device.
+ * If pointers are located on the host, the data will be copied to the currently active CUDA device.
+ * This region is only compiled when it's passed to nvcc.
+ */
+#ifdef __CUDACC__
+namespace tira::cuda {
+    /**
+     *
+     * @tparam Type is the data type used to represent the input matrices
+     * @param mats is a pointer to the start of the matrix array in DRAM
+     * @param n is the number of matrices in the array
+     * @return a dynamically-allocated array of eigenvalue pairs (bytes = n * 2 * sizeof(Type))
+     */
+
+    template <typename Type>
+    __global__ void kernel_evals2_symmetric(const Type* mats, Type* evals, const size_t n) {
+        i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= n) return;
+
+        Type eval0, eval1;
+        Type a = mats[i * 4 + 0];
+        Type b = mats[i * 4 + 1];
+        Type c = mats[i * 4 + 3];
+        eval2_symmetric(a, b, c, eval0, eval1);
+        evals[i * 2 + 0] = eval0;
+        evals[i * 2 + 1] = eval1;
+    }
+
+    template<typename Type>
+    Type* evals2_symmetric(const Type* mats, const size_t n) {
+
+        Type* evals;
+        cudaMalloc(&evals, sizeof(Type) * 2 * n);
+        dim3 block_dim(1024);
+        dim3 grid_dim(n / 1024 + 1);
+
+        kernel_evals2_symmetric<<<grid_dim, block_dim>>>(mats, evals, n);
+        return evals;
+    }
+}
+#endif
+
+/**
+ * Any functions in this general namespace will look at the associated pointers or device numbers and
+ * determine which functions in tira::cpu and tira::cuda are executed. This might be unnecessary.
+ */
+namespace tira {
+
+}
