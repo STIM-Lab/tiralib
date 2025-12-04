@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cmath>
-#include <algorithm>
 #include <tira/cuda/callable.h>
 
 #ifdef __CUDACC__
@@ -21,10 +20,8 @@ namespace tira::shared {
     }
 
     template <typename T>
-    CUDA_CALLABLE T sgn(T& a) {
-        if (a > (T)0) return (T)(1);
-        if (a < (T)0) return (T)(-1);
-        else return (T)0;
+    CUDA_CALLABLE T sgn(const T& a) {
+		return (a > T(0)) - (a < T(0));
     }
     
     template <typename T>
@@ -90,7 +87,7 @@ namespace tira::shared {
             return;
         }
         if (disc < 0) disc = 0;
-        T q = -0.5 * (b + sgn(b) * sqrt(disc));
+        T q = -T(0.5) * (b + sgn(b) * sqrt(disc));
         r1 = q;
         r2 = c / q;
     }
@@ -153,18 +150,18 @@ namespace tira::shared {
         T temp[3];
         if (absY - absX > TIRA_EIGEN_EPSILON) {
             if (absZ - absX > TIRA_EIGEN_EPSILON) {
-                temp[0] = 1.0f; temp[1] = 0.0f; temp[2] = 0.0f;         // X is smallest
+                temp[0] = T(1); temp[1] = T(0); temp[2] = T(0);         // X is smallest
             }
             else {
-            temp[0] = 0.0f; temp[1] = 0.0f; temp[2] = 1.0f;         // Z is smallest
+            temp[0] = T(0); temp[1] = T(0); temp[2] = T(1);         // Z is smallest
             }
         }
         else {
             if (absZ - absY > TIRA_EIGEN_EPSILON) {
-                temp[0] = 0.0f; temp[1] = 1.0f; temp[2] = 0.0f;          // Y is smallest
+                temp[0] = T(0); temp[1] = T(1); temp[2] = T(0);          // Y is smallest
             }
             else {
-                temp[0] = 0.0f; temp[1] = 0.0f; temp[2] = 1.0f;         // Z is smallest
+                temp[0] = T(0); temp[1] = T(0); temp[2] = T(1);         // Z is smallest
             }
         }
 		cross3(evec, temp, U);  // U = evec x temp
@@ -389,28 +386,24 @@ namespace tira::shared {
             // and assign the correct basis vector
             
             // Create pairs of (evals, evec_idx)
-			T val_idx[3][2] = { {a, 0} , {c, 1}, {f, 2} };
-			T basis[3][3] = { {1,0,0}, {0,1,0}, {0,0,1} };
+            struct EvalIdx { T eval; int index; };
+			EvalIdx vi[3] = { {a, 0} , {c, 1}, {f, 2} };
+            T basis[3][3] = { 
+                {T(1), T(0), T(0)},
+                {T(0), T(1), T(0)},
+				{T(0), T(0), T(1)}
+            };
 
-			// Bubble sort on the pairs based on evals
-            if (val_idx[0][0] > val_idx[1][0]) {
-                swap(val_idx[0][0], val_idx[1][0]);
-                swap(val_idx[0][1], val_idx[1][1]);
-			}
-            if (val_idx[1][0] > val_idx[2][0]) {
-                swap(val_idx[1][0], val_idx[2][0]);
-                swap(val_idx[1][1], val_idx[2][1]);
-            }
-            if (val_idx[0][0] > val_idx[1][0]) {
-                swap(val_idx[0][0], val_idx[1][0]);
-                swap(val_idx[0][1], val_idx[1][1]);
-			}
+			// Bubble sort on the pairs based on evals (ascending)
+            if (vi[0].eval > vi[1].eval) swap(vi[0], vi[1]);
+            if (vi[1].eval > vi[2].eval) swap(vi[1], vi[2]);
+            if (vi[0].eval > vi[1].eval) swap(vi[0], vi[1]);
 
-			// Assign the eigenvectors based on the sorted order
-			int idx0 = (int)val_idx[0][1];
-			int idx1 = (int)val_idx[1][1];
-			int idx2 = (int)val_idx[2][1];
+            const int idx0 = vi[0].index;
+			const int idx1 = vi[1].index;
+			const int idx2 = vi[2].index;
 
+            // Assign the eigenvectors based on the sorted order
 			evec0[0] = basis[idx0][0]; evec0[1] = basis[idx0][1]; evec0[2] = basis[idx0][2];
 			evec1[0] = basis[idx1][0]; evec1[1] = basis[idx1][1]; evec1[2] = basis[idx1][2];
 			evec2[0] = basis[idx2][0]; evec2[1] = basis[idx2][1]; evec2[2] = basis[idx2][2];
@@ -564,7 +557,7 @@ namespace tira::cpu {
         // | d  e  f |
 
         T* evecs = new T[3 * 2 * n];
-        for (unsigned int i = 0; i < n; i++) {
+        for (size_t i = 0; i < n; i++) {
             T a = mats[i * 9 + 0];
             T b = mats[i * 9 + 1];
             T d = mats[i * 9 + 2];
@@ -612,7 +605,7 @@ namespace tira::cuda {
      * @return a dynamically-allocated array of eigenvalue pairs (bytes = n * 2 * sizeof(Type))
      */
     template <typename Type>
-    __global__ void kernel_evals2_symmetric(const Type* mats, Type* evals, const size_t n) {
+    __global__ void kernel_eval2_symmetric(const Type* mats, const size_t n, Type* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
 
@@ -626,7 +619,7 @@ namespace tira::cuda {
     }
 
     template <typename Type>
-    __global__ void kernel_evec2polar_symmetric(const Type* mats, const Type* evals, Type* evecs, const size_t n) {
+    __global__ void kernel_evec2polar_symmetric(const Type* mats, const Type* evals, const size_t n, Type* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         Type a = mats[i * 4 + 0];
@@ -636,7 +629,7 @@ namespace tira::cuda {
 	}
 
 	template<typename Type>
-    __global__ void kernel_evals3_symmetric(const Type* mats, Type* evals, const size_t n) {
+    __global__ void kernel_eval3_symmetric(const Type* mats, const size_t n, Type* evals) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
 
@@ -647,7 +640,7 @@ namespace tira::cuda {
         const Type e = mats[i * 9 + 5];
         const Type f = mats[i * 9 + 8];
 
-        T l0, l1, l2;
+        Type l0, l1, l2;
         tira::shared::eval3_symmetric(a, b, c, d, e, f, l0, l1, l2);
 
         evals[i * 3 + 0] = l0;
@@ -656,7 +649,7 @@ namespace tira::cuda {
     }
 
 	template<typename Type>
-    __global__ void kernel_evecs3spherical_symmetric(const Type* mats, const Type* evals, Type* evecs, const size_t n) {
+    __global__ void kernel_evec3spherical_symmetric(const Type* mats, const Type* evals, const size_t n, Type* evecs) {
         const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
         const Type a = mats[i * 9 + 0];
@@ -696,9 +689,9 @@ namespace tira::cuda {
         cudaPointerAttributes attribs;										// create a pointer attribute structure
         HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			// get the attributes for the source pointer
 
-        if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
-            gpu_mats = mats;									            // set the gpu_source pointer to source
-        }
+        // if the provided pointer is on the device set the gpu_source pointer to source
+        if (attribs.type == cudaMemoryTypeDevice)   gpu_mats = mats;
+
         else {																// otherwise copy the source image to the GPU
             HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
             HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
@@ -711,7 +704,7 @@ namespace tira::cuda {
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
         unsigned int max_threads = props.maxThreadsPerBlock;
         dim3 blockDim = max_threads;
-        dim3 gridDim = n / blockDim.x + 1;	                                // calculate the grid size for the first pass
+        dim3 gridDim = (n / blockDim.x - 1) / blockDim.x;	                // calculate the grid size for the first pass
 
         Type* gpu_evals;
         HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
@@ -761,7 +754,7 @@ namespace tira::cuda {
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
         unsigned int max_threads = props.maxThreadsPerBlock;
         dim3 blockDim = max_threads;
-        dim3 gridDim = n / blockDim.x + 1;	                                // calculate the grid size for the first pass
+        dim3 gridDim = (n / blockDim.x - 1) / blockDim.x;	                // calculate the grid size for the first pass
 
         Type* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
@@ -811,7 +804,7 @@ namespace tira::cuda {
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
         unsigned int max_threads = props.maxThreadsPerBlock;
         dim3 blockDim = max_threads;
-        dim3 gridDim = n / blockDim.x + 1;	                                // calculate the grid size for the first pass
+        dim3 gridDim = (n / blockDim.x - 1) / blockDim.x;	                // calculate the grid size for the first pass
 
         Type* gpu_evals;
         HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
@@ -820,7 +813,7 @@ namespace tira::cuda {
         if (attribs.type == cudaMemoryTypeDevice)
             return gpu_evals;
         else {
-            T* evals = new Type[3 * n];
+            Type* evals = new Type[3 * n];
             HANDLE_ERROR(cudaMemcpy(evals, gpu_evals, evals_bytes, cudaMemcpyDeviceToHost));
             HANDLE_ERROR(cudaFree(gpu_evals));
             HANDLE_ERROR(cudaFree(temp_gpu_mats));
@@ -849,7 +842,7 @@ namespace tira::cuda {
         else {																// otherwise copy the source image to the GPU
             HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								    // allocate space on the GPU for the source image
             HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));      // copy the source image to the GPU
-            gpu_mats = static_cast<const T*>(temp_gpu_mats);
+            gpu_mats = static_cast<const Type*>(temp_gpu_mats);
         }
 
         // Determine if the eigenvalues are provided on the CPU or GPU
@@ -869,7 +862,7 @@ namespace tira::cuda {
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
         unsigned int max_threads = props.maxThreadsPerBlock;
         dim3 blockDim = max_threads;
-        dim3 gridDim = n / blockDim.x + 1;	                                    // calculate the grid size for the first pass
+        dim3 gridDim = (n / blockDim.x - 1) / blockDim.x;	                // calculate the grid size for the first pass
 
         Type* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, evecs_bytes));
