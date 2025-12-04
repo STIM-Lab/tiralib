@@ -1,6 +1,12 @@
 #pragma once
 
+#include <cmath>
+#include <algorithm>
 #include <tira/cuda/callable.h>
+
+#ifdef __CUDACC__
+    #include <tira/cuda/error.h>
+#endif
 
 #define PI 3.14159265358979323846
 #define TIRA_EIGEN_EPSILON 1e-12
@@ -121,12 +127,12 @@ namespace tira::shared {
         T a_l1 = a - l1;
 
         if (abs(a_l0) >= abs(a_l1)) {
-            theta1 = std::atan2(b, a_l0);
+            theta1 = atan2(b, a_l0);
             theta0 = theta1 + (PI / 2.0);
             if (theta0 > PI) theta0 -= 2 * PI;
         }
         else {
-            theta0 = std::atan2(b, a_l1);
+            theta0 = atan2(b, a_l1);
             theta1 = theta0 + (PI / 2.0);
             if (theta1 > PI) theta1 -= 2 * PI;
         }
@@ -449,14 +455,14 @@ namespace tira::shared {
         cart_evec1[2] = (cart_evec1[2] < T(-1)) ? T(-1) : ((cart_evec1[2] > T(1)) ? T(1) : cart_evec1[2]);
         cart_evec2[2] = (cart_evec2[2] < T(-1)) ? T(-1) : ((cart_evec2[2] > T(1)) ? T(1) : cart_evec2[2]);
 
-        evec0[0] = std::atan2(cart_evec0[1], cart_evec0[0]);
-        evec0[1] = std::acos(cart_evec0[2]);
+        evec0[0] = atan2(cart_evec0[1], cart_evec0[0]);
+        evec0[1] = acos(cart_evec0[2]);
 
-        evec1[0] = std::atan2(cart_evec1[1], cart_evec1[0]);
-        evec1[1] = std::acos(cart_evec1[2]);
+        evec1[0] = atan2(cart_evec1[1], cart_evec1[0]);
+        evec1[1] = acos(cart_evec1[2]);
 
-        evec2[0] = std::atan2(cart_evec2[1], cart_evec2[0]);
-        evec2[1] = std::acos(cart_evec2[2]);
+        evec2[0] = atan2(cart_evec2[1], cart_evec2[0]);
+        evec2[1] = acos(cart_evec2[2]);
     }
 }
 
@@ -482,13 +488,12 @@ namespace tira::cpu {
             Type a = mats[i * 4 + 0];
             Type b = mats[i * 4 + 1];
             Type c = mats[i * 4 + 3];
-            eval2_symmetric(a, b, c, eval0, eval1);
+            shared::eval2_symmetric(a, b, c, eval0, eval1);
             evals[i * 2 + 0] = eval0;
             evals[i * 2 + 1] = eval1;
         }
         return evals;
     }
-
 
     /**
 	* CPU code for calculating eigenvectors of an array of 2x2 matrices given an
@@ -507,7 +512,7 @@ namespace tira::cpu {
             T a = mats[i * 4 + 0];
             T b = mats[i * 4 + 1];
             T c = mats[i * 4 + 3];
-            evec2polar_symmetric(a, b, c, &evals[i * 2], vec0, vec1);
+            shared::evec2polar_symmetric(a, b, c, &evals[i * 2], vec0, vec1);
             vecs[i * 2 + 0] = vec0;
             vecs[i * 2 + 1] = vec1;
         }
@@ -534,7 +539,7 @@ namespace tira::cpu {
 			T e = mats[i * 9 + 5];
 			T f = mats[i * 9 + 8];
 
-            eval3_symmetric(a,b,c,d,e,f, eval0, eval1, eval2);
+            shared::eval3_symmetric(a,b,c,d,e,f, eval0, eval1, eval2);
 
             evals[i * 3 + 0] = eval0;
             evals[i * 3 + 1] = eval1;
@@ -542,7 +547,6 @@ namespace tira::cpu {
         }
         return evals;
     }
-
 
     /**
      * Calculate the eigenvectors of an array of 3x3 matrices. The eigenvectors are returned in spherical coordinates (theta, phi)
@@ -568,10 +572,9 @@ namespace tira::cpu {
             T e = mats[i * 9 + 5];
             T f = mats[i * 9 + 8];
 
-			// Now we can safely calculate the eigenvectors
 			T evec0[3], evec1[3], evec2[3];
             T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
-            evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
+            shared::evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
 
             // Clamp to [-1,1] to avoid NaNs from acos in case of numerical drift
             evec0[2] = (evec0[2] < T(-1)) ? T(-1) : ((evec0[2] > T(1)) ? T(1) : evec0[2]);
@@ -598,6 +601,9 @@ namespace tira::cpu {
  */
 #ifdef __CUDACC__
 namespace tira::cuda {
+
+	// ------ Kernels ------
+
     /**
      *
      * @tparam Type is the data type used to represent the input matrices
@@ -605,31 +611,281 @@ namespace tira::cuda {
      * @param n is the number of matrices in the array
      * @return a dynamically-allocated array of eigenvalue pairs (bytes = n * 2 * sizeof(Type))
      */
-
     template <typename Type>
     __global__ void kernel_evals2_symmetric(const Type* mats, Type* evals, const size_t n) {
-        i = blockIdx.x * blockDim.x + threadIdx.x;
+        const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i >= n) return;
 
         Type eval0, eval1;
         Type a = mats[i * 4 + 0];
         Type b = mats[i * 4 + 1];
         Type c = mats[i * 4 + 3];
-        eval2_symmetric(a, b, c, eval0, eval1);
+        shared::eval2_symmetric(a, b, c, eval0, eval1);
         evals[i * 2 + 0] = eval0;
         evals[i * 2 + 1] = eval1;
     }
 
+    template <typename Type>
+    __global__ void kernel_evec2polar_symmetric(const Type* mats, const Type* evals, Type* evecs, const size_t n) {
+        const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= n) return;
+        Type a = mats[i * 4 + 0];
+        Type b = mats[i * 4 + 1];
+        Type c = mats[i * 4 + 3];
+        tira::shared::evec2polar_symmetric(a, b, c, &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
+	}
+
+	template<typename Type>
+    __global__ void kernel_evals3_symmetric(const Type* mats, Type* evals, const size_t n) {
+        const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= n) return;
+
+        const Type a = mats[i * 9 + 0];
+        const Type b = mats[i * 9 + 1];
+        const Type d = mats[i * 9 + 2];
+        const Type c = mats[i * 9 + 4];
+        const Type e = mats[i * 9 + 5];
+        const Type f = mats[i * 9 + 8];
+
+        T l0, l1, l2;
+        tira::shared::eval3_symmetric(a, b, c, d, e, f, l0, l1, l2);
+
+        evals[i * 3 + 0] = l0;
+        evals[i * 3 + 1] = l1;
+        evals[i * 3 + 2] = l2;
+    }
+
+	template<typename Type>
+    __global__ void kernel_evecs3spherical_symmetric(const Type* mats, const Type* evals, Type* evecs, const size_t n) {
+        const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= n) return;
+        const Type a = mats[i * 9 + 0];
+        const Type b = mats[i * 9 + 1];
+        const Type d = mats[i * 9 + 2];
+        const Type c = mats[i * 9 + 4];
+        const Type e = mats[i * 9 + 5];
+        const Type f = mats[i * 9 + 8];
+        tira::shared::evec3spherical_symmetric(a, b, c, d, e, f,
+            &evals[i * 3],
+            &evecs[i * 6],
+            &evecs[i * 6 + 2],
+            &evecs[i * 6 + 4]);
+	}
+
+	// ------ Host-side launchers ------
+
+    /**
+     * @brief Compute eigenvalues of N symmetric 2x2 matrices on the GPU.
+     *
+     * @tparam Type is the data type used to represent the input matrices
+     * @param mats_device Pointer to N 2x2 matrices in device memory.
+     * @param n           Number of matrices.
+     * @return Type*      Pointer to eigenvalues in device memory (2*N elements).
+     *                    Caller is responsible for cudaFree().
+     */
     template<typename Type>
-    Type* evals2_symmetric(const Type* mats, const size_t n) {
+    Type* evals2_symmetric(const Type* mats, const size_t n, int device) {
+        if (device < 0) return cpu::evals2_symmetric(mats, n);
+
+        const Type* gpu_mats;
+        Type* temp_gpu_mats;
+        size_t mats_bytes = sizeof(Type) * 4 * n;
+        size_t evals_bytes = sizeof(Type) * 2 * n;
+
+        // determine if the source image is provided on the CPU or GPU
+        cudaPointerAttributes attribs;										// create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			// get the attributes for the source pointer
+
+        if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
+            gpu_mats = mats;									            // set the gpu_source pointer to source
+        }
+        else {																// otherwise copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+            gpu_mats = static_cast<const Type*>(temp_gpu_mats);
+        }
+
+        // get the active device properties to calculate the optimal the block size
+        HANDLE_ERROR(cudaGetDevice(&device));
+        cudaDeviceProp props;
+        HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
+        unsigned int max_threads = props.maxThreadsPerBlock;
+        dim3 blockDim = max_threads;
+        dim3 gridDim = n / blockDim.x + 1;	                                // calculate the grid size for the first pass
+
+        Type* gpu_evals;
+        HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
+        kernel_eval2_symmetric << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
 
         Type* evals;
-        cudaMalloc(&evals, sizeof(Type) * 2 * n);
-        dim3 block_dim(1024);
-        dim3 grid_dim(n / 1024 + 1);
-
-        kernel_evals2_symmetric<<<grid_dim, block_dim>>>(mats, evals, n);
+        if (attribs.type == cudaMemoryTypeDevice)   evals = gpu_evals;
+        else {
+            evals = new Type[2 * n];
+            HANDLE_ERROR(cudaMemcpy(evals, gpu_evals, evals_bytes, cudaMemcpyDeviceToHost));
+            HANDLE_ERROR(cudaFree(gpu_evals));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
+        }
         return evals;
+    }
+
+    template<typename Type>
+    Type* evecs2polar_symmetric(const Type* mats, Type* evals, size_t n, int device) {
+
+        const Type* gpu_mats;
+        const Type* gpu_evals;
+        Type* temp_gpu_mats;
+        Type* temp_gpu_evals;
+        size_t mats_bytes = sizeof(Type) * 4 * n;
+        size_t ev_bytes = sizeof(Type) * 2 * n;
+
+        // determine if the source image is provided on the CPU or GPU
+        cudaPointerAttributes attribs;										// create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			// get the attributes for the source pointer
+
+        if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
+            gpu_mats = mats;									            // set the gpu_source pointer to source
+            gpu_evals = evals;
+        }
+        else {																// otherwise copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_evals, ev_bytes));
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_evals, evals, ev_bytes, cudaMemcpyHostToDevice));
+            gpu_mats = static_cast<const Type*>(temp_gpu_mats);
+            gpu_evals = static_cast<const Type*>(temp_gpu_evals);
+        }
+
+        // get the active device properties to calculate the optimal the block size
+        HANDLE_ERROR(cudaGetDevice(&device));
+        cudaDeviceProp props;
+        HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
+        unsigned int max_threads = props.maxThreadsPerBlock;
+        dim3 blockDim = max_threads;
+        dim3 gridDim = n / blockDim.x + 1;	                                // calculate the grid size for the first pass
+
+        Type* gpu_evecs;
+        HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
+        kernel_evec2polar_symmetric << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
+
+        Type* evecs;
+        if (attribs.type == cudaMemoryTypeDevice)
+            evecs = gpu_evecs;
+        else {
+            evecs = new Type[2 * n];
+            HANDLE_ERROR(cudaMemcpy(evecs, gpu_evecs, ev_bytes, cudaMemcpyDeviceToHost));
+            HANDLE_ERROR(cudaFree(gpu_evecs));
+            HANDLE_ERROR(cudaFree(temp_gpu_evals));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
+        }
+        return evecs;
+    }
+
+    template<typename Type>
+    Type* evals3_symmetric(const Type* mats, const size_t n, int device) {
+        if (device < 0)  return cpu::evals3_symmetric(mats, n);
+
+        // Set up sizes for GPU storage
+        const size_t mats_bytes = sizeof(Type) * 9 * n;                              // required bytes for storing the tensor
+        const size_t evals_bytes = sizeof(Type) * 3 * n;                             // required bytes for storing eigenvalues
+
+        // Set up pointers
+        const Type* gpu_mats;
+        Type* temp_gpu_mats;
+
+        // Determine if the source volume is provided on the CPU or GPU
+        cudaPointerAttributes attribs;										// create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			    // get the attributes for the source pointer
+
+        if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
+            gpu_mats = mats;									            // set the gpu_source pointer to source
+        }
+        else {																// otherwise copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));   // copy the source image to the GPU
+            gpu_mats = static_cast<const Type*>(temp_gpu_mats);
+        }
+
+        // get the active device properties to calculate the optimal the block size
+        HANDLE_ERROR(cudaGetDevice(&device));
+        cudaDeviceProp props;
+        HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
+        unsigned int max_threads = props.maxThreadsPerBlock;
+        dim3 blockDim = max_threads;
+        dim3 gridDim = n / blockDim.x + 1;	                                // calculate the grid size for the first pass
+
+        Type* gpu_evals;
+        HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
+        kernel_eval3_symmetric << <gridDim, blockDim >> > (gpu_mats, n, gpu_evals);
+
+        if (attribs.type == cudaMemoryTypeDevice)
+            return gpu_evals;
+        else {
+            T* evals = new Type[3 * n];
+            HANDLE_ERROR(cudaMemcpy(evals, gpu_evals, evals_bytes, cudaMemcpyDeviceToHost));
+            HANDLE_ERROR(cudaFree(gpu_evals));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
+            return evals;
+        }
+    }
+
+    template<typename Type>
+    Type* evecs3spherical_symmetric(const Type* mats, const Type* lambda, const size_t n, int device) {
+        if (device < 0)  return cpu::evecs3spherical_symmetric(mats, lambda, n);
+
+        const Type* gpu_mats;
+        const Type* gpu_lambda;
+        Type* temp_gpu_mats;
+        Type* temp_gpu_lambda;
+        size_t mats_bytes = sizeof(Type) * 9 * n;                              // required bytes for storing the tensor
+        size_t evals_bytes = sizeof(Type) * 3 * n;                             // required bytes for storing eigenvalues
+        size_t evecs_bytes = sizeof(Type) * 6 * n;                             // required bytes for storing 2 3D eigenvectors (in polar coordinates)
+
+        // Determine if the source volume is provided on the CPU or GPU
+        cudaPointerAttributes attribs;										// create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			    // get the attributes for the source pointer
+
+        if (attribs.type == cudaMemoryTypeDevice)							// if the provided pointer is on the device
+            gpu_mats = mats;									            // set the gpu_source pointer to source
+        else {																// otherwise copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								    // allocate space on the GPU for the source image
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));      // copy the source image to the GPU
+            gpu_mats = static_cast<const T*>(temp_gpu_mats);
+        }
+
+        // Determine if the eigenvalues are provided on the CPU or GPU
+        HANDLE_ERROR(cudaPointerGetAttributes(&attribs, lambda));			    // get the attributes for the source pointer
+        if (attribs.type == cudaMemoryTypeDevice) {							    // if the provided pointer is on the device
+            gpu_lambda = lambda;									            // set the gpu_source pointer to source
+        }
+        else {																    // otherwise copy the source image to the GPU
+            HANDLE_ERROR(cudaMalloc(&temp_gpu_lambda, evals_bytes));
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_lambda, lambda, evals_bytes, cudaMemcpyHostToDevice));
+            gpu_lambda = static_cast<const Type*>(temp_gpu_lambda);
+        }
+
+        // Get the active device properties to calculate the optimal the block size
+        HANDLE_ERROR(cudaGetDevice(&device));
+        cudaDeviceProp props;
+        HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
+        unsigned int max_threads = props.maxThreadsPerBlock;
+        dim3 blockDim = max_threads;
+        dim3 gridDim = n / blockDim.x + 1;	                                    // calculate the grid size for the first pass
+
+        Type* gpu_evecs;
+        HANDLE_ERROR(cudaMalloc(&gpu_evecs, evecs_bytes));
+        kernel_evec3spherical_symmetric << <gridDim, blockDim >> > (gpu_mats, gpu_lambda, n, gpu_evecs);
+
+        Type* evecs;
+        if (attribs.type == cudaMemoryTypeDevice)
+            evecs = gpu_evecs;
+        else {
+            evecs = new Type[6 * n];
+            HANDLE_ERROR(cudaMemcpy(evecs, gpu_evecs, evecs_bytes, cudaMemcpyDeviceToHost));
+            HANDLE_ERROR(cudaFree(gpu_evecs));
+            HANDLE_ERROR(cudaFree(temp_gpu_lambda));
+            HANDLE_ERROR(cudaFree(temp_gpu_mats));
+        }
+        return evecs;
     }
 }
 #endif
