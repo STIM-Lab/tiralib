@@ -517,10 +517,10 @@ namespace tira::tensorvote {
 			stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,dn,0.0f,c1,c2 }, q, power, 1.0f);
         }
 
-		// Integral = sum * dbeta
-		V[0][0] *= dbeta; V[0][1] *= dbeta; V[0][2] *= dbeta;
-        V[1][0] *= dbeta; V[1][1] *= dbeta; V[1][2] *= dbeta;
-		V[2][0] *= dbeta; V[2][1] *= dbeta; V[2][2] *= dbeta;
+		// Integral = sum / samples
+		V[0][0] /= samples; V[0][1] /= samples; V[0][2] /= samples;
+        V[1][0] /= samples; V[1][1] /= samples; V[1][2] /= samples;
+		V[2][0] /= samples; V[2][1] /= samples; V[2][2] /= samples;
         return V;
     }
 
