@@ -21,7 +21,6 @@ namespace tira {
 
 		std::vector<double> _spacing;
 
-
 		/**
 		 * @brief Private initialization function sets the shape of the volume and allocates memory to store the data points
 		 * @param x is the size of the volume along the fastest dimension
@@ -36,7 +35,6 @@ namespace tira {
 			field<T>::m_shape.push_back(c);
 
 			field<T>::m_Allocate();
-
 		}
 
 		/**
@@ -83,7 +81,6 @@ namespace tira {
 		}
 
 		volume<float> _dist(volume<int>& binary_boundary) {
-
 			// create registers to hold the size
 			int w = X();
 			int h = Y();
@@ -99,8 +96,6 @@ namespace tira {
 			neighbors.emplace_back(-1, 0, 0);
 			neighbors.emplace_back(0, -1, 0);
 			neighbors.emplace_back(0, 0, -1);
-
-
 
 			// indentifying boundary cells
 			for (int y = 1; y < h - 1; y++) {						// for every row in the image
@@ -1691,7 +1686,6 @@ namespace tira {
 				squeezed_shape.pop_back();
 			}
 			field<T>::template SaveNpy<D>(filename, squeezed_shape);
-
 		}
 
 		T& operator()(size_t x, size_t y, size_t z, size_t c = 0) {

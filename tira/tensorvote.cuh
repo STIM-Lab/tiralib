@@ -1,7 +1,7 @@
 #pragma once
 #include "tensorvote.h"
 #include "cuda/error.h"
-#include "eigen.cuh"
+#include "eigen.h"
 
 #include <chrono>
 #include <glm/glm.hpp>
