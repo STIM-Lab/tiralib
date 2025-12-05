@@ -272,7 +272,7 @@ namespace tira::tensorvote {
             return r;
         }
 
-        static void tensorvote2_cpu(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
+        inline void tensorvote2_cpu(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
             const unsigned s0, const unsigned s1, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
 
             const float sticknorm = 1.0 / shared::sticknorm2(sigma[0], sigma[1], power);
@@ -295,7 +295,7 @@ namespace tira::tensorvote {
          * @param sigma     (sigma1, sigma2) for orthogonal and lateral decay.
          * @return          Vector of precomputed 3D neighbors.
          */
-        static std::vector<shared::Neighbor3D> build_neighbors3d(int w, glm::vec2 sigma) {
+        inline std::vector<shared::Neighbor3D> build_neighbors3d(int w, glm::vec2 sigma) {
             std::vector<shared::Neighbor3D> neighbors;
             neighbors.reserve(static_cast<size_t>(w) * w * w);
 
@@ -330,7 +330,7 @@ namespace tira::tensorvote {
      * @param power  Stick-vote power (refinement exponent).
      * @param scale  Scale from eigenvalues at the voter.
      */
-        static void stickvote3_accumulate_kernel(glm::mat3& M, const shared::Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
+        inline void stickvote3_accumulate_kernel(glm::mat3& M, const shared::Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
             // Calculate the contribution of (du,dv,dw) to (x,y,z)
             const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
             const float qTd2 = qTd * qTd;
@@ -364,7 +364,7 @@ namespace tira::tensorvote {
          * @param x      Receiver voxel location index (x0, x1, x2).
          * @return       3x3 stick vote tensor at the receiver.
          */
-        static glm::mat3 stickvote3(const glm::vec3* L, const glm::vec3* Q, const std::vector<shared::Neighbor3D>& NB,
+        inline glm::mat3 stickvote3(const glm::vec3* L, const glm::vec3* Q, const std::vector<shared::Neighbor3D>& NB,
             const unsigned power, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
 
             const int x0 = x[0];
@@ -414,7 +414,7 @@ namespace tira::tensorvote {
          * @param K1     Precomputed beta integral for J1-like term.
          * @return       3x3 plate vote tensor contribution.
          */
-        static glm::mat3 platevote3_analytic(const glm::vec3& d, float c1, float c2, unsigned power,
+        inline glm::mat3 platevote3_analytic(const glm::vec3& d, float c1, float c2, unsigned power,
             const glm::vec3& evec0, double K0, double K1) {
 
             glm::vec3 dn = d;
@@ -509,7 +509,7 @@ namespace tira::tensorvote {
          * @param samples  Number of angular samples for integration.
          * @return         Approximate 3x3 plate vote tensor.
          */
-        static glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power,
+        inline glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power,
             const glm::vec3& evec0, unsigned samples = 20) {
 
             // A zero-vector has no orientation and cannot vote
@@ -563,7 +563,7 @@ namespace tira::tensorvote {
          * @param samples  >0 for numerical integration, 0 for analytic form.
          * @return         3x3 plate vote tensor at the receiver.
          */
-        static glm::mat3 platevote3(const glm::vec3* L, const glm::vec3* Q_small, const std::vector<shared::Neighbor3D>& NB, const unsigned power,
+        inline glm::mat3 platevote3(const glm::vec3* L, const glm::vec3* Q_small, const std::vector<shared::Neighbor3D>& NB, const unsigned power,
             const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x, const unsigned samples = 0) {
 
             const int x0 = x[0];
@@ -628,7 +628,7 @@ namespace tira::tensorvote {
          * @param PLATE     If true, include plate votes.
          * @param samples   Samples for numerical plate (0 = analytic).
          */
-        static void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
+        inline void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
             glm::vec2 sigma, unsigned int power, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2,
             const bool STICK = true, const bool PLATE = true, const unsigned samples = 20) {
             const float sticknorm = 1.0 / shared::sticknorm3(sigma.x, sigma.y, power);
