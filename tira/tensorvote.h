@@ -644,7 +644,7 @@ namespace tira::tensorvote {
                         if (STICK)
                             Vote += sticknorm * stickvote3(L, Q_large, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2));
                         if (PLATE)
-                            Vote += platenorm * platevote3(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
+                            Vote += sticknorm * platevote3(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
                         VT[x0 * s1 * s2 + x1 * s2 + x2] = Vote;
                     }
                 }
