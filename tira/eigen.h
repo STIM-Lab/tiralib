@@ -138,7 +138,6 @@ namespace tira::shared {
 
     }
 
-
     /// Compute a right-handed orthonormal set { U, V, evec }.
     /// The vector evec is guaranteed to be unit-length, in which case
     /// there is no need to worry about a division by zero when computing invLength.
