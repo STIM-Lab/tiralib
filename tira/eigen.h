@@ -9,7 +9,7 @@
 
 namespace tira::constant {
 	constexpr double PI = 3.14159265358979323846;
-	template<typename T>
+    template <typename T>
 	constexpr T TIRA_EIGEN_EPSILON = static_cast<T>(1e-12);
 }
 
@@ -51,7 +51,7 @@ namespace tira::shared {
     CUDA_CALLABLE void normalize3(T* v) {
         // | v0  v1  v2 |
         T n = sqrt(dot3(v, v));
-        if (n > T(tira::constants::TIRA_EIGEN_EPSILON)) {
+        if (n > tira::constant::TIRA_EIGEN_EPSILON<T>) {
 			T inv_n = T(1) / n;
             v[0] *= inv_n; 
 			v[1] *= inv_n;
@@ -127,13 +127,13 @@ namespace tira::shared {
 
         if (abs(a_l0) >= abs(a_l1)) {
             theta1 = atan2(b, a_l0);
-            theta0 = theta1 + (tira::constants::PI / 2.0);
-            if (theta0 > tira::constants::PI) theta0 -= 2 * tira::constants::PI;
+            theta0 = theta1 + (tira::constant::PI / 2.0);
+            if (theta0 > tira::constant::PI) theta0 -= 2 * tira::constant::PI;
         }
         else {
             theta0 = atan2(b, a_l1);
-            theta1 = theta0 + (tira::constants::PI / 2.0);
-            if (theta1 > tira::constants::PI) theta1 -= 2 * tira::constants::PI;
+            theta1 = theta0 + (tira::constant::PI / 2.0);
+            if (theta1 > tira::constant::PI) theta1 -= 2 * tira::constant::PI;
         }
 
     }
@@ -150,8 +150,8 @@ namespace tira::shared {
 		const T absZ = abs(evec[2]);
 
         T temp[3];
-        if (absY - absX > tira::constants::TIRA_EIGEN_EPSILON) {
-            if (absZ - absX > tira::constants::TIRA_EIGEN_EPSILON) {
+        if (absY - absX > tira::constant::TIRA_EIGEN_EPSILON<T>) {
+            if (absZ - absX > tira::constant::TIRA_EIGEN_EPSILON<T>) {
                 temp[0] = T(1); temp[1] = T(0); temp[2] = T(0);         // X is smallest
             }
             else {
@@ -159,7 +159,7 @@ namespace tira::shared {
             }
         }
         else {
-            if (absZ - absY > tira::constants::TIRA_EIGEN_EPSILON) {
+            if (absZ - absY > tira::constant::TIRA_EIGEN_EPSILON<T>) {
                 temp[0] = T(0); temp[1] = T(1); temp[2] = T(0);          // Y is smallest
             }
             else {
@@ -243,7 +243,7 @@ namespace tira::shared {
 
         if (absM00 >= absM11)
         {
-            if (absM00 > T(tira::constants::TIRA_EIGEN_EPSILON) || absM01 > T(tira::constants::TIRA_EIGEN_EPSILON))
+            if (absM00 > tira::constant::TIRA_EIGEN_EPSILON<T> || absM01 > tira::constant::TIRA_EIGEN_EPSILON<T>)
             {
                 if (absM00 >= absM01)
                 {
@@ -270,7 +270,7 @@ namespace tira::shared {
         }
         else
         {
-            if (absM11 > T(tira::constants::TIRA_EIGEN_EPSILON) || absM01 > T(tira::constants::TIRA_EIGEN_EPSILON))
+            if (absM11 > tira::constant::TIRA_EIGEN_EPSILON<T> || absM01 > tira::constant::TIRA_EIGEN_EPSILON<T>)
             {
                 if (absM11 >= absM01)
                 {
@@ -322,7 +322,7 @@ namespace tira::shared {
 
         // determine if the matrix is diagonal
         const T p1 = b * b + d * d + e * e;
-        if (p1 < T(tira::constants::TIRA_EIGEN_EPSILON)) {
+        if (p1 < tira::constant::TIRA_EIGEN_EPSILON<T>) {
             eval0 = a;  eval1 = c;  eval2 = f;
             if (eval0 > eval1) swap(eval0, eval1);
             if (eval1 > eval2) swap(eval1, eval2);
@@ -361,12 +361,12 @@ namespace tira::shared {
         T r = det_B / T(2);
 
         T phi;
-        if (r < T(-1)) phi = T(tira::constants::PI) / T(3);
+        if (r < T(-1)) phi = T(tira::constant::PI) / T(3);
         else if (r >= T(1)) phi = T(0);
         else phi = acos(r) / T(3);
 
         eval2 = q + T(2) * p * cos(phi);
-        eval0 = q + T(2) * p * cos(phi + (T(2) * T(tira::constants::PI) / T(3)));
+        eval0 = q + T(2) * p * cos(phi + (T(2) * T(tira::constant::PI) / T(3)));
         eval1 = tr - eval0 - eval2;
     }
 
@@ -383,7 +383,7 @@ namespace tira::shared {
 
 		// Test to see if this matrix is diagonal
         const T upper_diagonal_norm = b * b + d * d + e * e;
-        if (upper_diagonal_norm < T(tira::constants::TIRA_EIGEN_EPSILON)) {
+        if (upper_diagonal_norm < tira::constant::TIRA_EIGEN_EPSILON<T>) {
 			// The evals are pre-sorted, we must find which diagonal element corresponds to which eigenvalue
             // and assign the correct basis vector
             
@@ -704,9 +704,9 @@ namespace tira::cuda {
         HANDLE_ERROR(cudaGetDevice(&device));
         cudaDeviceProp props;
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
-        unsigned int max_threads = props.maxThreadsPerBlock;
-        dim3 blockDim(256);
-        dim3 gridDim(n + blockDim.x - 1) / blockDim.x;
+        const unsigned int blockSize = std::min(256u, static_cast<unsigned int>(props.maxThreadsPerBlock));
+        dim3 blockDim(blockSize);
+        dim3 gridDim(static_cast<unsigned int>((n + blockDim.x - 1) / blockDim.x));
 
         Type* gpu_evals;
         HANDLE_ERROR(cudaMalloc(&gpu_evals, evals_bytes));
@@ -761,9 +761,9 @@ namespace tira::cuda {
         HANDLE_ERROR(cudaGetDevice(&device));
         cudaDeviceProp props;
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
-        unsigned int max_threads = props.maxThreadsPerBlock;
-        dim3 blockDim(256);
-        dim3 gridDim(n + blockDim.x - 1) / blockDim.x;
+        const unsigned int blockSize = std::min(256u, static_cast<unsigned int>(props.maxThreadsPerBlock));
+        dim3 blockDim(blockSize);
+        dim3 gridDim(static_cast<unsigned int>((n + blockDim.x - 1) / blockDim.x));
 
         Type* gpu_evecs;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
@@ -812,7 +812,7 @@ namespace tira::cuda {
         // get the active device properties to calculate the optimal the block size
         cudaDeviceProp props;
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
-		const unsigned int blockSize = std::min(256u, props.maxThreadsPerBlock);
+		const unsigned int blockSize = std::min(256u, static_cast<unsigned int>(props.maxThreadsPerBlock));
         dim3 blockDim(blockSize);
         dim3 gridDim(static_cast<unsigned int>((n + blockDim.x - 1) / blockDim.x));
 
@@ -873,7 +873,7 @@ namespace tira::cuda {
         // Set the optimal grid and block size
         cudaDeviceProp props{};
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
-        const unsigned int blockSize = std::min(256u, props.maxThreadsPerBlock);
+        const unsigned int blockSize = std::min(256u, static_cast<unsigned int>(props.maxThreadsPerBlock));
         dim3 blockDim(blockSize);
         dim3 gridDim(static_cast<unsigned int>((n + blockDim.x - 1) / blockDim.x));
 
