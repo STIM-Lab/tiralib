@@ -321,6 +321,16 @@ namespace tira {
 			return r;												//return the summed result
 		}
 
+		image<T> operator-(const image<T>& rhs) const {
+			size_t N = field<T>::Size();                           //allocate space for the resulting image
+			image<T> r(this->Shape());
+
+			for (size_t n = 0; n < N; n++)                        
+				r.m_data[n] = field<T>::m_data[n] - rhs.m_data[n];
+
+			return r;                                              // return the result
+		}
+
 		image<T> operator*(T rhs) {
 			size_t N = field<T>::Size();							//calculate the total number of values in the image
 			image<T> r(this->Shape());								//allocate space for the resulting image
@@ -380,8 +390,8 @@ namespace tira {
 				throw std::runtime_error("Images dimensions are incompatible");
 
 			if (C() == rhs.C()) {					// if both images have the same number of color channels
-				tira::image<T> result(this->shape());
-				for (size_t i = 0; i < field<T>::size(); i++) {
+				tira::image<T> result(this->Shape());
+				for (size_t i = 0; i < field<T>::Size(); i++) {
 					result.m_data[i] = field<T>::m_data[i] / rhs.m_data[i];
 				}
 				return result;
