@@ -2,7 +2,7 @@
 
 #define cimg_use_png
 #define cimg_use_jpeg
-#include "extern/CImg.h"
+#include "CImg.h"
 #undef min
 
 #include <stack>

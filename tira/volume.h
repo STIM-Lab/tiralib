@@ -238,7 +238,14 @@ namespace tira {
 		 * @param filemask is a mask used to glob a list of files to construct the volume
 		 */
 		volume(std::string filemask) {
-			Load(filemask);
+			std::vector<std::string> file_list(1);
+			file_list[0] = filemask;
+			Load(file_list);
+			_spacing = { 1.0f, 1.0f, 1.0f };
+		}
+
+		volume(std::vector<std::string> file_list) {
+			Load(file_list);
 			_spacing = { 1.0f, 1.0f, 1.0f };
 		}
 

@@ -21,7 +21,7 @@
 #define TV3_MAX_CONST_NB 1536
 #endif
 
-namespace tira::tensorvote {
+namespace tira {
 
     namespace shared {
         template <typename T>
@@ -272,7 +272,7 @@ namespace tira::tensorvote {
             return r;
         }
 
-        inline void tensorvote2_cpu(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
+        inline void tensorvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
             const unsigned s0, const unsigned s1, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
 
             const float sticknorm = 1.0 / shared::sticknorm2(sigma[0], sigma[1], power);
@@ -628,7 +628,7 @@ namespace tira::tensorvote {
          * @param PLATE     If true, include plate votes.
          * @param samples   Samples for numerical plate (0 = analytic).
          */
-        inline void tensorvote3_cpu(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
+        inline void tensorvote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
             glm::vec2 sigma, unsigned int power, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2,
             const bool STICK = true, const bool PLATE = true, const unsigned samples = 20) {
             const float sticknorm = 1.0 / shared::sticknorm3(sigma.x, sigma.y, power);
@@ -657,7 +657,7 @@ namespace tira::tensorvote {
      * If pointers are located on the host, the data will be copied to the currently active CUDA device.
      * This region is only compiled when it's passed to nvcc.
      */
-    #ifdef __CUDACC__
+#ifdef __CUDACC__
     namespace cuda {
 		
         // ------- 2D Tensor Voting -------
@@ -688,10 +688,10 @@ namespace tira::tensorvote {
 
         // TODO: assert both mats and evals are on the same side (host or device)
 		// Free up L and V after use based on their allocation side (host/device)
-        static void tensorvote2_cuda(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
-            unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
+        inline void tensorvote2(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
+                                unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
 
-            if (device < 0) return cpu::tensorvote2_cpu((glm::mat2*)output_field,
+            if (device < 0) return cpu::tensorvote2((glm::mat2*)output_field,
                                                         (glm::vec2*)tira::cpu::evals2_symmetric<float>(input_field, s0 * s1),
                                                         (glm::vec2*)tira::cpu::evecs2polar_symmetric(input_field,
                                                         tira::cpu::evals2_symmetric<float>(input_field, s0 * s1), s0 * s1),
@@ -1162,7 +1162,7 @@ namespace tira::tensorvote {
             VT[base_recv] += Receiver * norm;
         }
 
-        static void tensorvote3_cuda(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float sigma,
+        static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float sigma,
             float sigma2, unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
             
             HANDLE_ERROR(cudaSetDevice(device));
