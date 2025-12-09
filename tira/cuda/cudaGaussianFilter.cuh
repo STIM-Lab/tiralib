@@ -18,7 +18,7 @@ namespace tira {
 			return c * e;
 		}
 
-		/// 1D convolution along the Y (slow) axis
+/*		/// 1D convolution along the Y (slow) axis
 		template<typename T>
 		__global__ void kernel_Convolve1DY(const T* source, T* dest,
 			const unsigned int width, const unsigned int out_height,
@@ -51,7 +51,7 @@ namespace tira {
 			}
 			dest[yi * out_width + xi] = sum;								// assign the result to the output image
 		}
-
+*/
 		template<typename T>
 		__global__ void kernel_Convolve3DX(T* source, T* dest, unsigned int width, unsigned int out_width, unsigned int out_height,
 			unsigned int out_depth, float* kernel, unsigned int K) {
@@ -114,6 +114,7 @@ namespace tira {
 		/// <param name="out_width">width of the output image after the convolution</param>
 		/// <param name="out_height">height of the output image after the convolution</param>
 		/// <returns></returns>
+/*
 		template<typename T>
 		T* GaussianFilter2D(const T* source, unsigned int width, unsigned int height,
 			float sigma1, float sigma2,
@@ -217,7 +218,7 @@ namespace tira {
 			return out;
 
 		}
-
+*/
 
 		
 		/// <summary>
