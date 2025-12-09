@@ -22,35 +22,37 @@ namespace tira::cpu {
 	/**
 	 * @brief Generate a 1D Gaussian kernel sampled on a regular grid.
 	 *
-	 * @tparam T         Floating-point type for kernel values.
-	 * @param ksize		 Number of samples in the kernel.
-	 * @param mu         Mean of the Gaussian (typically 0).
-	 * @param sigma      Standard deviation of the Gaussian.
-	 * @param dx         Sample spacing of the grid.
-	 * @return std::vector<T> 1D Gaussian kernel of length @p windowSize.
+	 * @tparam Type      Floating-point type for kernel values
+	 * @param ksize		 Number of samples in the kernel
+	 * @param mu         Mean of the Gaussian (typically 0)
+	 * @param sigma      Standard deviation of the Gaussian
+	 * @param dx         Sample spacing of the grid
+	 * @return a pointer to an array containing ksize samples of a Gaussian kernel
 	 */
-	template <typename T>
-	static std::vector<T> kernel_gaussian(unsigned int ksize, T mu, T sigma, T dx) {
-		std::vector<T> kernel(ksize);
+	template <typename Type>
+	static Type* gaussian1d(unsigned int ksize, Type mu, Type sigma, Type dx) {
+		Type* kernel = new Type[ksize];
 
 		// Physical length of the kernel
-		const T halfwidth = static_cast<T>(ksize) * dx / static_cast<T>(2);
+		const Type halfwidth = static_cast<Type>(ksize) * dx / static_cast<Type>(2);
 
 		// First sample is centered at -halfwidth + dx/2 so the grid is symmetric around mu
-		const T startx = -halfwidth + (dx / static_cast<T>(2));
+		const Type startx = -halfwidth + (dx / static_cast<Type>(2));
 
 		// Sample the Gaussian at regularly spaced positions
-		T sum = static_cast<T>(0);
+		Type sum = static_cast<Type>(0);
 		for (unsigned int xi = 0; xi < ksize; ++xi) {
-			const T x = startx + static_cast<T>(xi) * dx;
+			const Type x = startx + static_cast<Type>(xi) * dx;
 			kernel[xi] = normaldist(mu, sigma, x);
 			sum += kernel[xi];
 		}
 
 		// Normalize the kernel to have sum 1
-		if (sum > static_cast<T>(0)) {
-			T inv_sum = static_cast<T>(1) / sum;
-			for (auto& v : kernel) v *= inv_sum;
+		if (sum > static_cast<Type>(0)) {
+			Type inv_sum = static_cast<Type>(1) / sum;
+			for (unsigned i = 0; i < ksize; i++)
+				kernel[i] *= inv_sum;
+			//for (auto& v : kernel) v *= inv_sum;
 		}
 
 		return kernel;
@@ -134,5 +136,24 @@ namespace tira::cpu {
 		}
 		// Hand ownership to caller, must delete[] the returned pointer
 		return output.release();
+	}
+
+	template <typename ImageType, typename KernelType = float>
+	static ImageType* gaussian_convolve2(const ImageType* input, const unsigned in_sx, const unsigned in_sy,
+		KernelType sigma,
+		unsigned& out_sx, unsigned& out_sy) {
+
+		// Calculate a 1D kernel
+		unsigned ksize = (unsigned)(6 * sigma);
+		KernelType* kernel = gaussian1d(ksize, (KernelType)0, sigma, (KernelType)1);
+		for (unsigned i = 0; i < ksize; i++)
+			printf("%f", kernel[i]);
+
+		ImageType* dest_x = tira::cpu::convolve2<ImageType, KernelType>(input, in_sx, in_sy, kernel, ksize, 1, out_sx, out_sy);
+		ImageType* dest_xy = tira::cpu::convolve2<ImageType, KernelType>(dest_x, out_sx, out_sy, kernel, 1, ksize, out_sx, out_sy);
+
+		delete kernel;
+		delete dest_x;
+		return dest_xy;
 	}
 };
