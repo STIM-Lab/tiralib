@@ -8,7 +8,7 @@
 #pragma once
 #include <tira/cuda/error.h>
 #include <tira/cuda/callable.h>
-#include <tira/filter.h>
+#include <tira/functions/filter.h>
 
 namespace tira {
 	namespace cuda {

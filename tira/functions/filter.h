@@ -24,8 +24,6 @@ namespace tira {
 
 namespace tira::cpu {
 
-
-	
 	/**
 	 * @brief Generate a 1D Gaussian kernel sampled on a regular grid.
 	 *
@@ -182,7 +180,6 @@ namespace tira::cpu {
 
 namespace tira::cuda {
 
-
 	template<typename T>
 	__global__ void cuda_convolve1y(const T* source, T* dest,
 		const unsigned int width, const unsigned int out_height,
@@ -217,22 +214,21 @@ namespace tira::cuda {
 	}
 
 
-		/// <summary>
-		/// Convolve a 2D image by a separable Gaussian kernel
-		/// </summary>
-		/// <typeparam name="T">data type for the input</typeparam>
-		/// <param name="source">GPU pointer to the source image array</param>
-		/// <param name="width">width of the source image array</param>
-		/// <param name="height">height of the source image array</param>
-		/// <param name="sigma1">standard deviation of the kernel along the x dimension</param>
-		/// <param name="sigma2">standard deviation of the kernel along the y dimension</param>
-		/// <param name="out_width">width of the output image after the convolution</param>
-		/// <param name="out_height">height of the output image after the convolution</param>
-		/// <returns></returns>
+	/// <summary>
+	/// Convolve a 2D image by a separable Gaussian kernel
+	/// </summary>
+	/// <typeparam name="T">data type for the input</typeparam>
+	/// <param name="source">GPU pointer to the source image array</param>
+	/// <param name="width">width of the source image array</param>
+	/// <param name="height">height of the source image array</param>
+	/// <param name="sigma1">standard deviation of the kernel along the x dimension</param>
+	/// <param name="sigma2">standard deviation of the kernel along the y dimension</param>
+	/// <param name="out_width">width of the output image after the convolution</param>
+	/// <param name="out_height">height of the output image after the convolution</param>
+	/// <returns></returns>
 	template <typename ImageType, typename KernelType = float>
 	ImageType* gaussian_convolve2(const ImageType* source, const unsigned in_sx, const unsigned in_sy,
-		float sigma1, float sigma2,
-		unsigned int& out_width, unsigned int& out_height) {
+		float sigma1, float sigma2, unsigned int& out_width, unsigned int& out_height) {
 
 		unsigned int window_size_w = (unsigned int)(sigma1 * 6 + 1);		// calculate the window sizes for each kernel
 		unsigned int window_size_h = (unsigned int)(sigma2 * 6 + 1);
@@ -324,8 +320,6 @@ namespace tira::cuda {
 		HANDLE_ERROR(cudaFree(gpu_kernel_h));
 
 		return out;
-
 	}
-
-#endif
 }
+#endif
