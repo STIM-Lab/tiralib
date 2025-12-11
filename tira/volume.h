@@ -234,13 +234,18 @@ namespace tira {
 
 
 		/**
-		 * @brief Creates a new volume from a stack of images
+		 * @brief Creates a new volume from a stack of images or a 3D image file (NPY)
 		 * @param filemask is a mask used to glob a list of files to construct the volume
 		 */
 		volume(std::string filemask) {
-			std::vector<std::string> file_list(1);
-			file_list[0] = filemask;
-			Load(file_list);
+			if (filemask.ends_with(".npy")) {
+				load_npy(filemask);
+			}
+			else {
+				std::vector<std::string> file_list(1);
+				file_list[0] = filemask;
+				Load(file_list);
+			}
 			_spacing = { 1.0f, 1.0f, 1.0f };
 		}
 
@@ -723,12 +728,13 @@ namespace tira {
 		}
 
 		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
-			
-			tira::field<float> F = tira::field<float>::Derivative(axis, d, order, print_coefs);		// derivative of the field
-			tira::volume<float> D(tira::field<float>::Shape());										// create a new volume
-			memcpy(D.Data(), F.Data(), D.Bytes());													// copy the field to the volume
-			D._spacing = _spacing;																	// copy the spacing (a volume has spacing, but a field doesn't)
-			D = D * (1 / D._spacing[axis]);															// scale the gradient by the axis spacing
+			tira::field<float> F = this->Derivative(axis, d, order, print_coefs);			// derivative of the field
+			tira::volume<float> D(F.Shape(), _spacing);										// create a new volume
+			memcpy(D.Data(), F.Data(), D.Bytes());											// copy the field to the volume
+			// field axes: {Z, Y, X, C} => {0, 1, 2, 3}
+			// spacing: {dx, dy, dz} => {0, 1, 2}
+			int spacing_idx = 2 - static_cast<int>(axis);									// axis 2->dx, 1->dy, 0->dz
+			D = D * static_cast<float>(1 / D._spacing[spacing_idx]);						// scale the gradient by the axis spacing
 			return D;
 		}
 
