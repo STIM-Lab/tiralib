@@ -175,18 +175,24 @@ namespace tira::cpu {
 
 	template <typename ImageType, typename KernelType = float>
 	static ImageType* gaussian_convolve3(const ImageType* input, const unsigned in_sx, const unsigned in_sy, const unsigned in_sz,
-		KernelType sigma, unsigned& out_sx, unsigned& out_sy, unsigned& out_sz) {
+		KernelType sigma_w, KernelType sigma_h, KernelType sigma_d, unsigned& out_sx, unsigned& out_sy, unsigned& out_sz) {
 		// Calculate a 1D kernel
-		unsigned int ksize = static_cast<unsigned int>(std::ceil(6.0f * sigma));
-		if (ksize % 2 == 0) ksize++;
-		KernelType* kernel = gaussian1d(ksize, (KernelType)0, sigma, (KernelType)1);
+		unsigned int ksize_w = static_cast<unsigned int>(std::ceil(6.0f * sigma_w));
+		if (ksize_w % 2 == 0) ksize_w++;
+		unsigned int ksize_h = static_cast<unsigned int>(std::ceil(6.0f * sigma_h));
+		if (ksize_h % 2 == 0) ksize_h++;
+		unsigned int ksize_d = static_cast<unsigned int>(std::ceil(6.0f * sigma_d));
+		if (ksize_d % 2 == 0) ksize_d++;
+		KernelType* kernel_w = gaussian1d(ksize_w, (KernelType)0, sigma_w, (KernelType)1);
+		KernelType* kernel_h = gaussian1d(ksize_h, (KernelType)0, sigma_h, (KernelType)1);
+		KernelType* kernel_d = gaussian1d(ksize_d, (KernelType)0, sigma_d, (KernelType)1);
+
 		unsigned temp_sx, temp_sy, temp_sz;
-		ImageType* dest_x = tira::cpu::convolve3<ImageType, KernelType>(input, in_sx, in_sy, in_sz, kernel, ksize, 1, 1, temp_sx, temp_sy, temp_sz);
-		ImageType* dest_xy = tira::cpu::convolve3<ImageType, KernelType>(dest_x, temp_sx, temp_sy, temp_sz, kernel, 1, ksize, 1, temp_sx, temp_sy, temp_sz);
-		ImageType* dest_xyz = tira::cpu::convolve3<ImageType, KernelType>(dest_xy, temp_sx, temp_sy, temp_sz, kernel, 1, 1, ksize, out_sx, out_sy, out_sz);
-		delete[] kernel;
-		delete[] dest_x;
-		delete[] dest_xy;
+		ImageType* dest_x = tira::cpu::convolve3<ImageType, KernelType>(input, in_sx, in_sy, in_sz, kernel_w, ksize_w, 1, 1, temp_sx, temp_sy, temp_sz);
+		ImageType* dest_xy = tira::cpu::convolve3<ImageType, KernelType>(dest_x, temp_sx, temp_sy, temp_sz, kernel_h, 1, ksize_h, 1, temp_sx, temp_sy, temp_sz);
+		ImageType* dest_xyz = tira::cpu::convolve3<ImageType, KernelType>(dest_xy, temp_sx, temp_sy, temp_sz, kernel_d, 1, 1, ksize_d, out_sx, out_sy, out_sz);
+		delete[] kernel_w, kernel_h, kernel_d;
+		delete[] dest_x, dest_xy;
 		return dest_xyz;
 	}
 };
