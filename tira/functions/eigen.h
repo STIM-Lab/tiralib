@@ -447,6 +447,20 @@ namespace tira {
         T cart_evec1[3];
         T cart_evec2[3];
         evec3_symmetric(a, b, c, d, e, f, evals, cart_evec0, cart_evec1, cart_evec2);
+        
+		// always keep vector in "upper" hemisphere
+        auto cononical_sign = [](T v[3]) {
+            if (v[2] < T(0) || (v[2] < constant::TIRA_EIGEN_EPSILON<T> && v[1] < T(0)) || (v[2] < constant::TIRA_EIGEN_EPSILON<T> &&
+                v[1] < constant::TIRA_EIGEN_EPSILON<T> && v[0] < T(0))) {
+                v[0] = -v[0]; v[1] = -v[1]; v[2] = -v[2];
+            }
+        };
+        
+        // To ensure CPU and GPU pick the same direction, we canonicalize vector signs
+        // if first non-zero component is negative, flip the vector
+		cononical_sign(cart_evec0);
+		cononical_sign(cart_evec1);
+		cononical_sign(cart_evec2);
 
         // Clamp to [-1,1] to avoid NaNs from acos in case of numerical drift
         cart_evec0[2] = (cart_evec0[2] < T(-1)) ? T(-1) : ((cart_evec0[2] > T(1)) ? T(1) : cart_evec0[2]);
@@ -658,11 +672,7 @@ namespace tira::cuda {
         const Type c = mats[i * 9 + 4];
         const Type e = mats[i * 9 + 5];
         const Type f = mats[i * 9 + 8];
-        tira::evec3spherical_symmetric(a, b, c, d, e, f,
-            &evals[i * 3],
-            &evecs[i * 6],
-            &evecs[i * 6 + 2],
-            &evecs[i * 6 + 4]);
+        tira::evec3spherical_symmetric(a, b, c, d, e, f, &evals[i * 3], &evecs[i * 6], &evecs[i * 6 + 2], &evecs[i * 6 + 4]);
 	}
 
 	// ------ Host-side launchers ------
@@ -836,21 +846,21 @@ namespace tira::cuda {
 
 		HANDLE_ERROR(cudaSetDevice(device));
 
-        const Type* gpu_mats    = nullptr;
-        const Type* gpu_lambda  = nullptr;
-        Type* temp_gpu_mats     = nullptr;
-        Type* temp_gpu_lambda   = nullptr;
-        const size_t mats_bytes  = sizeof(Type) * 9 * n;                              // required bytes for storing the tensor
-        const size_t evals_bytes = sizeof(Type) * 3 * n;                             // required bytes for storing eigenvalues
-        const size_t evecs_bytes = sizeof(Type) * 6 * n;                             // required bytes for storing 2 3D eigenvectors (in polar coordinates)
+        const Type* gpu_mats     = nullptr;
+        const Type* gpu_lambda   = nullptr;
+        Type* temp_gpu_mats      = nullptr;
+        Type* temp_gpu_lambda    = nullptr;
+        const size_t mats_bytes  = sizeof(Type) * 9 * n;                            // required bytes for storing the tensor
+        const size_t evals_bytes = sizeof(Type) * 3 * n;                            // required bytes for storing eigenvalues
+        const size_t evecs_bytes = sizeof(Type) * 6 * n;                            // required bytes for storing 2 3D eigenvectors (in polar coordinates)
 
         // Determine if the volume is provided on the host or device
-        cudaPointerAttributes matsAttr{};										// create a pointer attribute structure
-        HANDLE_ERROR(cudaPointerGetAttributes(&matsAttr, mats));			    // get the attributes for the source pointer
+        cudaPointerAttributes matsAttr{};										    // create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&matsAttr, mats));			        // get the attributes for the source pointer
 
 		const bool mats_on_device = (matsAttr.type == cudaMemoryTypeDevice);
         if (mats_on_device)  gpu_mats = mats;
-        else {																// otherwise copy the source image to the GPU
+        else {																                        // otherwise copy the source image to the GPU
             HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								    // allocate space on the GPU for the source image
             HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));      // copy the source image to the GPU
             gpu_mats = temp_gpu_mats;
