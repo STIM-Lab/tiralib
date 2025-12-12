@@ -1695,7 +1695,7 @@ namespace tira {
 		template<typename D = T>
 		void save_npy(std::string filename) {
 			std::vector<size_t> squeezed_shape = field<T>::m_shape;
-			if (field<T>::m_shape[3] == 1) {
+			if (squeezed_shape.size() == 4 && field<T>::m_shape[3] == 1) {
 				squeezed_shape.pop_back();
 			}
 			field<T>::template SaveNpy<D>(filename, squeezed_shape);
