@@ -257,24 +257,53 @@ namespace tira {
             float c2;                       // exp(-l2 / sigma2^2)
         };
 
+    /**
+    * @brief Accumulate one 3D stick vote contribution into a tensor.
+    *
+    * @param M      3x3 tensor accumulator (modified in place).
+    * @param n      Precomputed neighbor direction and decay factors.
+    * @param q      Local stick direction (largest eigenvector).
+    * @param power  Stick-vote power (refinement exponent).
+    * @param scale  Scale from eigenvalues at the voter.
+    */
+    template<typename Dir, typename Vec>
+    CUDA_CALLABLE void stickvote3_accumulate_kernel(float& m00, float& m01, float& m02,
+        float& m11, float& m12, float& m22,
+        const Dir& d, const float c1, const float c2,
+        const Vec& q, const unsigned power, const float scale)
+    {
+        const float qTd = q.x * d.x + q.y * d.y + q.z * d.z;
+        const float qTd2 = qTd * qTd;
+
+        float eta;
+        if (power == 1)
+            eta = c1 * (1.0f - qTd2) + c2 * qTd2;
+        else {
+            const float t1 = 1.0f - qTd2;
+            const float t2 = qTd2;
+            float e1 = t1;
+            float e2 = t2;
+            for (unsigned i = 1; i < power; ++i) {
+                e1 *= t1;
+                e2 *= t2;
+            }
+        }
+
+        // Reflected direction
+        const float rx = q.x - 2.0f * qTd * d.x;
+        const float ry = q.y - 2.0f * qTd * d.y;
+        const float rz = q.z - 2.0f * qTd * d.z;
+        const float term = scale * eta;
+
+        m00 += term * rx * rx; m01 += term * rx * ry; m02 += term * rx * rz;
+        m11 += term * ry * ry; m12 += term * ry * rz; m22 += term * rz * rz;
+    }
 
     /**
      * CPU namespace contains functions that are run completely on the host. All input and output pointers
      * are allocated on the host.
      */
     namespace cpu {
-        /**
-         * @brief Raise a scalar to an integer power (power >= 1).
-         *
-         * @param t      Base scalar.
-         * @param power  Exponent.
-         * @return       t^power.
-         */
-        inline float term_power(float t, unsigned power) {
-            float r = t;
-            for (unsigned i = 1; i < power; ++i) r *= t;
-            return r;
-        }
 
         inline void tensorvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
             const unsigned s0, const unsigned s1, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
@@ -325,33 +354,6 @@ namespace tira {
             }
             return neighbors;
         }
-
-        /**
-         * @brief Accumulate one 3D stick vote contribution into a tensor.
-         *
-         * @param M      3x3 tensor accumulator (modified in place).
-         * @param n      Precomputed neighbor direction and decay factors.
-         * @param q      Local stick direction (largest eigenvector).
-         * @param power  Stick-vote power (refinement exponent).
-         * @param scale  Scale from eigenvalues at the voter.
-         */
-        inline void stickvote3_accumulate_kernel(glm::mat3& M, const Neighbor3D& n, const glm::vec3 q, const unsigned power, const float scale) {
-            // Calculate the contribution of (du,dv,dw) to (x,y,z)
-            const float qTd = q.x * n.d.x + q.y * n.d.y + q.z * n.d.z;
-            const float qTd2 = qTd * qTd;
-            float eta;
-            if (power == 1)
-                eta = n.c1 * (1 - qTd2) + n.c2 * qTd2;
-            else
-                eta = n.c1 * term_power(1 - qTd2, power) + n.c2 * term_power(qTd2, power);
-            const float rx = q.x - 2.0f * qTd * n.d.x;
-            const float ry = q.y - 2.0f * qTd * n.d.y;
-            const float rz = q.z - 2.0f * qTd * n.d.z;
-            const float term = scale * eta;
-            M[0][0] += term * rx * rx; M[0][1] += term * rx * ry; M[0][2] += term * rx * rz;
-            M[1][0] += term * ry * rx; M[1][1] += term * ry * ry; M[1][2] += term * ry * rz;
-            M[2][0] += term * rz * rx; M[2][1] += term * rz * ry; M[2][2] += term * rz * rz;
-        }
         
         /**
          * @brief Compute 3D stick vote tensor at a receiver voxel.
@@ -376,7 +378,9 @@ namespace tira {
             const int x1 = x[1];
             const int x2 = x[2];
 
-            glm::mat3 Votee(0.0f);
+            // Accumulate in symmetric 6-value form
+			float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
+			float m11 = 0.0f, m12 = 0.0f, m22 = 0.0f;
 
             for (const auto& n : NB) {                         // For each pixel in the window
                 const int r0 = x0 + n.dw;
@@ -399,8 +403,12 @@ namespace tira {
                 const float scale = std::copysignf(fabsf(l2) - fabsf(l1), l2);
 
                 // Calculate the accumulated contribution of (du,dv,dw) to (x,y,z)
-                stickvote3_accumulate_kernel(Votee, n, q, power, scale);
+                stickvote3_accumulate_kernel(m00, m01, m02, m11, m12, m22, n.d, n.c1, n.c2, q, power, scale);
             }
+			glm::mat3 Votee(0.0f);
+			Votee[0][0] = m00; Votee[0][1] = m01; Votee[0][2] = m02;
+			Votee[1][0] = m01; Votee[1][1] = m11; Votee[1][2] = m12;
+			Votee[2][0] = m02; Votee[2][1] = m12; Votee[2][2] = m22;
             return Votee;
         }
 
@@ -538,18 +546,26 @@ namespace tira {
             // Integrate over [0, pi] to avoid double counting q and -q
             // (the stick vote is symmetric along the stick axis)
             const float dbeta = float(TV_PI) / float(samples);
+			float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
+			float m11 = 0.0f, m12 = 0.0f, m22 = 0.0f;
+
             for (unsigned i = 0; i < samples; ++i) {
                 const float beta = dbeta * float(i);
 				const float cb = cosf(beta);
 				const float sb = sinf(beta);
                 const glm::vec3 q = cb * u + sb * v;
-                stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,dn,0.0f,c1,c2 }, q, power, 1.0f);
+
+				stickvote3_accumulate_kernel(m00, m01, m02, m11, m12, m22, dn, c1, c2, q, power, 1.0f);
             }
 
             // Integral = sum / samples
-            V[0][0] /= samples; V[0][1] /= samples; V[0][2] /= samples;
-            V[1][0] /= samples; V[1][1] /= samples; V[1][2] /= samples;
-            V[2][0] /= samples; V[2][1] /= samples; V[2][2] /= samples;
+			const float inv_samples = 1.0f / static_cast<float>(samples);
+			m00 *= inv_samples; m01 *= inv_samples; m02 *= inv_samples;
+			m11 *= inv_samples; m12 *= inv_samples; m22 *= inv_samples;
+			V[0][0] = m00; V[0][1] = m01; V[0][2] = m02;
+			V[1][0] = m01; V[1][1] = m11; V[1][2] = m12;
+			V[2][0] = m02; V[2][1] = m12; V[2][2] = m22;
+            
             return V;
         }
 
@@ -847,12 +863,6 @@ namespace tira {
             dn.used_const = false;
         }
 
-        __device__ static inline float term_power_device(float t, unsigned power) {
-            float r = t;
-            for (unsigned i = 1; i < power; ++i) r *= t;
-            return r;
-        }
-
         __device__ static inline double hyp2f1_neg_p_device(const unsigned int p, const double b, const double c, const double z) {
             double sum = 1.0;
             double term = 1.0;
@@ -890,27 +900,6 @@ namespace tira {
             Qout[i * 3 + 2] = q.z;
         }
 
-        __device__ static inline void stickvote3_accumulate_kernel_device(float& m00, float& m01, float& m02,
-                                                                          float& m11, float& m12, float& m22,
-                                                                          const float3 d, const float c1, const float c2,
-                                                                          const glm::vec3 q, const unsigned power, const float scale)
-        {
-            const float qTd = q.x * d.x + q.y * d.y + q.z * d.z;
-            const float qTd2 = qTd * qTd;
-            float eta;
-            if (power == 1)
-                eta = c1 * (1.0f - qTd2) + c2 * qTd2;
-            else
-                eta = c1 * term_power_device(1.0f - qTd2, power) + c2 * term_power_device(qTd2, power);
-            const float rx = q.x - 2.0f * qTd * d.x;
-            const float ry = q.y - 2.0f * qTd * d.y;
-            const float rz = q.z - 2.0f * qTd * d.z;
-            const float term = scale * eta;
-
-            m00 += term * rx * rx; m01 += term * rx * ry; m02 += term * rx * rz;
-            m11 += term * ry * ry; m12 += term * ry * rz; m22 += term * rz * rz;
-        }
-
         __global__ static void global_stickvote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q, const Neighbor3D_CUDA* d_neighbors_glob,
             int nb_count, int usedConst, unsigned int power, float norm, int s0, int s1, int s2) {
 
@@ -944,7 +933,7 @@ namespace tira {
                 // Eigenvector at voter in spherical angles
                 const glm::vec3 q = Q[base_voter];
                 
-                stickvote3_accumulate_kernel_device(m00, m01, m02, m11, m12, m22,
+                stickvote3_accumulate_kernel(m00, m01, m02, m11, m12, m22,
 					nb.d, nb.c1, nb.c2, q, power, scale);
             }
 
@@ -986,7 +975,7 @@ namespace tira {
                 float cb = cosf(beta);
                 float sb = sinf(beta);
                 glm::vec3 q = cb * u + sb * v;
-                stickvote3_accumulate_kernel_device(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, power, 1.0f);
+                stickvote3_accumulate_kernel(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, power, 1.0f);
             }
 
             m00 += scale * v00 / samples; m01 += scale * v01 / samples; m02 += scale * v02 / samples;
