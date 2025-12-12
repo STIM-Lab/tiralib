@@ -42,17 +42,23 @@ namespace tira {
         return sqrtf(T(3) / T(2) * (numer / denom));
     }
 
-    template <typename T>
-    CUDA_CALLABLE static T PlateDecay2D(T length, T sigma) {
-        T c = TV_PI * exp(-(length * length) / (sigma * sigma)) / 2.0f;
-        return c;
-    }
-
     CUDA_CALLABLE static double factorial(const unsigned n) {
         double fac = 1;
         for (unsigned int i = 1; i <= n; i++)
             fac *= i;
         return fac;
+    }
+
+    CUDA_CALLABLE glm::vec3 spherical_to_cartesian(const float theta, const float phi) {
+		const float st = sinf(theta), ct = cosf(theta);
+		const float sp = sinf(phi),   cp = cosf(phi);
+		return glm::vec3(ct * sp, st * sp, cp);
+	}
+
+    template <typename T>
+    CUDA_CALLABLE static T PlateDecay2D(T length, T sigma) {
+        T c = TV_PI * exp(-(length * length) / (sigma * sigma)) / 2.0f;
+        return c;
     }
 
     template <typename T>
@@ -534,7 +540,9 @@ namespace tira {
             const float dbeta = float(TV_PI) / float(samples);
             for (unsigned i = 0; i < samples; ++i) {
                 const float beta = dbeta * float(i);
-                const glm::vec3 q = std::cos(beta) * u + std::sin(beta) * v;
+				const float cb = cosf(beta);
+				const float sb = sinf(beta);
+                const glm::vec3 q = cb * u + sb * v;
                 stickvote3_accumulate_kernel(V, Neighbor3D{ 0,0,0,dn,0.0f,c1,c2 }, q, power, 1.0f);
             }
 
@@ -875,12 +883,11 @@ namespace tira {
                 phi   = V6[i * 6 + 1];
             }
 
-			const float st = sinf(theta), ct = cosf(theta);
-			const float sp = sinf(phi), cp = cosf(phi);
+			glm::vec3 q = spherical_to_cartesian(theta, phi);
 
-            Qout[i * 3 + 0] = ct * sp;
-            Qout[i * 3 + 1] = st * sp;
-            Qout[i * 3 + 2] = cp;
+            Qout[i * 3 + 0] = q.x;
+            Qout[i * 3 + 1] = q.y;
+            Qout[i * 3 + 2] = q.z;
         }
 
         __device__ static inline void stickvote3_accumulate_kernel_device(float& m00, float& m01, float& m02,
