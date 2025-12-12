@@ -450,10 +450,17 @@ namespace tira {
         
 		// always keep vector in "upper" hemisphere
         auto cononical_sign = [](T v[3]) {
-            if (v[2] < T(0) || (v[2] < constant::TIRA_EIGEN_EPSILON<T> && v[1] < T(0)) || (v[2] < constant::TIRA_EIGEN_EPSILON<T> &&
-                v[1] < constant::TIRA_EIGEN_EPSILON<T> && v[0] < T(0))) {
+			T ax = tira::abs(v[0]);
+			T ay = tira::abs(v[1]);
+			T az = tira::abs(v[2]);
+            int k = 0;
+			T amax = ax;
+			if (ay > amax) { k = 1; amax = ay; }
+			if (az > amax) { k = 2; amax = az; }
+
+            if (v[k] < T(0) ) {
                 v[0] = -v[0]; v[1] = -v[1]; v[2] = -v[2];
-            }
+			}
         };
         
         // To ensure CPU and GPU pick the same direction, we canonicalize vector signs
