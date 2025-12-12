@@ -884,9 +884,9 @@ namespace tira {
         }
 
         __device__ static inline void stickvote3_accumulate_kernel_device(float& m00, float& m01, float& m02,
-            float& m11, float& m12, float& m22,
-            const float3 d, const float c1, const float c2,
-            const glm::vec3 q, const float scale, const unsigned power)
+                                                                          float& m11, float& m12, float& m22,
+                                                                          const float3 d, const float c1, const float c2,
+                                                                          const glm::vec3 q, const unsigned power, const float scale)
         {
             const float qTd = q.x * d.x + q.y * d.y + q.z * d.z;
             const float qTd2 = qTd * qTd;
@@ -938,7 +938,7 @@ namespace tira {
                 const glm::vec3 q = Q[base_voter];
                 
                 stickvote3_accumulate_kernel_device(m00, m01, m02, m11, m12, m22,
-					nb.d, nb.c1, nb.c2, q, scale, power);
+					nb.d, nb.c1, nb.c2, q, power, scale);
             }
 
             // Write back to VT
@@ -950,9 +950,10 @@ namespace tira {
         }
 
         __device__ static inline void platevote3_numerical_device(float& m00, float& m01, float& m02,
-            float& m11, float& m12, float& m22,
-            const float3 d, const float c1, const float c2,
-            const glm::vec3 evec0, float scale, const unsigned samples)
+                                                                  float& m11, float& m12, float& m22,
+                                                                  const float3 d, const float c1, const float c2,
+			                                                      unsigned power, const glm::vec3 evec0, 
+                                                                  float scale, const unsigned samples)
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
@@ -962,10 +963,10 @@ namespace tira {
 
             glm::vec3 u, v;
             if (fabsf(evec0.z) < 0.999f) {
-                u = glm::normalize(glm::cross(evec0, glm::vec3(0.0f, 0.0f, 1.0f)));
+                u = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), evec0));
             }
             else {
-                u = glm::normalize(glm::cross(evec0, glm::vec3(1.0f, 0.0f, 0.0f)));
+                u = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), evec0));
             }
             v = glm::cross(evec0, u);
 
@@ -978,11 +979,11 @@ namespace tira {
                 float cb = cosf(beta);
                 float sb = sinf(beta);
                 glm::vec3 q = cb * u + sb * v;
-                stickvote3_accumulate_kernel_device(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, scale, 1.0f);
+                stickvote3_accumulate_kernel_device(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, power, 1.0f);
             }
 
-            m00 += v00 / samples; m01 += v01 / samples; m02 += v02 / samples;
-            m11 += v11 / samples; m12 += v12 / samples; m22 += v22 / samples;
+            m00 += scale * v00 / samples; m01 += scale * v01 / samples; m02 += scale * v02 / samples;
+            m11 += scale * v11 / samples; m12 += scale * v12 / samples; m22 += scale * v22 / samples;
         }
 
         __device__ static inline void platevote3_analytical_device(float& m00, float& m01, float& m02,
@@ -1129,7 +1130,7 @@ namespace tira {
                 // Numerical integration
                 if (samples > 0)
                     platevote3_numerical_device(m00, m01, m02, m11, m12, m22,
-                        nb.d, nb.c1, nb.c2, evec0, scale, samples);
+                        nb.d, nb.c1, nb.c2, power, evec0, scale, samples);
                 else
                     platevote3_analytical_device(m00, m01, m02, m11, m12, m22,
                         nb.d, nb.c1, nb.c2, evec0, scale, power, K0_d, K1_d);
