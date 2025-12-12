@@ -11,9 +11,13 @@ namespace tira::constant {
 	constexpr double PI = 3.14159265358979323846;
     template <typename T>
 	constexpr T TIRA_EIGEN_EPSILON = static_cast<T>(1e-12);
+
+    // Specialization for float: looser tolerance
+	template <>
+	constexpr float TIRA_EIGEN_EPSILON<float> = 1e-6f;
 }
 
-namespace tira::shared {
+namespace tira {
     template <typename T>
     CUDA_CALLABLE void swap(T& a, T& b) {
         T temp = a;
@@ -82,10 +86,10 @@ namespace tira::shared {
     /// <returns></returns>
     template <typename T>
     CUDA_CALLABLE void quad_root(T b, T c, T& r1, T& r2) {
-        T disc = b * b - 4 * c;
-        if (b == 0) {
-            r1 = 0;
-            r2 = 0;
+        T disc = b * b - T(4) * c;
+        if (b < tira::constant::TIRA_EIGEN_EPSILON<T>) {
+            r1 = T(0);
+            r2 = T(0);
             return;
         }
         if (disc < 0) disc = 0;
@@ -415,7 +419,7 @@ namespace tira::shared {
         const T p2 = (a - q) * (a - q) + (c - q) * (c - q) + (f - q) * (f - q) + T(2) * upper_diagonal_norm;
         const T p = sqrt(p2 / T(6));
         T halfDet;
-        if (p == T(0))
+		if (p < tira::constant::TIRA_EIGEN_EPSILON<T>)
             halfDet = T(0);
         else
             // formula is det(A-qI) / (2 * p^3)
@@ -482,7 +486,7 @@ namespace tira::cpu {
             Type a = mats[i * 4 + 0];
             Type b = mats[i * 4 + 1];
             Type c = mats[i * 4 + 3];
-            shared::eval2_symmetric(a, b, c, eval0, eval1);
+            eval2_symmetric(a, b, c, eval0, eval1);
             evals[i * 2 + 0] = eval0;
             evals[i * 2 + 1] = eval1;
         }
@@ -506,7 +510,7 @@ namespace tira::cpu {
             T a = mats[i * 4 + 0];
             T b = mats[i * 4 + 1];
             T c = mats[i * 4 + 3];
-            shared::evec2polar_symmetric(a, b, c, &evals[i * 2], vec0, vec1);
+            evec2polar_symmetric(a, b, c, &evals[i * 2], vec0, vec1);
             vecs[i * 2 + 0] = vec0;
             vecs[i * 2 + 1] = vec1;
         }
@@ -533,7 +537,7 @@ namespace tira::cpu {
 			T e = mats[i * 9 + 5];
 			T f = mats[i * 9 + 8];
 
-            shared::eval3_symmetric(a,b,c,d,e,f, eval0, eval1, eval2);
+            eval3_symmetric(a,b,c,d,e,f, eval0, eval1, eval2);
 
             evals[i * 3 + 0] = eval0;
             evals[i * 3 + 1] = eval1;
@@ -559,30 +563,25 @@ namespace tira::cpu {
 
         T* evecs = new T[3 * 2 * n];
         for (size_t i = 0; i < n; i++) {
-            T a = mats[i * 9 + 0];
-            T b = mats[i * 9 + 1];
-            T d = mats[i * 9 + 2];
-            T c = mats[i * 9 + 4];
-            T e = mats[i * 9 + 5];
-            T f = mats[i * 9 + 8];
+            const T a = mats[i * 9 + 0];
+            const T b = mats[i * 9 + 1];
+            const T d = mats[i * 9 + 2];
+            const T c = mats[i * 9 + 4];
+            const T e = mats[i * 9 + 5];
+            const T f = mats[i * 9 + 8];
 
-			T evec0[3], evec1[3], evec2[3];
-            T evals[] = { lambda[i * 3 + 0], lambda[i * 3 + 1], lambda[i * 3 + 2] };
-            shared::evec3_symmetric(a, b, c, d, e, f, evals, evec0, evec1, evec2);
+			T theta_phi0[3], theta_phi1[3], theta_phi2[3];
+			const T* evals = &lambda[i * 3];
+			evec3spherical_symmetric(a, b, c, d, e, f, evals, theta_phi0, theta_phi1, theta_phi2);
 
-            // Clamp to [-1,1] to avoid NaNs from acos in case of numerical drift
-            evec0[2] = (evec0[2] < T(-1)) ? T(-1) : ((evec0[2] > T(1)) ? T(1) : evec0[2]);
-            evec1[2] = (evec1[2] < T(-1)) ? T(-1) : ((evec1[2] > T(1)) ? T(1) : evec1[2]);
-            evec2[2] = (evec2[2] < T(-1)) ? T(-1) : ((evec2[2] > T(1)) ? T(1) : evec2[2]);
-
-            evecs[i * 6 + 0] = std::atan2(evec0[1], evec0[0]);
-            evecs[i * 6 + 1] = std::acos(evec0[2]);
-
-            evecs[i * 6 + 2] = std::atan2(evec1[1], evec1[0]);
-            evecs[i * 6 + 3] = std::acos(evec1[2]);
-
-            evecs[i * 6 + 4] = std::atan2(evec2[1], evec2[0]);
-            evecs[i * 6 + 5] = std::acos(evec2[2]);
+            evecs[i * 6 + 0] = theta_phi0[0];
+            evecs[i * 6 + 1] = theta_phi0[1];
+                               
+            evecs[i * 6 + 2] = theta_phi1[0];
+            evecs[i * 6 + 3] = theta_phi1[1];
+                               
+            evecs[i * 6 + 4] = theta_phi2[0];
+            evecs[i * 6 + 5] = theta_phi2[1];
         }
         return evecs;
     }
@@ -614,7 +613,7 @@ namespace tira::cuda {
         Type a = mats[i * 4 + 0];
         Type b = mats[i * 4 + 1];
         Type c = mats[i * 4 + 3];
-        shared::eval2_symmetric(a, b, c, eval0, eval1);
+        eval2_symmetric(a, b, c, eval0, eval1);
         evals[i * 2 + 0] = eval0;
         evals[i * 2 + 1] = eval1;
     }
@@ -626,7 +625,7 @@ namespace tira::cuda {
         Type a = mats[i * 4 + 0];
         Type b = mats[i * 4 + 1];
         Type c = mats[i * 4 + 3];
-        tira::shared::evec2polar_symmetric(a, b, c, &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
+        tira::evec2polar_symmetric(a, b, c, &evals[i * 2], evecs[i * 2 + 0], evecs[i * 2 + 1]);
 	}
 
 	template<typename Type>
@@ -642,7 +641,7 @@ namespace tira::cuda {
         const Type f = mats[i * 9 + 8];
 
         Type l0, l1, l2;
-        tira::shared::eval3_symmetric(a, b, c, d, e, f, l0, l1, l2);
+        tira::eval3_symmetric(a, b, c, d, e, f, l0, l1, l2);
 
         evals[i * 3 + 0] = l0;
         evals[i * 3 + 1] = l1;
@@ -659,7 +658,7 @@ namespace tira::cuda {
         const Type c = mats[i * 9 + 4];
         const Type e = mats[i * 9 + 5];
         const Type f = mats[i * 9 + 8];
-        tira::shared::evec3spherical_symmetric(a, b, c, d, e, f,
+        tira::evec3spherical_symmetric(a, b, c, d, e, f,
             &evals[i * 3],
             &evecs[i * 6],
             &evecs[i * 6 + 2],
