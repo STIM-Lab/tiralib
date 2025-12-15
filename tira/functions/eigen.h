@@ -315,6 +315,9 @@ namespace tira {
      * @param eval0
      * @param eval1
      * @param eval2
+     * 
+	 * NOTE: Due to FMA instructions on GPUs, the results may differ slightly between CPU and GPU.
+	 * To get consistent results, add --fmad=false to the nvcc compiler flags in CMake.
      */
     template<typename T>
     CUDA_CALLABLE void eval3_symmetric(T a, T b, T c, T d, T e, T f,
@@ -342,7 +345,7 @@ namespace tira {
 
         const T p2 = aq * aq + cq * cq + fq * fq + T(2) * p1;
         T p = sqrt(p2 / T(6));
-
+        
         // The matrix C = A - q*I is represented by the following, where
         // b00, b11 and b22 are computed after these comments,
         //       +-           -+         +-               -+
@@ -358,7 +361,7 @@ namespace tira {
         const T Bd = p_inv * d;
         const T Be = p_inv * e;
         const T Bf = p_inv * fq;
-
+		
         // calculate the determinant of B
         const T det_B = Ba * (Bc * Bf - Be * Be) - Bb * (Bb * Bf - Bd * Be) + Bd * (Bb * Be - Bd * Bc);
         T r = det_B / T(2);
