@@ -287,6 +287,7 @@ namespace tira {
                 e1 *= t1;
                 e2 *= t2;
             }
+			eta = c1 * e1 + c2 * e2;
         }
 
         // Reflected direction
@@ -1138,8 +1139,8 @@ namespace tira {
             VT[base_recv] += Receiver * norm;
         }
 
-        static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float sigma,
-            float sigma2, unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
+        static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float* largest_q, float* smallest_q,
+            float sigma, float sigma2, unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
             
             HANDLE_ERROR(cudaSetDevice(device));
 
@@ -1166,32 +1167,34 @@ namespace tira {
 
             // Eigendecomposition on GPU
             start = std::chrono::high_resolution_clock::now();
-            float* L = tira::cuda::evals3_symmetric(input_field, n_voxels, device);
-            float* V = tira::cuda::evecs3spherical_symmetric(input_field, L, n_voxels, device);
+            // float* L = tira::cuda::evals3_symmetric(input_field, n_voxels, device);
+            // float* V = tira::cuda::evecs3spherical_symmetric(input_field, L, n_voxels, device);
+            float* L = tira::cpu::evals3_symmetric(input_field, n_voxels);
+            // float* V = tira::cpu::evecs3spherical_symmetric(input_field, L, n_voxels);
             end = std::chrono::high_resolution_clock::now();
             float t_eigendecomposition = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
             // Declare GPU arrays
             float* gpuOutputField;
-            float* gpuV;
+            // float* gpuV;
             float* gpuL;
 
             // Check if input/eigens are already on device
             start = std::chrono::high_resolution_clock::now();
             cudaPointerAttributes attrL, attrV;
             HANDLE_ERROR(cudaPointerGetAttributes(&attrL, L));
-            HANDLE_ERROR(cudaPointerGetAttributes(&attrV, V));
+            // HANDLE_ERROR(cudaPointerGetAttributes(&attrV, V));
 
             if (attrL.type == cudaMemoryTypeDevice) gpuL = L;
             else {
                 HANDLE_ERROR(cudaMalloc(&gpuL, evals_bytes));
                 HANDLE_ERROR(cudaMemcpy(gpuL, L, evals_bytes, cudaMemcpyHostToDevice));
             }
-            if (attrV.type == cudaMemoryTypeDevice) gpuV = V;
+            /*if (attrV.type == cudaMemoryTypeDevice) gpuV = V;
             else {
                 HANDLE_ERROR(cudaMalloc(&gpuV, evecs_bytes));
                 HANDLE_ERROR(cudaMemcpy(gpuV, V, evecs_bytes, cudaMemcpyHostToDevice));
-            }
+            }*/
             end = std::chrono::high_resolution_clock::now();
             float t_host2device = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -1199,17 +1202,23 @@ namespace tira {
             float* dQ_large = nullptr;
             float* dQ_small = nullptr;
             const size_t cartesian_bytes = sizeof(float) * 3 * n_voxels;
-            if (STICK) HANDLE_ERROR(cudaMalloc(&dQ_large, cartesian_bytes));
-            if (PLATE) HANDLE_ERROR(cudaMalloc(&dQ_small, cartesian_bytes));
-            {
+            if (STICK) {
+                HANDLE_ERROR(cudaMalloc(&dQ_large, cartesian_bytes));
+                HANDLE_ERROR(cudaMemcpy(dQ_large, largest_q, cartesian_bytes, cudaMemcpyHostToDevice));
+            }
+            if (PLATE) {
+                HANDLE_ERROR(cudaMalloc(&dQ_small, cartesian_bytes));
+                HANDLE_ERROR(cudaMemcpy(dQ_small, smallest_q, cartesian_bytes, cudaMemcpyHostToDevice));
+            }
+            /*{
                 int t = 256; int g = (int)((n_voxels + t - 1) / t);
                 if (STICK)
                     spherical_to_cart3_kernel << <g, t >> > (dQ_large, (const float*)gpuV, true, n_voxels);
                 if (PLATE)
                     spherical_to_cart3_kernel << <g, t >> > (dQ_small, (const float*)gpuV, false, n_voxels);
                 HANDLE_ERROR(cudaDeviceSynchronize());
-            }
-
+            }*/
+           
             // Allocate output on device
             start = std::chrono::high_resolution_clock::now();
             HANDLE_ERROR(cudaMalloc(&gpuOutputField, tensorField_bytes));
@@ -1263,10 +1272,10 @@ namespace tira {
             HANDLE_ERROR(cudaFree(gpuOutputField));
 			if (attrL.type == cudaMemoryTypeDevice) HANDLE_ERROR(cudaFree(L));              // This is fragile but works for now
 			else delete[] L;                                                                // works for either new[] or cudaMalloc
-            if (attrV.type == cudaMemoryTypeDevice) HANDLE_ERROR(cudaFree(V));
-            else delete[] V;
+            // if (attrV.type == cudaMemoryTypeDevice) HANDLE_ERROR(cudaFree(V));
+            // else delete[] V;
             if (gpuL && gpuL != L) HANDLE_ERROR(cudaFree(gpuL));
-            if (gpuV && gpuV != V) HANDLE_ERROR(cudaFree(gpuV));
+            // if (gpuV && gpuV != V) HANDLE_ERROR(cudaFree(gpuV));
 			if (dQ_large) HANDLE_ERROR(cudaFree(dQ_large));
 			if (dQ_small) HANDLE_ERROR(cudaFree(dQ_small));
             cudaDeviceSynchronize();
