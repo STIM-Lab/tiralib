@@ -10,11 +10,11 @@
 namespace tira::constant {
 	constexpr double PI = 3.14159265358979323846;
     template <typename T>
-	constexpr T TIRA_EIGEN_EPSILON = static_cast<T>(1e-12);
+	constexpr T TIRA_EIGEN_EPSILON = static_cast<T>(1e-6);
 
     // Specialization for float: looser tolerance
-	template <>
-	constexpr float TIRA_EIGEN_EPSILON<float> = 1e-6f;
+	//template <>
+	//constexpr float TIRA_EIGEN_EPSILON<float> = 1e-6f;
 }
 
 namespace tira {
@@ -84,18 +84,13 @@ namespace tira {
     /// <param name="b"></param>
     /// <param name="c"></param>
     /// <returns></returns>
-    template <typename T>
-    CUDA_CALLABLE void quad_root(T b, T c, T& r1, T& r2) {
-        T disc = b * b - T(4) * c;
-        if (b < tira::constant::TIRA_EIGEN_EPSILON<T>) {
-            r1 = T(0);
-            r2 = T(0);
-            return;
-        }
-        if (disc < 0) disc = 0;
-        T q = -T(0.5) * (b + sgn(b) * sqrt(disc));
+
+    template <typename Type>
+    CUDA_CALLABLE void quad_root(Type b, Type c, Type& r1, Type& r2) {
+        Type q = -0.5 * (b + sgn(b) * std::sqrt(b * b - 4 * c));
         r1 = q;
-        r2 = c / q;
+        if (q == 0) r2 = 0;
+        else r2 = c / q;
     }
 
     /// Calculate the eigenvalues of a 2x2 matrix
@@ -109,10 +104,10 @@ namespace tira {
         T det = a * c - b * b;                          // calculate the determinant
 
         T l0, l1;
-        quad_root(-tr, det, l0, l1);    // find the roots of the quadratic equation - these are the eigenvalues
+        quad_root(-tr, det, eval1, eval0);    // find the roots of the quadratic equation - these are the eigenvalues
 
-        eval0 = abs(l0) < abs(l1) ? l0 : l1;  // sort the eigenvalues based on their magnitude
-        eval1 = abs(l0) > abs(l1) ? l0 : l1;
+        //eval0 = abs(l0) < abs(l1) ? l0 : l1;  // sort the eigenvalues based on their magnitude
+        //eval1 = abs(l0) > abs(l1) ? l0 : l1;
     }
 
     /// Calculate the eigenvectors of a 2x2 matrix associated with the two eigenvalues stored in lambdas.
