@@ -21,176 +21,205 @@
 #endif
 
 namespace tira {
-
-    template <typename T>
-    CUDA_CALLABLE static T stick_decay(T term, T length, T sigma) {
-        T c = exp(-(length * length) / (sigma * sigma));
-        T tp = term;
+    /**
+     * Calculates the decay value for a stick tensor voting field
+     *
+     * @tparam Type data type used to calculate the decay value
+     * @param sin_theta angular term used to determine the angular decay, with maximum values in directions orthogonal to the stick tensor
+     * @param length distance between the voter and receiver
+     * @param sigma standard deviation indicating the attenuation of the vote signal
+     * @return a decay value used to scale a stick tensor vote
+     */
+    template <typename Type>
+    CUDA_CALLABLE static Type stick_decay(Type sin_theta, Type length, Type sigma) {
+        Type c = exp(-(length * length) / (sigma * sigma));
+        Type tp = sin_theta;
         return c * tp;
     }
 
-    template <typename T>
-    CUDA_CALLABLE static T plate_decay(T length, T sigma) {
-        T c = TV_PI * exp(-(length * length) / (sigma * sigma)) / 2.0f;
-        return c;
-    }
-
-
-
     /**
-        * @brief Normalization constant for 3D stick voting
-        *
-        * @tparam T        Floating point type
-        * @param sigma1    Stick-vote sigma along first axis.
-        * @param sigma2    Stick-vote sigma along second axis.
-        * @param p         Stick-vote power (refinement exponent).
-        * @return          Normalization factor for 3D stick votes.
+    * @brief Normalization constant for 3D stick voting
+    *
+    * @tparam T        Floating point type
+    * @param sigma1    Stick-vote sigma along first axis.
+    * @param sigma2    Stick-vote sigma along second axis.
+    * @param p         Stick-vote power (refinement exponent).
+    * @return          Normalization factor for 3D stick votes.
     */
-    template <typename T>
-    CUDA_CALLABLE static T sticknorm3(const T sigma1, const T sigma2, const unsigned p) {
-        T pi_term = TV_PI * sqrt(TV_PI) / 2.0;
-        T sig1_3 = sigma1 * sigma1 * sigma1;
-        T sig2_3 = sigma2 * sigma2 * sigma2;
-        T num1 = pow(2, 2 * p + 1) * factorial(p) * factorial(p);
-        T num2 = 2.0;
-        T den1 = factorial(2 * p + 1);
-        T den2 = 2 * p + 1;
+    template <typename Type>
+    CUDA_CALLABLE static Type sticknorm3(const Type sigma1, const Type sigma2, const unsigned p) {
+        Type pi_term = TV_PI * sqrt(TV_PI) / 2.0;
+        Type sig1_3 = sigma1 * sigma1 * sigma1;
+        Type sig2_3 = sigma2 * sigma2 * sigma2;
+        Type num1 = pow(2, 2 * p + 1) * factorial(p) * factorial(p);
+        Type num2 = 2.0;
+        Type den1 = factorial(2 * p + 1);
+        Type den2 = 2 * p + 1;
         return pi_term * ((sig1_3 * num1 / den1) + (sig2_3 * num2 / den2));
     }
 
-    /// <summary>
-    /// Calculate the stick vote for the relative position (u, v) given the voter eigenvales and eigenvectors
-    /// </summary>
-    /// <param name="uv">position of the receiver relative to the voter</param>
-    /// <param name="sigma">decay value (standard deviation)</param>
-    /// <param name="theta">orientation of the voter</param>
-    /// <param name="power">refinement term</param>
-    /// <returns></returns>
-    CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2 uv, const float sigma, const float theta) {
+    /**
+     * Calculates the vote contribution for a stick tensor at a position specified relative to the voter
+     *
+     * @param rx is the position of the reciever relative to the tensor casting the vote (voter)
+     * @param ry is the position of the reciever relative to the tensor casting the vote (voter)
+     * @param sigma is the attenuation of the tensor vote field
+     * @param theta is the angle of the stick tensor (its largest eigenvector direction) in polar coordinates
+     * @param a upper left value in the symmetric 2x2 output matrix
+     * @param b upper right value in the symmetric 2x2 output matrix
+     * @param c lower right value in the symmetric 2x2 output matrix
+     */
+    template<typename Type>
+    CUDA_CALLABLE static void stickvote(const Type rx, const Type ry, const float sigma, const float theta,
+        Type& a, Type& b, Type& c) {
 
-        const float cos_theta = cos(theta);
-        const float sin_theta = sin(theta);
-        const glm::vec2 q(cos_theta, sin_theta);
+        // | a  b |
+        // | b  c |
 
-        glm::vec2 d = uv;                                       // normalize the direction vector
-        const float l = glm::length(d);                               // calculate ell (distance between voter/votee)
-        if (l == 0) d = glm::vec2(0, 0);                         // assumes that the voter DOES contribute to itself
-        else d = glm::normalize(d);
+        // calculate the orientation of the stick tensor in Cartesian cordinates
+        const Type cos_theta = cos(theta);
+        const Type sin_theta = sin(theta);
+        const Type q[2] = {cos_theta, sin_theta};
 
-        const float qTd = glm::dot(q, d);
+        Type d[2];                                                   // store the direction vector
+        const Type l = std::sqrt(rx * rx + ry * ry);                // calculate l (distance between voter/votee)
+        if (l == 0) {
+            d[0] = 0;                                      // assumes that the voter DOES contribute to itself
+            d[1] = 0;
+        }
+        else {
+            d[0] = rx / l;
+            d[1] = ry / l;
+        }
 
-        // Calculate the decay terms
-        float eta = sigma == 0.0f ? (l > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : stick_decay(1 - qTd * qTd, l, sigma);
+        const Type qTd = q[0] * d[0] + q[1] * d[1];                 // calculate the dot product between the tensor orientation and vote direction
 
-        const glm::mat2 R = glm::mat2(1.0f) - 2.0f * glm::outerProduct(d, d);
-        const glm::vec2 Rq = R * q;
-        const glm::mat2 RqRq = glm::outerProduct(Rq, Rq);
+        // Calculate the decay term
+        Type eta = stick_decay(1 - qTd * qTd, l, sigma);
 
-        return RqRq * eta;
+        // build a rotation matrix by calculating 1 - dd^T
+        Type R_a = 1.0 - 2.0 * d[0] * d[0];
+        Type R_b = 0.0 - 2.0 * d[0] * d[1];
+        Type R_c = 1.0 - 2.0 * d[1] * d[1];
+
+
+        // rotate the eigenvector direction to get the orientation of the tensor vote
+        Type Rq_x = R_a * q[0] + R_b * q[1];
+        Type Rq_y = R_b * q[0] + R_c * q[1];
+
+        // calculate the output tensor and scale it by the decay term
+        a = Rq_x * Rq_x * eta;
+        b = Rq_x * Rq_y * eta;
+        c = Rq_y * Rq_y * eta;
     }
 
-    /// <summary>
-    /// Calculates the accumulated tensor vote received at position x within a window w.
-    /// </summary>
-    /// <param name="L">pointer to an image of eigenvalues</param>
-    /// <param name="V">pointer to an image of eigenvectors</param>
-    /// <param name="sigma">decay value (standard deviation)</param>
-    /// <param name="power">refinement term</param>
-    /// <param name="norm"></param>
-    /// <param name="w">width of the vote region</param>
-    /// <param name="s0">size of the L and V images along the first dimension</param>
-    /// <param name="s1">size of the L and V images along the second dimension</param>
-    /// <param name="x">position of the receiver</param>
-    /// <returns></returns>
-    CUDA_CALLABLE static glm::mat2 stickvote2_window(const glm::vec2* L, const glm::vec2* V, const float sigma,
-        const int w, const int s0, const int s1, const glm::ivec2 x) {
+    /**
+     * Calculate the accumulated value of a tensor voting receiver by integrating votes across a window surrounding
+     * the receiver position
+     *
+     * @tparam Type data type used for the calculation
+     * @param lambdas array of eigenvalues (2 per pixel) corresponding to tensors in the image
+     * @param thetas array of eigenvectors in polar coordinates (2 per pixel) corresponding to tensors in the image
+     * @param sigma attenuation value for the voting field
+     * @param w window size used for summing (normally about 6x sigma)
+     * @param s0 size of the tensor field along the first (slow) dimension
+     * @param s1 size of the tensor field along the second (fast) dimension
+     * @param x0 position of the receiver
+     * @param x1 position of the receiver
+     * @param out_a upper left value of the 2x2 symmetric tensor vote
+     * @param out_b upper right value of the 2x2 symmetric tensor vote
+     * @param out_c lower right value of the 2x2 symmetric tensor vote
+     */
+    template <typename Type>
+    CUDA_CALLABLE static void stickvote_window(const Type* lambdas, const Type* thetas, const Type sigma,
+        const int w, const int s0, const int s1, const int x0, const int x1,
+        Type& out_a, Type& out_b, Type& out_c) {
 
-        const int x0 = x[0];
-        const int x1 = x[1];
+        // Indices for the symmetric tensor:
+        // | a  b |
+        // | b  c |
+        out_a = out_b = out_c = 0;                           // initialize the receiver value to zero
 
-        glm::mat2 Votee(0.0f);
-
-        const int hw = w / 2;
+        const int hw = w / 2;                                // calculate the half window size
         for (int v = -hw; v <= hw; v++) {                    // for each pixel in the window
-            const int r0 = static_cast<int>(x0) + v;
+            const int r0 = static_cast<int>(x0) + v;         // calculate the position relative to the voter
             if (r0 >= 0 && r0 < s0) {
                 for (int u = -hw; u <= hw; u++) {
 
                     const int r1 = static_cast<int>(x1) + u;
                     if (r1 >= 0 && r1 < s1) {
-                        // calculate the contribution of (u,v) to (x,y)
-                        glm::vec2 Vpolar = V[r0 * s1 + r1];
-                        const float theta = Vpolar[1];
-                        const glm::vec2 uv(u, v);
-                        glm::mat2 vote = tira::stickvote2(uv, sigma, theta);
-                        const float l0 = L[r0 * s1 + r1][0];
-                        const float l1 = L[r0 * s1 + r1][1];
-                        float scale = fabs(l1) - fabs(l0);
-                        if (l1 < 0) scale = scale * (-1);
-                        Votee = Votee + scale * vote;
+                        const Type theta = thetas[r0 * s1 * 2 + r1 * 2 + 1];               // retrieve the largest eigenvector
+                        Type a, b, c;
+                        tira::stickvote<Type>(u, v, sigma, theta, a, b, c); // calculate the stick vote contribution
+                        const Type l0 = lambdas[r0 * s1 * 2 + r1 * 2 + 0];                 // load both eigenvalues associated with the voter
+                        const Type l1 = lambdas[r0 * s1 * 2 + r1 * 2 + 1];
+                        Type scale = fabs(l1) - fabs(l0);                                  // calculate the vote scale based on the difference between eigenvalues
+                        if (l1 < 0) scale = scale * (-1);                                   // TODO: Probably don't need this test since l1 should be larger than l0
+                        out_a += scale * a;                                                 // accumulate the receiver vote
+                        out_b += scale * b;
+                        out_c += scale * c;
                     }
                 }
             }
         }
-        return Votee;
     }
 
+    /**
+     * Calculate the plate tensor contribution using numerical integration.
+     *
+     * @tparam Type data type used for the calculation
+     * @param u is the position of the reciever relative to the tensor casting the vote (voter)
+     * @param v is the position of the reciever relative to the tensor casting the vote (voter)
+     * @param sigma is the attenuation of the tensor vote field
+     * @param out_a upper left value in the symmetric 2x2 output matrix
+     * @param out_b upper right value in the symmetric 2x2 output matrix
+     * @param out_c lower right value in the symmetric 2x2 output matrix
+     * @param n number of samples to use for numerical integration
+     */
+    template <typename Type>
+    CUDA_CALLABLE  static void platevote_numerical(const Type u, const Type v, const Type sigma,
+        Type& out_a, Type& out_b, Type& out_c, const unsigned int n = 10) {
 
-    // the plate tensor field is symmetric and not impacted by the refinement term
-    // thus -> p = 1
-    /*CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, float sigma) {
-
-        // calculate the distance between voter and votee
-        const float length = sqrt(uv[0] * uv[0] + uv[1] * uv[1]);
-        const float l2 = length * length;
-        const float s12 = sigma[0] * sigma[0];
-        const float s22 = sigma[1] * sigma[1];
-        float e1 = 0;
-        if (sigma[0] > 0)
-            e1 = expf(-l2 / s12);
-        float e2 = 0;
-        if (sigma[1] > 0)
-            e2 = expf(-l2 / s22);
-
-        const float alpha = atan2f(uv[1], uv[0]);
-        const float two_a = 2 * alpha;
-        const float cos_2a = cosf(two_a);
-        const float sin_2a = sinf(two_a);
-        glm::mat2 M;
-        M[0][0] = cos_2a + 2;
-        M[1][0] = sin_2a;
-        M[0][1] = sin_2a;
-        M[1][1] = 2 - cos_2a;
-
-        const glm::mat2 I(1.0f);
-
-        const float c = 1.0f / (TV_PI * (s12 + s22));
-
-        return c * (e1 * (I - 0.25f * M) + e2 * (0.25f * M));
-    }*/
-
-
-
-    CUDA_CALLABLE  static glm::mat2 platevote2_numerical(const glm::vec2 uv, const float sigma, const unsigned int n = 20) {
-
-        const float dtheta = TV_PI / static_cast<double>(n);
-        glm::mat2 V(0.0f);
+        const Type dtheta = TV_PI / static_cast<Type>(n);
+        out_a = out_b = out_c = 0;
         for (unsigned int i = 0; i < n; i++) {
-            const float theta = dtheta * i;
-            V = V + stickvote2(uv, sigma, theta);
+            const Type theta = dtheta * i;
+            Type a, b, c;
+            stickvote(u, v, sigma, theta, a, b, c);
+            out_a += a;
+            out_b += b;
+            out_c += c;
         }
-        const float norm = (float)1.0f / static_cast<float>(n);
-        return V * norm;
+        const Type norm = (Type)1.0 / static_cast<Type>(n);
+        out_a *= norm;
+        out_b *= norm;
+        out_c *= norm;
     }
 
-    CUDA_CALLABLE static glm::mat2 platevote2_window(const glm::vec2* L, float sigma,
-        const int w, const int s0, const int s1, const glm::ivec2 x, const unsigned samples = 10) {
+    /**
+     * Calculate the accumulated value of a tensor voting receiver by integrating votes across a window surrounding
+     * the receiver position
+     *
+     * @tparam Type data type used for the calculation
+     * @param lambdas array of eigenvalues (2 per pixel) corresponding to tensors in the image
+     * @param sigma attenuation value for the voting field
+     * @param w window size used for summing (normally about 6x sigma)
+     * @param s0 size of the tensor field along the first (slow) dimension
+     * @param s1 size of the tensor field along the second (fast) dimension
+     * @param x0 position of the receiver
+     * @param x1 position of the receiver
+     * @param out_a upper left value of the 2x2 symmetric tensor vote
+     * @param out_b upper right value of the 2x2 symmetric tensor vote
+     * @param out_c lower right value of the 2x2 symmetric tensor vote
+     * @param samples number of stick tensor samples used for numerical integration
+     */
+    template <typename Type>
+    CUDA_CALLABLE static void platevote_window(const Type* lambdas, Type sigma,
+        const int w, const int s0, const int s1, const unsigned x0, const unsigned x1,
+        Type& out_a, Type& out_b, Type& out_c, const unsigned samples = 10) {
 
-        const int x0 = x[0];
-        const int x1 = x[1];
 
-
-        glm::mat2 Receiver(0.0f);
+        out_a = out_b = out_c = 0;
 
         const int hw = w / 2;
 
@@ -200,19 +229,19 @@ namespace tira {
                 for (int u = -hw; u <= hw; u++) {
                     int r1 = static_cast<int>(x1) + u;
                     if (r1 >= 0 && r1 < s1) {
-                        const float l0 = L[r0 * s1 + r1][0];
+                        const Type l0 = lambdas[r0 * s1 * 2 + r1 * 2 + 0];
                         if (l0 != 0) {
-                            const glm::vec2 uv(u, v);
-                            //if (samples > 0)             // if a sample number is provided, use numerical integration
-                                Receiver += fabsf(l0) * platevote2_numerical(uv, sigma, samples);
-                            //else                         // otherwise use analytical integration (in progress)
-                            //    Receiver += fabsf(l0) * platevote2(uv, sigma);
+                            Type a, b, c;
+                            platevote_numerical<Type>(u, v, sigma, a, b, c, samples);
+                            out_a += a * fabsf(l0);
+                            out_b += b * fabsf(l0);
+                            out_c += c * fabsf(l0);
+
                         }
                     }
                 }
             }
         }
-        return Receiver;
     }
 
 
@@ -276,37 +305,66 @@ namespace tira {
      */
     namespace cpu {
 
-        static void tensorvote2(glm::mat2* t_out, const glm::vec2* L, const glm::vec2* V, float sigma, const unsigned w,
+        /**
+        *
+        * @tparam Type data type used for the calculation
+        * @param t_out is a pointer to the array to be filled with the tensor voting result
+        * @param lambdas array of eigenvalues (2 per pixel) corresponding to tensors in the image
+        * @param evecs is an array of eigenvectors (2 per pixel) in polar coordinates
+        * @param sigma attenuation value for the voting field
+        * @param w window size used for summing (normally about 6x sigma)
+        * @param shape0 size of the tensor field along the first (slow) dimension
+        * @param shape1 size of the tensor field along the second (fast) dimension
+        * @param stick is a boolean flag specifying calculation of the stick tensor vote
+        * @param plate is a boolean flag specifying calculation of the plate tensor vote
+        * @param samples number of stick tensor samples used for numerical integration
+        */
+        template <typename Type>
+        static void tensorvote(Type* t_out, const Type* lambdas, const Type* evecs, Type sigma, const unsigned w,
             const unsigned shape0, const unsigned shape1,
-            const bool STICK = true, const bool PLATE = true, const unsigned samples = 10) {
+            const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
-            //const float sticknorm = 1.0f / sticknorm2(sigma[0], sigma[1], power);
+            Type out_a, out_b, out_c;
+
+
+            float a, b, c;
             for (int x0 = 0; x0 < shape0; x0++) {
                 for (int x1 = 0; x1 < shape1; x1++) {
-                    glm::mat2 Vote(0.0f);
-                    if (STICK)
-                        Vote = Vote + stickvote2_window(L, V, sigma, w, shape0, shape1, glm::ivec2(x0, x1));
-                    if (PLATE)
-                        Vote = Vote + platevote2_window(L, sigma, w, shape0, shape1, glm::ivec2(x0, x1), samples);
-                    t_out[x0 * shape1 + x1] = Vote;
+                    out_a = out_b = out_c = 0;
+                    if (stick) {
+                        stickvote_window(lambdas, evecs, sigma, w, shape0, shape1, x0, x1, a, b, c);
+                        out_a += a;
+                        out_b += b;
+                        out_c += c;
+                    }
+
+                    if (plate) {
+                        platevote_window(lambdas, sigma, w, shape0, shape1, x0, x1, a, b, c, samples);
+                        out_a += a;
+                        out_b += b;
+                        out_c += c;
+                    }
+                    t_out[x0 * shape1 * 4 + x1 * 4 + 0] = out_a;
+                    t_out[x0 * shape1 * 4 + x1 * 4 + 1] = out_b;
+                    t_out[x0 * shape1 * 4 + x1 * 4 + 2] = out_b;
+                    t_out[x0 * shape1 * 4 + x1 * 4 + 3] = out_c;
                 }
             }
         }
 
-        static void tensorvote2(glm::mat2* t_out, const glm::mat2* t_in, const float sigma, const unsigned w,
+        template <typename Type>
+        static void tensorvote(Type* t_out, const Type* t_in, const Type sigma, const unsigned w,
             const unsigned shape0, const unsigned shape1, 
             const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
             // calculate the eigenvalues for each tensor in the field
-            float* lambdas = tira::cpu::evals2_symmetric((float*)t_in, shape0 * shape1);
+            float* lambdas = evals2_symmetric(t_in, shape0 * shape1);
 
             // calculate the eigenvectors for each tensor in the field
-            float* evecs = tira::cpu::evecs2polar_symmetric((float*)t_in, lambdas, shape0 * shape1);
+            float* evecs = evecs2polar_symmetric(t_in, lambdas, shape0 * shape1);
 
             // perform tensor voting
-            tensorvote2(t_out, (glm::vec2*)lambdas, (glm::vec2*)evecs, sigma, w, shape0, shape1, stick, plate, samples);
-
-
+            tensorvote(t_out, lambdas, evecs, sigma, w, shape0, shape1, stick, plate, samples);
         }
 
 
@@ -672,35 +730,48 @@ namespace tira {
      * If pointers are located on the host, the data will be copied to the currently active CUDA device.
      * This region is only compiled when it's passed to nvcc.
      */
+
 #ifdef __CUDACC__
     namespace cuda {
 		
         // ------- 2D Tensor Voting -------
 
-        __global__ static void global_stickvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, float sigma, int w, int shape0, int shape1) {
+        template <typename Type>
+        __global__ static void global_stickvote(Type* t_out, Type* L, Type* V, float sigma, int w, int shape0, int shape1) {
 
             int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
             int x1 = blockDim.y * blockIdx.y + threadIdx.y;
             if (x0 >= shape0 || x1 >= shape1)                                                          // if not within bounds of image, return
                 return;
 
-            glm::mat2 Receiver = stickvote2_window(L, V, sigma, w, shape0, shape1, glm::ivec2(x0, x1));
-            VT[x0 * shape1 + x1] += Receiver;
+            float a, b, c;
+            stickvote_window(L, V, sigma, w, shape0, shape1, x0, x1, a, b, c);
+            t_out[x0 * shape1 * 4 + x1 * 4 + 0] += a;
+            t_out[x0 * shape1 * 4 + x1 * 4 + 1] += b;
+            t_out[x0 * shape1 * 4 + x1 * 4 + 2] += b;
+            t_out[x0 * shape1 * 4 + x1 * 4 + 3] += c;
         }
 
-        __global__ static void global_platevote2(glm::mat2* VT, glm::vec2* L, float sigma, int w, int s0, int s1, unsigned samples) {
+        template <typename Type>
+        __global__ static void global_platevote(Type* t_out, Type* L, float sigma, int w, int s0, int s1, unsigned samples) {
 
             int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
             int x1 = blockDim.y * blockIdx.y + threadIdx.y;
             if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
                 return;
 
-            glm::mat2 Receiver = platevote2_window(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
-            VT[x0 * s1 + x1] += Receiver;
+            float a, b, c;
+            platevote_window(L, sigma, w, s0, s1, x0, x1, a, b, c, samples);
+
+            t_out[x0 * s1 * 4 + x1 * 4 + 0] += a;
+            t_out[x0 * s1 * 4 + x1 * 4 + 1] += b;
+            t_out[x0 * s1 * 4 + x1 * 4 + 2] += b;
+            t_out[x0 * s1 * 4 + x1 * 4 + 3] += c;
         }
 
 
-        static void tensorvote2(glm::mat2* t_out, const glm::mat2* t_in, const float sigma, const unsigned w,
+        template <typename Type>
+        static void tensorvote(Type* t_out, const Type* t_in, const Type sigma, const unsigned w,
             const unsigned shape0, const unsigned shape1,
             const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
@@ -727,8 +798,8 @@ namespace tira {
             int tensorFieldSize = 4 * shape0 * shape1;
 
             start = std::chrono::high_resolution_clock::now();
-            float* L = tira::cuda::evals2_symmetric<float>((const float*)t_in, shape0 * shape1, device);
-            float* V = tira::cuda::evecs2polar_symmetric((const float*)t_in, L, shape0 * shape1, device);
+            float* L = tira::cuda::evals2_symmetric(t_in, shape0 * shape1, device);
+            float* V = tira::cuda::evecs2polar_symmetric(t_in, L, shape0 * shape1, device);
             end = std::chrono::high_resolution_clock::now();
             float t_eigendecomposition = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -763,8 +834,10 @@ namespace tira {
 
             // perform tensor voting
             start = std::chrono::high_resolution_clock::now();
-            global_stickvote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, sigma, w, shape0, shape1);
-            global_platevote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, sigma, w, shape0, shape1, samples);
+            if (stick)
+                global_stickvote << < blocks, threads >> > (gpuOutputField, gpuL, gpuV, sigma, w, shape0, shape1);
+            if (plate)
+                global_platevote << < blocks, threads >> > (gpuOutputField, gpuL, sigma, w, shape0, shape1, samples);
             cudaDeviceSynchronize();
             end = std::chrono::high_resolution_clock::now();
             float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
