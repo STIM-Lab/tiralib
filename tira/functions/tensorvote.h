@@ -6,14 +6,13 @@
     #include <tira/cuda/error.h>
 #endif
 
-#include "eigen.h"
+#include "tensor.h"
 #include <chrono>
 #include <cmath>
 #include <iostream>
 #include <vector>
 #include <boost/math/special_functions/beta.hpp>
 #include <boost/math/special_functions/hypergeometric_pFq.hpp>
-#include <glm/glm.hpp>
 
 #define TV_PI 3.14159265358979323846
 #define TIRA_VOTE_EPSILON 1e-12
@@ -24,51 +23,19 @@
 namespace tira {
 
     template <typename T>
-    CUDA_CALLABLE static T decay(T term, T length, T sigma, const unsigned power = 1) {
+    CUDA_CALLABLE static T stick_decay(T term, T length, T sigma) {
         T c = exp(-(length * length) / (sigma * sigma));
-
         T tp = term;
-        for (unsigned int pi = 1; pi < power; pi++)
-            tp *= term;
-
         return c * tp;
     }
 
     template <typename T>
-    CUDA_CALLABLE static T FractionalAnisotropy(T l0, T l1, T l2) {
-        T l_average = (l0 + l1 + l2) / T(3);
-        T numer = (l2 - l_average) * (l2 - l_average) + (l1 - l_average) * (l1 - l_average) + (l0 - l_average) * (l0 - l_average);
-        T denom = l0 * l0 + l1 * l1 + l2 * l2;
-        return sqrtf(T(3) / T(2) * (numer / denom));
-    }
-
-    CUDA_CALLABLE static double factorial(const unsigned n) {
-        double fac = 1;
-        for (unsigned int i = 1; i <= n; i++)
-            fac *= i;
-        return fac;
-    }
-
-    CUDA_CALLABLE glm::vec3 spherical_to_cartesian(const float theta, const float phi) {
-		const float st = sinf(theta), ct = cosf(theta);
-		const float sp = sinf(phi),   cp = cosf(phi);
-		return glm::vec3(ct * sp, st * sp, cp);
-	}
-
-    template <typename T>
-    CUDA_CALLABLE static T PlateDecay2D(T length, T sigma) {
+    CUDA_CALLABLE static T plate_decay(T length, T sigma) {
         T c = TV_PI * exp(-(length * length) / (sigma * sigma)) / 2.0f;
         return c;
     }
 
-    template <typename T>
-    CUDA_CALLABLE static T sticknorm2(const T sigma1, const T sigma2, const unsigned p) {
-        T num = TV_PI * factorial(2 * p);
-        T ex = pow(2, 2 * p);
-        T facp = factorial(p);
-        T trig_int = num / (ex * facp * facp);
-        return trig_int * (sigma1 * sigma1 + sigma2 * sigma2);
-    }
+
 
     /**
         * @brief Normalization constant for 3D stick voting
@@ -99,7 +66,7 @@ namespace tira {
     /// <param name="theta">orientation of the voter</param>
     /// <param name="power">refinement term</param>
     /// <returns></returns>
-    CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2 uv, const glm::vec2 sigma, const float theta, const unsigned power) {
+    CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2 uv, const float sigma, const float theta) {
 
         const float cos_theta = cos(theta);
         const float sin_theta = sin(theta);
@@ -113,18 +80,17 @@ namespace tira {
         const float qTd = glm::dot(q, d);
 
         // Calculate the decay terms
-        float eta1 = sigma[0] == 0.0f ? (l > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : decay(1 - qTd * qTd, l, sigma[0], power);
-        float eta2 = sigma[1] == 0.0f ? (l > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : decay(qTd * qTd, l, sigma[1], power);
+        float eta = sigma == 0.0f ? (l > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : stick_decay(1 - qTd * qTd, l, sigma);
 
         const glm::mat2 R = glm::mat2(1.0f) - 2.0f * glm::outerProduct(d, d);
         const glm::vec2 Rq = R * q;
         const glm::mat2 RqRq = glm::outerProduct(Rq, Rq);
 
-        return RqRq * (eta1 + eta2);
+        return RqRq * eta;
     }
 
     /// <summary>
-    /// Calculate the receiver vote from an image of eigenvalues and eigenvectors.
+    /// Calculates the accumulated tensor vote received at position x within a window w.
     /// </summary>
     /// <param name="L">pointer to an image of eigenvalues</param>
     /// <param name="V">pointer to an image of eigenvectors</param>
@@ -136,7 +102,7 @@ namespace tira {
     /// <param name="s1">size of the L and V images along the second dimension</param>
     /// <param name="x">position of the receiver</param>
     /// <returns></returns>
-    CUDA_CALLABLE static glm::mat2 stickvote2(const glm::vec2* L, const glm::vec2* V, const glm::vec2 sigma, const unsigned power, const float norm,
+    CUDA_CALLABLE static glm::mat2 stickvote2_window(const glm::vec2* L, const glm::vec2* V, const float sigma,
         const int w, const int s0, const int s1, const glm::ivec2 x) {
 
         const int x0 = x[0];
@@ -156,12 +122,12 @@ namespace tira {
                         glm::vec2 Vpolar = V[r0 * s1 + r1];
                         const float theta = Vpolar[1];
                         const glm::vec2 uv(u, v);
-                        glm::mat2 vote = stickvote2(uv, sigma, theta, power);
+                        glm::mat2 vote = tira::stickvote2(uv, sigma, theta);
                         const float l0 = L[r0 * s1 + r1][0];
                         const float l1 = L[r0 * s1 + r1][1];
                         float scale = fabs(l1) - fabs(l0);
                         if (l1 < 0) scale = scale * (-1);
-                        Votee = Votee + scale * vote * norm;
+                        Votee = Votee + scale * vote;
                     }
                 }
             }
@@ -169,9 +135,10 @@ namespace tira {
         return Votee;
     }
 
+
     // the plate tensor field is symmetric and not impacted by the refinement term
     // thus -> p = 1
-    CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, glm::vec2 sigma) {
+    /*CUDA_CALLABLE  static glm::mat2 platevote2(glm::vec2 uv, float sigma) {
 
         // calculate the distance between voter and votee
         const float length = sqrt(uv[0] * uv[0] + uv[1] * uv[1]);
@@ -200,22 +167,24 @@ namespace tira {
         const float c = 1.0f / (TV_PI * (s12 + s22));
 
         return c * (e1 * (I - 0.25f * M) + e2 * (0.25f * M));
-    }
+    }*/
 
-    CUDA_CALLABLE  static glm::mat2 platevote2_numerical(const glm::vec2 uv, const glm::vec2 sigma, const unsigned int n = 20) {
+
+
+    CUDA_CALLABLE  static glm::mat2 platevote2_numerical(const glm::vec2 uv, const float sigma, const unsigned int n = 20) {
 
         const float dtheta = TV_PI / static_cast<double>(n);
         glm::mat2 V(0.0f);
         for (unsigned int i = 0; i < n; i++) {
             const float theta = dtheta * i;
-            V = V + stickvote2(uv, sigma, theta, 1);
+            V = V + stickvote2(uv, sigma, theta);
         }
         const float norm = (float)1.0f / static_cast<float>(n);
         return V * norm;
     }
 
-    CUDA_CALLABLE static glm::mat2 platevote2(const glm::vec2* L, const glm::vec2 sigma,
-        const int w, const int s0, const int s1, const glm::ivec2 x, const unsigned samples = 0) {
+    CUDA_CALLABLE static glm::mat2 platevote2_window(const glm::vec2* L, float sigma,
+        const int w, const int s0, const int s1, const glm::ivec2 x, const unsigned samples = 10) {
 
         const int x0 = x[0];
         const int x1 = x[1];
@@ -234,10 +203,10 @@ namespace tira {
                         const float l0 = L[r0 * s1 + r1][0];
                         if (l0 != 0) {
                             const glm::vec2 uv(u, v);
-                            if (samples > 0)             // if a sample number is provided, use numerical integration
+                            //if (samples > 0)             // if a sample number is provided, use numerical integration
                                 Receiver += fabsf(l0) * platevote2_numerical(uv, sigma, samples);
-                            else                         // otherwise use analytical integration (in progress)
-                                Receiver += fabsf(l0) * platevote2(uv, sigma);
+                            //else                         // otherwise use analytical integration (in progress)
+                            //    Receiver += fabsf(l0) * platevote2(uv, sigma);
                         }
                     }
                 }
@@ -245,6 +214,7 @@ namespace tira {
         }
         return Receiver;
     }
+
 
     /**
         * @brief Precomputed 3D neighbor offset and weights for voting.
@@ -306,21 +276,42 @@ namespace tira {
      */
     namespace cpu {
 
-        inline void tensorvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, const unsigned w,
-            const unsigned s0, const unsigned s1, const bool STICK = true, const bool PLATE = true, const unsigned samples = 0) {
+        static void tensorvote2(glm::mat2* t_out, const glm::vec2* L, const glm::vec2* V, float sigma, const unsigned w,
+            const unsigned shape0, const unsigned shape1,
+            const bool STICK = true, const bool PLATE = true, const unsigned samples = 10) {
 
-            const float sticknorm = 1.0f / sticknorm2(sigma[0], sigma[1], power);
-            for (int x0 = 0; x0 < s0; x0++) {
-                for (int x1 = 0; x1 < s1; x1++) {
+            //const float sticknorm = 1.0f / sticknorm2(sigma[0], sigma[1], power);
+            for (int x0 = 0; x0 < shape0; x0++) {
+                for (int x1 = 0; x1 < shape1; x1++) {
                     glm::mat2 Vote(0.0f);
                     if (STICK)
-                        Vote = Vote + stickvote2(L, V, sigma, power, sticknorm, w, s0, s1, glm::ivec2(x0, x1));
+                        Vote = Vote + stickvote2_window(L, V, sigma, w, shape0, shape1, glm::ivec2(x0, x1));
                     if (PLATE)
-                        Vote = Vote + platevote2(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
-                    VT[x0 * s1 + x1] = Vote;
+                        Vote = Vote + platevote2_window(L, sigma, w, shape0, shape1, glm::ivec2(x0, x1), samples);
+                    t_out[x0 * shape1 + x1] = Vote;
                 }
             }
         }
+
+        static void tensorvote2(glm::mat2* t_out, const glm::mat2* t_in, const float sigma, const unsigned w,
+            const unsigned shape0, const unsigned shape1, 
+            const bool stick = true, const bool plate = true, const unsigned samples = 10) {
+
+            // calculate the eigenvalues for each tensor in the field
+            float* lambdas = tira::cpu::evals2_symmetric((float*)t_in, shape0 * shape1);
+
+            // calculate the eigenvectors for each tensor in the field
+            float* evecs = tira::cpu::evecs2polar_symmetric((float*)t_in, lambdas, shape0 * shape1);
+
+            // perform tensor voting
+            tensorvote2(t_out, (glm::vec2*)lambdas, (glm::vec2*)evecs, sigma, w, shape0, shape1, stick, plate, samples);
+
+
+        }
+
+
+
+
 
         /**
          * @brief Build all 3D neighbor offsets and Gaussian weights for a window.
@@ -686,42 +677,46 @@ namespace tira {
 		
         // ------- 2D Tensor Voting -------
 
-        __global__ static void global_stickvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, glm::vec2 sigma, unsigned int power, float norm,
-            int w, int s0, int s1) {
+        __global__ static void global_stickvote2(glm::mat2* VT, glm::vec2* L, glm::vec2* V, float sigma, int w, int shape0, int shape1) {
+
+            int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
+            int x1 = blockDim.y * blockIdx.y + threadIdx.y;
+            if (x0 >= shape0 || x1 >= shape1)                                                          // if not within bounds of image, return
+                return;
+
+            glm::mat2 Receiver = stickvote2_window(L, V, sigma, w, shape0, shape1, glm::ivec2(x0, x1));
+            VT[x0 * shape1 + x1] += Receiver;
+        }
+
+        __global__ static void global_platevote2(glm::mat2* VT, glm::vec2* L, float sigma, int w, int s0, int s1, unsigned samples) {
 
             int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
             int x1 = blockDim.y * blockIdx.y + threadIdx.y;
             if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
                 return;
 
-            glm::mat2 Receiver = stickvote2(L, V, sigma, power, norm, w, s0, s1, glm::ivec2(x0, x1));
+            glm::mat2 Receiver = platevote2_window(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
             VT[x0 * s1 + x1] += Receiver;
         }
 
-        __global__ static void global_platevote2(glm::mat2* VT, glm::vec2* L, glm::vec2 sigma, unsigned int power,
-            int w, int s0, int s1, unsigned samples) {
 
-            int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
-            int x1 = blockDim.y * blockIdx.y + threadIdx.y;
-            if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
-                return;
+        static void tensorvote2(glm::mat2* t_out, const glm::mat2* t_in, const float sigma, const unsigned w,
+            const unsigned shape0, const unsigned shape1,
+            const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
-            glm::mat2 Receiver = platevote2(L, sigma, w, s0, s1, glm::ivec2(x0, x1), samples);
-            VT[x0 * s1 + x1] += Receiver;
-        }
+            /*
+            if (device < 0) {
+                return cpu::tensorvote2((glm::mat2*)output_field,
+                            (glm::vec2*)tira::cpu::evals2_symmetric<float>(input_field, shape0 * shape1),
+                            (glm::vec2*)tira::cpu::evecs2polar_symmetric(input_field,
+                            tira::cpu::evals2_symmetric<float>(input_field, shape0 * shape1), shape0 * shape1),
+                            glm::vec2(sigma, sigma2), power, w, shape0, shape1, STICK, PLATE, samples);
+            }
+            */
 
-        // TODO: assert both mats and evals are on the same side (host or device)
-		// Free up L and V after use based on their allocation side (host/device)
-        inline void tensorvote2(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, float sigma, float sigma2,
-                                unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
 
-            if (device < 0) return cpu::tensorvote2((glm::mat2*)output_field,
-                                                        (glm::vec2*)tira::cpu::evals2_symmetric<float>(input_field, s0 * s1),
-                                                        (glm::vec2*)tira::cpu::evecs2polar_symmetric(input_field,
-                                                        tira::cpu::evals2_symmetric<float>(input_field, s0 * s1), s0 * s1),
-				                                        glm::vec2(sigma, sigma2), power, w, s0, s1, STICK, PLATE, samples);
-
-            HANDLE_ERROR(cudaSetDevice(device));
+            int device;
+            HANDLE_ERROR(cudaGetDevice(&device));
 
             auto start = std::chrono::high_resolution_clock::now();
             cudaDeviceProp props;
@@ -729,11 +724,11 @@ namespace tira {
             auto end = std::chrono::high_resolution_clock::now();
             float t_deviceprops = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-            int tensorFieldSize = 4 * s0 * s1;
+            int tensorFieldSize = 4 * shape0 * shape1;
 
             start = std::chrono::high_resolution_clock::now();
-            float* L = tira::cuda::evals2_symmetric<float>(input_field, s0 * s1, device);
-            float* V = tira::cuda::evecs2polar_symmetric(input_field, L, s0 * s1, device);
+            float* L = tira::cuda::evals2_symmetric<float>((const float*)t_in, shape0 * shape1, device);
+            float* V = tira::cuda::evecs2polar_symmetric((const float*)t_in, L, shape0 * shape1, device);
             end = std::chrono::high_resolution_clock::now();
             float t_eigendecomposition = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -746,16 +741,16 @@ namespace tira {
             start = std::chrono::high_resolution_clock::now();
             HANDLE_ERROR(cudaMalloc(&gpuOutputField, tensorFieldSize * sizeof(float)));
             HANDLE_ERROR(cudaMemset(gpuOutputField, 0, tensorFieldSize * sizeof(float)));
-            HANDLE_ERROR(cudaMalloc(&gpuV, s0 * s1 * 2 * sizeof(float)));
-            HANDLE_ERROR(cudaMalloc(&gpuL, s0 * s1 * 2 * sizeof(float)));
+            HANDLE_ERROR(cudaMalloc(&gpuV, shape0 * shape1 * 2 * sizeof(float)));
+            HANDLE_ERROR(cudaMalloc(&gpuL, shape0 * shape1 * 2 * sizeof(float)));
             cudaDeviceSynchronize();
             end = std::chrono::high_resolution_clock::now();
             float t_devicealloc = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
             start = std::chrono::high_resolution_clock::now();
             // Copy input arrays
-            HANDLE_ERROR(cudaMemcpy(gpuV, V, s0 * s1 * 2 * sizeof(float), cudaMemcpyHostToDevice));
-            HANDLE_ERROR(cudaMemcpy(gpuL, L, s0 * s1 * 2 * sizeof(float), cudaMemcpyHostToDevice));
+            HANDLE_ERROR(cudaMemcpy(gpuV, V, shape0 * shape1 * 2 * sizeof(float), cudaMemcpyHostToDevice));
+            HANDLE_ERROR(cudaMemcpy(gpuL, L, shape0 * shape1 * 2 * sizeof(float), cudaMemcpyHostToDevice));
             cudaDeviceSynchronize();
             end = std::chrono::high_resolution_clock::now();
 
@@ -764,18 +759,12 @@ namespace tira {
             // Specify the CUDA block and grid dimensions
             size_t blockDim = sqrt(props.maxThreadsPerBlock);
             dim3 threads(blockDim, blockDim);
-            dim3 blocks(s0 / threads.x + 1, s1 / threads.y + 1);
+            dim3 blocks(shape0 / threads.x + 1, shape1 / threads.y + 1);
 
-            float sn = 1.0 / sticknorm2(sigma, sigma2, power);
-
-            if (debug)
-                std::cout << "Stick Area: " << sn << std::endl;
-
+            // perform tensor voting
             start = std::chrono::high_resolution_clock::now();
-            if (STICK)
-                global_stickvote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, glm::vec2(sigma, sigma2), power, sn, w, s0, s1);
-            if (PLATE)
-                global_platevote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, glm::vec2(sigma, sigma2), power, w, s0, s1, samples);
+            global_stickvote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, (glm::vec2*)gpuV, sigma, w, shape0, shape1);
+            global_platevote2 << < blocks, threads >> > ((glm::mat2*)gpuOutputField, (glm::vec2*)gpuL, sigma, w, shape0, shape1, samples);
             cudaDeviceSynchronize();
             end = std::chrono::high_resolution_clock::now();
             float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -783,7 +772,7 @@ namespace tira {
 
             start = std::chrono::high_resolution_clock::now();
             // Copy the final result back from the GPU
-            HANDLE_ERROR(cudaMemcpy(output_field, gpuOutputField, tensorFieldSize * sizeof(float), cudaMemcpyDeviceToHost));
+            HANDLE_ERROR(cudaMemcpy(t_out, gpuOutputField, tensorFieldSize * sizeof(float), cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();
             end = std::chrono::high_resolution_clock::now();
             float t_device2host = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -797,7 +786,7 @@ namespace tira {
             end = std::chrono::high_resolution_clock::now();
             float t_devicefree = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-            if (debug) {
+            /*if (debug) {
                 std::cout << "Eigendecomposition:  " << t_eigendecomposition << " ms" << std::endl;
                 std::cout << "Voting: " << t_voting << " ms" << std::endl;
                 std::cout << "cudaMemcpy (H->D):  " << t_host2device << " ms" << std::endl;
@@ -805,7 +794,7 @@ namespace tira {
                 std::cout << "cudaMalloc: " << t_devicealloc << " ms" << std::endl;
                 std::cout << "cudaFree: " << t_devicefree << " ms" << std::endl;
                 std::cout << "cudaDeviceProps: " << t_deviceprops << " ms" << std::endl;
-            }
+            }*/
         }
 
 
