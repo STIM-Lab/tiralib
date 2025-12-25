@@ -37,6 +37,175 @@ namespace tira {
         return c * tp;
     }
 
+    template <typename Type>
+    CUDA_CALLABLE static Type atv_attenuation(Type dist, Type sigma) {
+        return exp(-(dist * dist) / (sigma * sigma));
+    }
+
+    template <typename Type>
+    CUDA_CALLABLE static void atv_rotation(Type dx, Type dy, Type& out_a, Type& out_b, Type& out_c) {
+        out_a = 1 - 2 * dx * dx;
+        out_b = 0 - 2 * dx * dy;
+        out_c = 1 - dy * dy;
+    }
+
+    template <typename Type>
+    CUDA_CALLABLE static void atv_normalized_T(Type evec_x, Type evec_y,
+        Type& out_a, Type& out_b, Type& out_c) {
+        out_a = evec_x * evec_x;
+        out_b = evec_x * evec_y;
+        out_c = evec_y * evec_y;
+    }
+
+    template <typename Type>
+    CUDA_CALLABLE void atv_vTvT(Type dx, Type dy, Type T_a, Type T_b, Type T_c,
+        Type& out_a, Type& out_b, Type& out_c) {
+
+        Type vTv = dx * (dx * T_a + dy * T_b) + dy * (dx * T_b + dy * T_c);
+        out_a = T_a * vTv;
+        out_b = T_b * vTv;
+        out_c = T_c * vTv;
+    }
+
+    template <typename Type>
+    CUDA_CALLABLE void atv_TvvT(Type dx, Type dy, Type T_a, Type T_b, Type T_c,
+        Type& out_a, Type& out_b, Type& out_c) {
+
+        Type vv = dx * dx + dy * dy;
+        Type aa = T_a * T_a;
+        Type bb = T_b * T_b;
+        Type cc = T_c * T_c;
+        Type ab = T_a * T_c;
+        Type bc = T_b * T_c;
+        out_a = (aa + bb) * vv;
+        out_b = (ab + bc) * vv;
+        out_c = (bb + cc) * vv;
+    }
+
+    template <typename Type>
+    CUDA_CALLABLE static void atv_H(Type lambda0, Type lambda1,
+        Type ev0x, Type ev0y, Type ev1x, Type ev1y, Type dx, Type dy,
+        Type& H_a, Type& H_b, Type& H_c) {
+
+        // Calculate the normalized tensors T0 and T1
+        Type T1_a, T1_b, T1_c;
+        atv_normalized_T(ev1x, ev1y, T1_a, T1_b, T1_c);
+
+        Type T0_a, T0_b, T0_c;
+        atv_normalized_T(ev0x, ev0y, T0_a, T0_b, T0_c);
+        T0_a += T1_a;
+        T0_b += T1_b;
+        T0_c += T1_c;
+
+        // calculate the internal terms vTvT for each matrix
+        Type vT0vT0_a, vT0vT0_b, vT0vT0_c;
+        atv_vTvT(dx, dy, T0_a, T0_b, T0_c, vT0vT0_a, vT0vT0_b, vT0vT0_c);
+        Type vT1vT1_a, vT1vT1_b, vT1vT1_c;
+        atv_vTvT(dx, dy, T1_a, T1_b, T1_c, vT1vT1_a, vT1vT1_b, vT1vT1_c);
+
+        // calculate the internal terms TvvT for each matrix
+        Type T0vvT0_a, T0vvT0_b, T0vvT0_c;
+        atv_TvvT(dx, dy, T0_a, T0_b, T0_c, T0vvT0_a, T0vvT0_b, T0vvT0_c);
+        Type T1vvT1_a, T1vvT1_b, T1vvT1_c;
+        atv_TvvT(dx, dy, T1_a, T1_b, T1_c, T1vvT1_a, T1vvT1_b, T1vvT1_c);
+
+        Type s1 = lambda1 - lambda0;
+        H_a = s1 * (T1_a - (1.0/3.0) * (vT1vT1_a + 2 * T1vvT1_a));
+        H_b = s1 * (T1_b - (1.0/3.0) * (vT1vT1_b + 2 * T1vvT1_b));
+        H_c = s1 * (T1_c - (1.0/3.0) * (vT1vT1_c + 2 * T1vvT1_c));
+
+        Type s0 = lambda0;
+        H_a += s0 * (T0_a - (1.0/3.0) * (vT0vT0_a + 2 * T0vvT0_a));
+        H_b += s0 * (T0_b - (1.0/3.0) * (vT0vT0_b + 2 * T0vvT0_b));
+        H_c += s0 * (T0_c - (1.0/3.0) * (vT0vT0_c + 2 * T0vvT0_c));
+    }
+
+    template <typename Type>
+    CUDA_CALLABLE static void atv(Type lambda0, Type lambda1,
+        Type ev0x, Type ev0y, Type ev1x, Type ev1y, Type rx, Type ry, Type sigma,
+        Type& V_a, Type& V_b, Type& V_c) {
+
+        // calculate the distance attenuation function
+        Type dist = std::sqrt(rx * rx + ry * ry);
+        Type c = atv_attenuation(dist, sigma);
+
+        // calculate the normalized direction vector from voter to receiver
+        Type dx, dy;
+        if (dist == 0) {
+            dx = 0;
+            dy = 0;
+        }
+        else {
+            dx = rx / dist;
+            dy = ry / dist;
+        }
+
+
+        // calculate the rotation matrix
+        Type R_a, R_b, R_c;
+        atv_rotation(dx, dy, R_a, R_b, R_c);
+
+        // calculate the H matrix
+        Type H_a, H_b, H_c;
+        atv_H(lambda0, lambda1, ev0x, ev0y, ev1x, ev1y, dx, dy, H_a, H_b, H_c);
+
+        // calculate the final tensor vote
+        Type Ra2 = R_a * R_a;
+        Type Rb2 = R_b * R_b;
+        Type Rc2 = R_c * R_c;
+        Type Rab = R_a * R_b;
+        Type Rbc = R_b * R_c;
+        Type Rac = R_a * R_c;
+        V_a = c * (Ra2 * H_a    + 2 * Rab * H_b     + Rb2 * H_c);
+        V_b = c * (Rb2 * H_b    + Rab * H_a         + Rac * H_b     + Rbc * H_c);
+        V_c = c * (Rb2 * H_a    + 2 * Rbc * H_b     + Rc2 * H_c);
+    }
+
+    template <typename Type>
+    CUDA_CALLABLE static void atv_window(const Type* lambdas, const Type* thetas, const Type sigma,
+        const int w, const int s0, const int s1, const int x0, const int x1,
+        Type& out_a, Type& out_b, Type& out_c) {
+
+        // Indices for the symmetric tensor:
+        // | a  b |
+        // | b  c |
+        out_a = out_b = out_c = 0;                           // initialize the receiver value to zero
+
+        const int hw = w / 2;                                // calculate the half window size
+        for (int v = -hw; v <= hw; v++) {                    // for each pixel in the window
+            const int r0 = static_cast<int>(x0) + v;         // calculate the position relative to the voter
+            if (r0 >= 0 && r0 < s0) {
+                for (int u = -hw; u <= hw; u++) {
+
+                    const int r1 = static_cast<int>(x1) + u;
+                    if (r1 >= 0 && r1 < s1) {
+                        const Type theta0 = thetas[r0 * s1 * 2 + r1 * 2 + 0];               // retrieve the largest eigenvector
+                        const Type evx0 = std::cos(theta0);
+                        const Type evy0 = std::sin(theta0);
+                        const Type theta1 = thetas[r0 * s1 * 2 + r1 * 2 + 1];
+                        const Type evx1 = std::cos(theta1);
+                        const Type evy1 = std::sin(theta1);
+
+                        Type Va, Vb, Vc;
+
+                        //tira::atv<Type>(u, v, sigma, theta, a, b, c); // calculate the stick vote contribution
+                        const Type l0 = lambdas[r0 * s1 * 2 + r1 * 2 + 0];                 // load both eigenvalues associated with the voter
+                        const Type l1 = lambdas[r0 * s1 * 2 + r1 * 2 + 1];
+                        tira::atv<Type>(l0, l1, evx0, evy0, evx1, evy1, u, v, sigma, Va, Vb, Vc);
+                        //Type scale = fabs(l1) - fabs(l0);                                  // calculate the vote scale based on the difference between eigenvalues
+                        //if (l1 < 0) scale = scale * (-1);                                   // TODO: Probably don't need this test since l1 should be larger than l0
+                        //out_a += scale * a;                                                 // accumulate the receiver vote
+                        //out_b += scale * b;
+                        //out_c += scale * c;
+                        out_a += Va;
+                        out_b += Vb;
+                        out_c += Vc;
+                    }
+                }
+            }
+        }
+    }
+
     /**
     * @brief Normalization constant for 3D stick voting
     *
@@ -327,11 +496,12 @@ namespace tira {
             Type out_a, out_b, out_c;
 
 
-            float a, b, c;
+            //float a, b, c;
             for (int x0 = 0; x0 < shape0; x0++) {
                 for (int x1 = 0; x1 < shape1; x1++) {
                     out_a = out_b = out_c = 0;
-                    if (stick) {
+                    atv_window(lambdas, evecs, sigma, w, shape0, shape1, x0, x1, out_a, out_b, out_c);
+                    /*if (stick) {
                         stickvote_window(lambdas, evecs, sigma, w, shape0, shape1, x0, x1, a, b, c);
                         out_a += a;
                         out_b += b;
@@ -343,7 +513,7 @@ namespace tira {
                         out_a += a;
                         out_b += b;
                         out_c += c;
-                    }
+                    }*/
                     t_out[x0 * shape1 * 4 + x1 * 4 + 0] = out_a;
                     t_out[x0 * shape1 * 4 + x1 * 4 + 1] = out_b;
                     t_out[x0 * shape1 * 4 + x1 * 4 + 2] = out_b;
