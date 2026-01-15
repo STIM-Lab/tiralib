@@ -37,11 +37,33 @@ namespace tira {
         return c * tp;
     }
 
+    /**
+     * Calculate the distance attentuation for the tensor vote, which is just a Gaussian
+     * function based on the distance between the voter and receiver.
+     *
+     * @tparam Type data type for the calculation
+     * @param dist distance between the voter and receiver
+     * @param sigma standard deviation for the decay
+     * @return the magnitude of the decay function
+     */
     template <typename Type>
     CUDA_CALLABLE static Type atv_attenuation(Type dist, Type sigma) {
         return exp(-(dist * dist) / (sigma * sigma));
     }
 
+    /**
+     * Calculate the rotation matrix R for analytical tensor voting. The rotation matrix
+     * is returned as a diagonal matrix in column-major format:
+     * [ a  b ]
+     * [ b  c ]
+     *
+     * @tparam Type data type for the calculation
+     * @param dx is the x direction from the voter to the receiver
+     * @param dy is the y direction from the voter to the receiver
+     * @param out_a is the upper-left component of the rotation matrix
+     * @param out_b is the upper-right component of the rotation matrix
+     * @param out_c is the lower-right component of the rotation matrix
+     */
     template <typename Type>
     CUDA_CALLABLE static void atv_rotation(Type dx, Type dy, Type& out_a, Type& out_b, Type& out_c) {
         out_a = 1 - 2 * dx * dx;
@@ -49,6 +71,20 @@ namespace tira {
         out_c = 1 - dy * dy;
     }
 
+    /**
+     * Calculate the tensor produced by a normalized eigenvector. This is the outer product
+     * of the vector with itself. The matrix is returned as a diagonal matrix in
+     * column-major format:
+     * [ a  b ]
+     * [ b  c ]
+     *
+     * @tparam Type data type for the calculation
+     * @param evec_x x direction of the eigenvector
+     * @param evec_y y direction of the eigenvector
+     * @param out_a
+     * @param out_b
+     * @param out_c
+     */
     template <typename Type>
     CUDA_CALLABLE static void atv_normalized_T(Type evec_x, Type evec_y,
         Type& out_a, Type& out_b, Type& out_c) {
@@ -57,6 +93,28 @@ namespace tira {
         out_c = evec_y * evec_y;
     }
 
+    /*
+     * The following functions are used to calculate the H matrix in the analytical tensor
+     * voting paper.
+     */
+
+    /**
+     * Calculates the v^T * T_d * v * T_d term of the H matrix given the direction
+     * vector v and the normalized matrix T_d.
+     * The result is a 2x2 diagonal matrix in column-major form:
+     * [ a  b ]
+     * [ b  c ]
+     *
+     * @tparam Type data type used in the calculation
+     * @param dx is the x direction from voter to receiver
+     * @param dy is the y direction from voter to receiver
+     * @param T_a is the upper-left component of T_d
+     * @param T_b is the upper-right component of T_d
+     * @param T_c is the lower-right component of T_d
+     * @param out_a is the upper-left component of the output matrix
+     * @param out_b is the upper-right component of the output matrix
+     * @param out_c is the lower-right component of the output matrix
+     */
     template <typename Type>
     CUDA_CALLABLE void atv_vTvT(Type dx, Type dy, Type T_a, Type T_b, Type T_c,
         Type& out_a, Type& out_b, Type& out_c) {
@@ -67,6 +125,22 @@ namespace tira {
         out_c = T_c * vTv;
     }
 
+    /**
+     * Calculates the T_d * v * v^T * T_d term of the H matrix given the direction
+     * vector v and the normalized matrix T_d.
+     * The result is a 2x2 diagonal matrix in column-major form:
+     * [ a  b ]
+     * [ b  c ]
+     * @tparam Type data type used in the calculation
+     * @param dx is the x direction from voter to receiver
+     * @param dy is the y direction from voter to receiver
+     * @param T_a is the upper-left component of T_d
+     * @param T_b is the upper-right component of T_d
+     * @param T_c is the lower-right component of T_d
+     * @param out_a is the upper-left component of the output matrix
+     * @param out_b is the upper-right component of the output matrix
+     * @param out_c is the lower-right component of the output matrix
+     */
     template <typename Type>
     CUDA_CALLABLE void atv_TvvT(Type dx, Type dy, Type T_a, Type T_b, Type T_c,
         Type& out_a, Type& out_b, Type& out_c) {
@@ -82,6 +156,25 @@ namespace tira {
         out_c = (bb + cc) * vv;
     }
 
+    /**
+     * Calculates the H matrix for analytical tensor voting.
+     * The result is a 2x2 diagonal matrix in column-major form:
+     * [ a  b ]
+     * [ b  c ]
+     *
+     * @tparam Type  data type used in the calculation
+     * @param lambda0
+     * @param lambda1
+     * @param ev0x x direction of the smallest eigenvector
+     * @param ev0y y direction of the smallest eigenvector
+     * @param ev1x x direction of the largest eigenvector
+     * @param ev1y y direction of the largest eigenvector
+     * @param dx is the x direction from voter to receiver
+     * @param dy is the y direction from voter to receiver
+     * @param H_a upper-left component of H
+     * @param H_b upper-right component of H
+     * @param H_c lower-right component of H
+     */
     template <typename Type>
     CUDA_CALLABLE static void atv_H(Type lambda0, Type lambda1,
         Type ev0x, Type ev0y, Type ev1x, Type ev1y, Type dx, Type dy,
@@ -120,6 +213,30 @@ namespace tira {
         H_c += s0 * (T0_c - (1.0/3.0) * (vT0vT0_c + 2 * T0vvT0_c));
     }
 
+    /**
+     * Implements analytical tensor voting given:
+     *      1) a pair of eigenvalues such that l0 <= l1
+     *      2) a pair of eigenvectors associated with these eigenvalues
+     *      3) the position of the receiver relative to the voter (where the voter is at the origin)
+     *      4) a sigma value specifying the distance attenuation of the vote
+     * This function calculates the resulting vote at the receiver location as a
+     * 2x2 diagonal matrix in column-major form:
+     * [ a  b ]
+     * [ b  c ]
+     * @tparam Type data type used in the calculation
+     * @param lambda0 smallest eigenvalue
+     * @param lambda1 largest eigenvalue
+     * @param ev0x x coordinate of the smallest eigenvector
+     * @param ev0y y coordinate of the smallest eigenvector
+     * @param ev1x x coordinate of the largest eigenvector
+     * @param ev1y y coordinate of the largest eigenvector
+     * @param rx x coordinate of the receiver relative to the voter location
+     * @param ry y coordinate of the receiver relative to the voter location
+     * @param sigma distance attenuation parameter (standard deviation of a Gaussian)
+     * @param V_a upper-left component of the resulting vote matrix
+     * @param V_b upper-right component of the resulting vote matrix
+     * @param V_c lower-right component of the resulting vote matrix
+     */
     template <typename Type>
     CUDA_CALLABLE static void atv(Type lambda0, Type lambda1,
         Type ev0x, Type ev0y, Type ev1x, Type ev1y, Type rx, Type ry, Type sigma,
@@ -161,6 +278,28 @@ namespace tira {
         V_c = c * (Rb2 * H_a    + 2 * Rbc * H_b     + Rc2 * H_c);
     }
 
+    /**
+     * Calculate the result of analytical tensor voting across a window of voters, where
+     * the receiver is at the center. This function sums the contributions of all votes
+     * within the window and returns the final vote result at the receiver. The receiver
+     * is a 2x2 diagonal matrix in column-major form:
+     * [ a  b ]
+     * [ b  c ]
+     *
+     * @tparam Type is the data type for the calculation
+     * @param lambdas a pointer to an array of eigenvalues for each sample point in an image
+     * @param thetas a pointer to an array of theta values expressing the corresponding
+     * eigenvector directions in polar coordinates
+     * @param sigma is the decay term describing the fall-off of the vote contribution with distance
+     * @param w is the size of the window (usually some factor of sigma)
+     * @param s0 image size along the fast axis (usually x)
+     * @param s1 image size along the slow axis (usually y)
+     * @param x0 first coordinate for the receiver position (center of the window)
+     * @param x1 second coordinate for the receiver position (center of the window)
+     * @param out_a upper-left component of the summed receiver vote
+     * @param out_b upper-right component of the summed receiver vote
+     * @param out_c lower-right component of the summed receiver vote
+     */
     template <typename Type>
     CUDA_CALLABLE static void atv_window(const Type* lambdas, const Type* thetas, const Type sigma,
         const int w, const int s0, const int s1, const int x0, const int x1,

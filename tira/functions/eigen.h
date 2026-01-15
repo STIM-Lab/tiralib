@@ -26,8 +26,9 @@ namespace tira {
     }
 
     template <typename T>
-    CUDA_CALLABLE T sgn(const T& a) {
-		return (a > T(0)) - (a < T(0));
+    CUDA_CALLABLE T sgn_plus(const T& a) {
+		if (a < 0) return -1;
+        return 1;
     }
     
     template <typename T>
@@ -87,7 +88,8 @@ namespace tira {
 
     template <typename Type>
     CUDA_CALLABLE void quad_root(Type b, Type c, Type& r1, Type& r2) {
-        Type q = -0.5 * (b + sgn(b) * std::sqrt(b * b - 4 * c));
+        Type disc = (b * b) - (4 * c);
+        Type q = -0.5 * (b + sgn_plus(b) * std::sqrt(disc));
         r1 = q;
         if (q == 0) r2 = 0;
         else r2 = c / q;
