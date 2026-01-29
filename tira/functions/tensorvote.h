@@ -318,24 +318,21 @@ namespace tira {
 
                     const int r1 = static_cast<int>(x1) + u;
                     if (r1 >= 0 && r1 < s1) {
-                        const Type theta0 = thetas[r0 * s1 * 2 + r1 * 2 + 0];               // retrieve the largest eigenvector
+                        const int ri = r0 * s1 + r1;
+                        const Type theta0 = thetas[ri * 2 + 0];               // retrieve the largest eigenvector
                         const Type evx0 = std::cos(theta0);
                         const Type evy0 = std::sin(theta0);
-                        const Type theta1 = thetas[r0 * s1 * 2 + r1 * 2 + 1];
+                        const Type theta1 = thetas[ri * 2 + 1];
                         const Type evx1 = std::cos(theta1);
                         const Type evy1 = std::sin(theta1);
 
                         Type Va, Vb, Vc;
 
                         //tira::atv<Type>(u, v, sigma, theta, a, b, c); // calculate the stick vote contribution
-                        const Type l0 = lambdas[r0 * s1 * 2 + r1 * 2 + 0];                 // load both eigenvalues associated with the voter
-                        const Type l1 = lambdas[r0 * s1 * 2 + r1 * 2 + 1];
+                        const Type l0 = lambdas[ri * 2 + 0];                 // load both eigenvalues associated with the voter
+                        const Type l1 = lambdas[ri * 2 + 1];
                         tira::atv<Type>(l0, l1, evx0, evy0, evx1, evy1, u, v, sigma, Va, Vb, Vc);
-                        //Type scale = fabs(l1) - fabs(l0);                                  // calculate the vote scale based on the difference between eigenvalues
-                        //if (l1 < 0) scale = scale * (-1);                                   // TODO: Probably don't need this test since l1 should be larger than l0
-                        //out_a += scale * a;                                                 // accumulate the receiver vote
-                        //out_b += scale * b;
-                        //out_c += scale * c;
+
                         out_a += Va;
                         out_b += Vb;
                         out_c += Vc;
@@ -640,19 +637,7 @@ namespace tira {
                 for (int x1 = 0; x1 < shape1; x1++) {
                     out_a = out_b = out_c = 0;
                     atv_window(lambdas, evecs, sigma, w, shape0, shape1, x0, x1, out_a, out_b, out_c);
-                    /*if (stick) {
-                        stickvote_window(lambdas, evecs, sigma, w, shape0, shape1, x0, x1, a, b, c);
-                        out_a += a;
-                        out_b += b;
-                        out_c += c;
-                    }
 
-                    if (plate) {
-                        platevote_window(lambdas, sigma, w, shape0, shape1, x0, x1, a, b, c, samples);
-                        out_a += a;
-                        out_b += b;
-                        out_c += c;
-                    }*/
                     t_out[x0 * shape1 * 4 + x1 * 4 + 0] = out_a;
                     t_out[x0 * shape1 * 4 + x1 * 4 + 1] = out_b;
                     t_out[x0 * shape1 * 4 + x1 * 4 + 2] = out_b;
