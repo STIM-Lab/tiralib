@@ -148,7 +148,7 @@ namespace tira {
     CUDA_CALLABLE void atv_TvvT(Type dx, Type dy, Type T_a, Type T_b, Type T_c,
         Type& out_a, Type& out_b, Type& out_c) {
 
-        Type vv = dx * dx + dy * dy;
+        /*Type vv = dx * dx + dy * dy;
         Type aa = T_a * T_a;
         Type bb = T_b * T_b;
         Type cc = T_c * T_c;
@@ -156,7 +156,17 @@ namespace tira {
         Type bc = T_b * T_c;
         out_a = (aa + bb) * vv;
         out_b = (ab + bc) * vv;
-        out_c = (bb + cc) * vv;
+        out_c = (bb + cc) * vv;*/
+        
+        // v = [dx, dy]^T
+        // Tv = T * v
+        const Type tvx = T_a * dx + T_b * dy;
+        const Type tvy = T_b * dx + T_c * dy;
+
+        // T v v^T T = (T v) (T v)^T
+        out_a = tvx * tvx;
+        out_b = tvx * tvy;
+        out_c = tvy * tvy;
     }
 
     /**
