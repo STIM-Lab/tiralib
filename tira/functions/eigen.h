@@ -74,69 +74,141 @@ namespace tira {
 	    result[2] = a[0] * b[1] - a[1] * b[0];
     }
 
-    /// <summary>
-    /// Calculate the roots of a quadratic equation where a=1 using stable
-    /// assumptions for eigenvalues of 2x2 matrices. In particular, if b = 0
-    /// this function will set both roots (eigenvalues) to zero. If the discriminant
-    /// is negative, we assume that the negative is round-off error and set the
-    /// discriminant to zero.
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="b"></param>
-    /// <param name="c"></param>
-    /// <returns></returns>
-
+    /**
+     * @brief Calculate the roots of a quadratic equation x^2 + b x + c = 0 using stable
+     * assumptions for eigenvalues of 2x2 matrices via the characteristic polynomial: λ^2 - tr(A) λ + det(A) = 0 
+     * The returned roots are in ascending order: r0 <= r1. For PSD matrices (tr>=0, b<0), r1 is always the largest eigenvalue.
+     * Negative discriminants are clamped to zero.
+     * 
+     * @tparam Type data type used for the calculation 
+     * @param b Linear coefficient. 
+     * @param c Constant coefficient.
+     * @param r0 Smallest root (for PSD matrices).
+     * @param r1 Largest root (for PSD matrices).
+     */
     template <typename Type>
-    CUDA_CALLABLE void quad_root(Type b, Type c, Type& r1, Type& r2) {
-        Type disc = (b * b) - (4 * c);
-        Type q = -0.5 * (b + sgn_plus(b) * std::sqrt(disc));
+    CUDA_CALLABLE void quad_root(Type b, Type c, Type& r0, Type& r1) {
+        Type disc = (b * b) - Type(4) * c;
+        if (disc < Type(0)) disc = Type(0);
+        Type q = -Type(0.5) * (b + sgn_plus(b) * std::sqrt(disc));
         r1 = q;
-        if (q == 0) r2 = 0;
-        else r2 = c / q;
+        if (q == 0) r0 = 0;
+        else r0 = c / q;
+        if (r0 > r1) swap(r0, r1);
     }
 
-    /// Calculate the eigenvalues of a 2x2 matrix
-    template<typename T>
-    CUDA_CALLABLE void eval2_symmetric(const T a, const T b, const T c, T& eval0, T& eval1) {
-        // | a  b |
-        // | b  c |
+    /**
+     * @brief Compute eigenvalues of a symmetric 2x2 matrix in ascending order.
+     *
+     * Matrix:
+     *   | a  b |
+     *   | b  c |
+     *
+     * Uses the stable form: t = (a+c)/2, s = hypot((a-c)/2, b), evals = t±s.
+     * In case of PSD matrices, tiny negative values caused by round-off are
+     * clamped to zero.
+     *
+     * @tparam Type data type used for the calculation 
+     * @param a Upper-left component.
+     * @param b Upper-right component.
+     * @param c Lower-right component.
+     * @param eval0 Smallest eigenvalue.
+     * @param eval1 Largest eigenvalue.
+    */
+    template<typename Type>
+    CUDA_CALLABLE void eval2_symmetric(const Type a, const Type b, const Type c, Type& eval0, Type& eval1) {
+        // This algorithm uses the trace method to calculate the eigenvalues
+        Type tr = a + c;                                   // calculate the matrix trace
+        Type det = a * c - b * b;                          // calculate the determinant
 
-        // this algorithm uses the trace method to calculate the eigenvalues
-        T tr = a + c;                                   // calculate the matrix trace
-        T det = a * c - b * b;                          // calculate the determinant
+        // Eigenvalues are in ascending order: eval0 <= eval1
+        quad_root(-tr, det, eval0, eval1);    // find the roots of the quadratic equation - these are the eigenvalues
 
-        T l0, l1;
-        quad_root(-tr, det, eval1, eval0);    // find the roots of the quadratic equation - these are the eigenvalues
+        // Clamp only tiny negative values
+        const Type scale = (tira::abs(eval1) > Type(1)) ? tira::abs(eval1) : Type(1);
+        const Type tol   = tira::constant::TIRA_EIGEN_EPSILON<Type> * scale;
 
-        //eval0 = abs(l0) < abs(l1) ? l0 : l1;  // sort the eigenvalues based on their magnitude
-        //eval1 = abs(l0) > abs(l1) ? l0 : l1;
+        if (eval0 < Type(0) && eval0 > -tol) eval0 = Type(0);
+        if (eval1 < Type(0) && eval1 > -tol) eval1 = Type(0);
     }
 
-    /// Calculate the eigenvectors of a 2x2 matrix associated with the two eigenvalues stored in lambdas.
-    /// The eigenvectors are returned in polar coordinates (theta). The input matrices are assumed to be in
-    /// column-major format (similar to OpenGL).
-    template<typename T>
-    CUDA_CALLABLE void evec2polar_symmetric(const T a, const T b, const T c, const T* lambdas, T& theta0, T& theta1) {
-        //[a  b]
-        //[b  c]
+    /**
+     * @brief Compute eigenvector directions (theta) for a symmetric 2x2 matrix.
+     * 
+     * Input format (column-major):
+     *    | a  b |
+     *    | b  c |
+     * @tparam Type data type used for the calculation 
+     * @param a Upper-left componant.
+     * @param b Upper-right componant.
+     * @param c Lower-right componant.
+     * @param lambdas Pointer to two eigenvalues (ascending order).
+     * @param theta0 Angle of eigenvector for smallest eigenvalue.
+     * @param theta1 Angle of eigenvector for largest eigenvalue.
+     */
+    template<typename Type>
+    CUDA_CALLABLE void evec2polar_symmetric(const Type a, const Type b, const Type c, const Type* lambdas, Type& theta0, Type& theta1) {
+        const Type pi = Type(tira::constant::PI);
+        
+        Type l0 = lambdas[0];
+        Type l1 = lambdas[1];
 
-        T l0 = lambdas[0];
-        T l1 = lambdas[1];
+        // Type a_l0 = a - l0;
+        // Type a_l1 = a - l1;
 
-        T a_l0 = a - l0;
-        T a_l1 = a - l1;
+        // if (abs(a_l0) > abs(a_l1)) {
+        //     theta1 = atan2(b, a_l1);
+        //     theta0 = theta1 + (tira::constant::PI / 2.0);
+        //     if (theta0 > tira::constant::PI) theta0 -= 2 * tira::constant::PI;
+        // }
+        // else {
+        //     theta0 = atan2(b, a_l0);
+        //     theta1 = theta0 + (tira::constant::PI / 2.0);
+        //     if (theta1 > tira::constant::PI) theta1 -= 2 * tira::constant::PI;
+        // }
+        
+        // More stable version for l0 from (A - l0 I) -> row0 = [a-l0, b], row1 = [b, c-l0]
+        Type vx0 = -b, vy0 = a - l0;
+        Type vx1 = c - l0, vy1 = -b;
 
-        if (abs(a_l0) >= abs(a_l1)) {
-            theta1 = atan2(b, a_l0);
-            theta0 = theta1 + (tira::constant::PI / 2.0);
-            if (theta0 > tira::constant::PI) theta0 -= 2 * tira::constant::PI;
+        const Type n0 = vx0 * vx0 + vy0 * vy0;
+        const Type n1 = vx1 * vx1 + vy1 * vy1;
+        Type vx = (n0 >= n1) ? vx0 : vx1;
+        Type vy = (n0 >= n1) ? vy0 : vy1;
+        Type n = sqrt(vx * vx + vy * vy);
+        if (n < tira::constant::TIRA_EIGEN_EPSILON<Type>) {
+            // Degenerate (nearly isotropic): pick a basis
+            vx = Type(1); vy = Type(0);
+            n = Type(1);
         }
         else {
-            theta0 = atan2(b, a_l1);
-            theta1 = theta0 + (tira::constant::PI / 2.0);
-            if (theta1 > tira::constant::PI) theta1 -= 2 * tira::constant::PI;
+            const Type inv = Type(1) / n;
+            vx *= inv; vy *= inv;
         }
 
+        // Avoid theta from flipping by pi
+        if (tira::abs(vx) >= tira::abs(vy)) {
+            if (vx < Type(0)) { vx = -vx; vy = -vy; }
+        } else {
+            if (vy < Type(0)) { vx = -vx; vy = -vy; } 
+        }
+
+        theta0 = atan2(vy, vx);
+
+        // Orthogonal eigenvector for l1
+        Type ux = -vy, uy = vx;
+        if (tira::abs(ux) >= tira::abs(uy)) {
+            if (ux < Type(0)) { ux = -ux; uy = -uy; }
+        } else {
+            if (uy < Type(0)) { ux = -ux; uy = -uy; } 
+        }
+        theta1 = atan2(uy, ux);
+
+        // Clamp to [-pi, pi]
+        if (theta0 <= -pi) theta0 += Type(2) * pi;
+        if (theta1 <= -pi) theta1 += Type(2) * pi;
+        if (theta0 > pi) theta0 -= Type(2) * pi;
+        if (theta1 > pi) theta1 -= Type(2) * pi;
     }
 
     /// Compute a right-handed orthonormal set { U, V, evec }.
@@ -739,16 +811,27 @@ namespace tira::cuda {
         return evals;
     }
 
-	// TODO: assert both mats and evals are on the same side (host or device)
-    // or independently inspect lambda. Just like the 3D version.
+	/**
+     * @brief Compute eigenvector angles for N symmetric 2x2 matrices on the GPU.
+     *
+     * If either input pointer is on device, the output is returned on device
+     * (caller must cudaFree). Otherwise, results are copied back to host.
+     *
+     * @tparam Type data type used for the calculation 
+     * @param mats Pointer to N 2x2 matrices (host or device).
+     * @param evals Pointer to N eigenvalue pairs (host or device).
+     * @param n Number of matrices.
+     * @param device CUDA device id (<0 for CPU).
+     * @return Pointer to 2*N angles (theta0, theta1) per matrix.
+     */
     template<typename Type>
     Type* evecs2polar_symmetric(const Type* mats, const Type* evals, size_t n, int device) {
 		if (device < 0)  return cpu::evecs2polar_symmetric(mats, evals, n);
 
 		HANDLE_ERROR(cudaSetDevice(device));
 
-        size_t mats_bytes   = sizeof(Type) * 4 * n;
-        size_t ev_bytes     = sizeof(Type) * 2 * n;
+        const size_t mats_bytes   = sizeof(Type) * 4 * n;
+        const size_t ev_bytes     = sizeof(Type) * 2 * n;
 
         const Type* gpu_mats    = nullptr;
         const Type* gpu_evals   = nullptr;
@@ -756,45 +839,56 @@ namespace tira::cuda {
         Type* temp_gpu_evals    = nullptr;
 
         // determine if the source image is provided on the CPU or GPU
-        cudaPointerAttributes attribs{};										// create a pointer attribute structure
-        HANDLE_ERROR(cudaPointerGetAttributes(&attribs, mats));			// get the attributes for the source pointer
+        cudaPointerAttributes matAttr{};										// create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&matAttr, mats));			// get the attributes for the source pointer
+        const bool mats_on_device = (matAttr.type == cudaMemoryTypeDevice);
 
-        if (attribs.type == cudaMemoryTypeDevice) {							// if the provided pointer is on the device
-            gpu_mats = mats;									            // set the gpu_source pointer to source
-            gpu_evals = evals;
-        }
-        else {																// otherwise copy the source image to the GPU
+        if (mats_on_device) gpu_mats = mats;
+        else {																                    // otherwise copy the source image to the GPU
             HANDLE_ERROR(cudaMalloc(&temp_gpu_mats, mats_bytes));								// allocate space on the GPU for the source image
-            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));// copy the source image to the GPU
+            HANDLE_ERROR(cudaMemcpy(temp_gpu_mats, mats, mats_bytes, cudaMemcpyHostToDevice));  // copy the source image to the GPU
+            gpu_mats = temp_gpu_mats;
+        }
+
+        // determine if the source lambdas is provided on the CPU or GPU
+        cudaPointerAttributes evalAttr{};										// create a pointer attribute structure
+        HANDLE_ERROR(cudaPointerGetAttributes(&evalAttr, evals));			// get the attributes for the source pointer
+        const bool evals_on_device = (evalAttr.type == cudaMemoryTypeDevice);
+
+        if (evals_on_device) gpu_evals = evals;
+        else {																                    // otherwise copy the source image to the GPU
             HANDLE_ERROR(cudaMalloc(&temp_gpu_evals, ev_bytes));
             HANDLE_ERROR(cudaMemcpy(temp_gpu_evals, evals, ev_bytes, cudaMemcpyHostToDevice));
-            gpu_mats = static_cast<const Type*>(temp_gpu_mats);
-            gpu_evals = static_cast<const Type*>(temp_gpu_evals);
+            gpu_evals = temp_gpu_evals;
         }
-
+        
         // get the active device properties to calculate the optimal the block size
         HANDLE_ERROR(cudaGetDevice(&device));
-        cudaDeviceProp props;
+        cudaDeviceProp props{};
         HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
-        const unsigned int blockSize = std::min(256u, static_cast<unsigned int>(props.maxThreadsPerBlock));
+        const unsigned int blockSize = std::min(256u, (unsigned int)(props.maxThreadsPerBlock));
         dim3 blockDim(blockSize);
-        dim3 gridDim(static_cast<unsigned int>((n + blockDim.x - 1) / blockDim.x));
+        dim3 gridDim((unsigned int)((n + blockDim.x - 1) / blockDim.x));
 
-        Type* gpu_evecs;
+        Type* gpu_evecs = nullptr;
         HANDLE_ERROR(cudaMalloc(&gpu_evecs, ev_bytes));
         kernel_evec2polar_symmetric << <gridDim, blockDim >> > (gpu_mats, gpu_evals, n, gpu_evecs);
         HANDLE_ERROR(cudaGetLastError());
 
-        Type* evecs;
-        if (attribs.type == cudaMemoryTypeDevice)
+        const bool keep_on_device = mats_on_device || evals_on_device;
+
+        Type* evecs = nullptr;
+        if (keep_on_device) {
             evecs = gpu_evecs;
+        }
         else {
             evecs = new Type[2 * n];
             HANDLE_ERROR(cudaMemcpy(evecs, gpu_evecs, ev_bytes, cudaMemcpyDeviceToHost));
             HANDLE_ERROR(cudaFree(gpu_evecs));
-            HANDLE_ERROR(cudaFree(temp_gpu_evals));
-            HANDLE_ERROR(cudaFree(temp_gpu_mats));
         }
+        
+        if (temp_gpu_mats)   HANDLE_ERROR(cudaFree(temp_gpu_mats));
+        if (temp_gpu_evals)  HANDLE_ERROR(cudaFree(temp_gpu_evals));
         return evecs;
     }
 
