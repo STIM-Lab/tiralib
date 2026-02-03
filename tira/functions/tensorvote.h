@@ -546,9 +546,11 @@ namespace tira {
             out_c += c;
         }
         const Type inv_n = Type(1) / static_cast<Type>(n);
-        out_a *= inv_n;
-        out_b *= inv_n;
-        out_c *= inv_n;
+
+        // multiply by 2 to account for the entire integral (2 * pi)
+        out_a *= 2 * inv_n;
+        out_b *= 2 * inv_n;
+        out_c *= 2 * inv_n;
     }
 
     /**
