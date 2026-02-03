@@ -15,7 +15,7 @@
 #include <boost/math/special_functions/hypergeometric_pFq.hpp>
 
 #define TV_PI 3.14159265358979323846
-#define TIRA_VOTE_EPSILON 1e-12
+#define TV_EPSILON 1e-12
 #ifndef TV3_MAX_CONST_NB
 #define TV3_MAX_CONST_NB 1536
 #endif
@@ -49,7 +49,7 @@ namespace tira {
     template <typename Type>
     CUDA_CALLABLE static Type atv_attenuation(Type dist, Type sigma) {
         if (sigma == Type(0)) {
-            return (dist > Type(TIRA_VOTE_EPSILON)) ? Type(0) : Type(1);
+            return (dist > Type(TV_EPSILON)) ? Type(0) : Type(1);
         }
         return exp(-(dist * dist) / (sigma * sigma));
     }
@@ -216,14 +216,16 @@ namespace tira {
         atv_TvvT(dx, dy, T1_a, T1_b, T1_c, T1vvT1_a, T1vvT1_b, T1vvT1_c);
 
         Type s1 = lambda1 - lambda0;
-        H_a = s1 * (T1_a - (1.0/3.0) * (vT1vT1_a + 2 * T1vvT1_a));
-        H_b = s1 * (T1_b - (1.0/3.0) * (vT1vT1_b + 2 * T1vvT1_b));
-        H_c = s1 * (T1_c - (1.0/3.0) * (vT1vT1_c + 2 * T1vvT1_c));
+        const Type inv3 = Type(1.0) / Type(3.0);        // K = 1
+        H_a = s1 * (T1_a - inv3 * (vT1vT1_a + 2 * T1vvT1_a));
+        H_b = s1 * (T1_b - inv3 * (vT1vT1_b + 2 * T1vvT1_b));
+        H_c = s1 * (T1_c - inv3 * (vT1vT1_c + 2 * T1vvT1_c));
 
         Type s0 = lambda0;
-        H_a += s0 * (T0_a - (1.0/3.0) * (vT0vT0_a + 2 * T0vvT0_a));
-        H_b += s0 * (T0_b - (1.0/3.0) * (vT0vT0_b + 2 * T0vvT0_b));
-        H_c += s0 * (T0_c - (1.0/3.0) * (vT0vT0_c + 2 * T0vvT0_c));
+        const Type inv4 = Type(1.0) / Type(4.0);        // K = 2
+        H_a += s0 * (T0_a - inv4 * (vT0vT0_a + 2 * T0vvT0_a));
+        H_b += s0 * (T0_b - inv4 * (vT0vT0_b + 2 * T0vvT0_b));
+        H_c += s0 * (T0_c - inv4 * (vT0vT0_c + 2 * T0vvT0_c));
     }
 
     /**
@@ -331,24 +333,21 @@ namespace tira {
 
                     const int r1 = static_cast<int>(x1) + u;
                     if (r1 >= 0 && r1 < s1) {
-                        const Type theta0 = thetas[r0 * s1 * 2 + r1 * 2 + 0];               // retrieve the largest eigenvector
+                        const int idx = r0 * s1 * 2 + r1 * 2;
+                        const Type theta0 = thetas[idx + 0];               // retrieve the smallest eigenvector
                         const Type evx0 = std::cos(theta0);
                         const Type evy0 = std::sin(theta0);
-                        const Type theta1 = thetas[r0 * s1 * 2 + r1 * 2 + 1];
+                        const Type theta1 = thetas[idx + 1];
                         const Type evx1 = std::cos(theta1);
                         const Type evy1 = std::sin(theta1);
 
                         Type Va, Vb, Vc;
 
                         //tira::atv<Type>(u, v, sigma, theta, a, b, c); // calculate the stick vote contribution
-                        const Type l0 = lambdas[r0 * s1 * 2 + r1 * 2 + 0];                 // load both eigenvalues associated with the voter
-                        const Type l1 = lambdas[r0 * s1 * 2 + r1 * 2 + 1];
+                        const Type l0 = lambdas[idx + 0];                 // load both eigenvalues associated with the voter
+                        const Type l1 = lambdas[idx + 1];
                         tira::atv<Type>(l0, l1, evx0, evy0, evx1, evy1, u, v, sigma, Va, Vb, Vc);
-                        //Type scale = fabs(l1) - fabs(l0);                                  // calculate the vote scale based on the difference between eigenvalues
-                        //if (l1 < 0) scale = scale * (-1);                                   // TODO: Probably don't need this test since l1 should be larger than l0
-                        //out_a += scale * a;                                                 // accumulate the receiver vote
-                        //out_b += scale * b;
-                        //out_c += scale * c;
+
                         out_a += Va;
                         out_b += Vb;
                         out_c += Vc;
@@ -516,7 +515,7 @@ namespace tira {
     }
 
     /**
-     * Calculate the plate tensor contribution using numerical integration.
+     * Calculate the 2D plate tensor contribution using numerical integration.
      *
      * @tparam Type data type used for the calculation
      * @param u is the position of the reciever relative to the tensor casting the vote (voter)
@@ -528,28 +527,33 @@ namespace tira {
      * @param n number of samples to use for numerical integration
      */
     template <typename Type>
-    CUDA_CALLABLE  static void platevote_numerical(const Type u, const Type v, const Type sigma,
+    CUDA_CALLABLE  static void tk_platevote_numerical(const Type rx, const Type ry, const Type sigma1, const Type sigma2, const unsigned power,
         Type& out_a, Type& out_b, Type& out_c, const unsigned int n = 10) {
 
-        const Type dtheta = TV_PI / static_cast<Type>(n);
         out_a = out_b = out_c = 0;
+        if (n == 0) return;
+
+        const Type dtheta = TV_PI / static_cast<Type>(n);
+
         for (unsigned int i = 0; i < n; i++) {
-            const Type theta = dtheta * i;
+            const Type theta = dtheta * static_cast<Type>(i);
+
             Type a, b, c;
-            stickvote(u, v, sigma, theta, a, b, c);
+            tk_stickvote_2d<Type>(rx, ry, sigma1, sigma2, power, theta, a, b, c);
+
             out_a += a;
             out_b += b;
             out_c += c;
         }
-        const Type norm = (Type)1.0 / static_cast<Type>(n);
-        out_a *= norm;
-        out_b *= norm;
-        out_c *= norm;
+        const Type inv_n = Type(1) / static_cast<Type>(n);
+        out_a *= inv_n;
+        out_b *= inv_n;
+        out_c *= inv_n;
     }
 
     /**
-     * Calculate the accumulated value of a tensor voting receiver by integrating votes across a window surrounding
-     * the receiver position
+     * Accumulate the 2D plate vote tensor kernels at a receiver by integrating TK plate votes over a local window.
+     * The contribution from each voter is scaled by lambda0, the smallest eigenvalue of the tensor at that location.
      *
      * @tparam Type data type used for the calculation
      * @param lambdas array of eigenvalues (2 per pixel) corresponding to tensors in the image
@@ -565,29 +569,33 @@ namespace tira {
      * @param samples number of stick tensor samples used for numerical integration
      */
     template <typename Type>
-    CUDA_CALLABLE static void platevote_window(const Type* lambdas, Type sigma,
-        const int w, const int s0, const int s1, const unsigned x0, const unsigned x1,
+    CUDA_CALLABLE static void tk_platevote_window(const Type* lambdas, Type sigma1, Type sigma2, const unsigned power,
+        const int w, const int s0, const int s1, const int x0, const int x1,
         Type& out_a, Type& out_b, Type& out_c, const unsigned samples = 10) {
 
-
-        out_a = out_b = out_c = 0;
-
+        out_a = out_b = out_c = Type(0);
+        if (samples == 0) return;
+        
         const int hw = w / 2;
 
-        for (int v = -hw; v <= hw; v++) {                    // for each pixel in the window
-            const int r0 = static_cast<int>(x0) + v;
+        for (int v = -hw; v <= hw; v++) {                    
+            const int r0 = x0 + v;
             if (r0 >= 0 && r0 < s0) {
                 for (int u = -hw; u <= hw; u++) {
-                    int r1 = static_cast<int>(x1) + u;
+                    int r1 = x1 + u;
                     if (r1 >= 0 && r1 < s1) {
-                        const Type l0 = lambdas[r0 * s1 * 2 + r1 * 2 + 0];
-                        if (l0 != 0) {
-                            Type a, b, c;
-                            platevote_numerical<Type>(u, v, sigma, a, b, c, samples);
-                            out_a += a * fabsf(l0);
-                            out_b += b * fabsf(l0);
-                            out_c += c * fabsf(l0);
 
+                        const int idx = r0 * s1 * 2 + r1 * 2;
+                        const Type l0 = lambdas[idx + 0];
+
+                        if (l0 != Type(0)) {
+                            Type Va, Vb, Vc;
+                            tk_platevote_numerical<Type>(u, v, sigma1, sigma2, power, Va, Vb, Vc, samples);
+
+                            const Type scale = fabsf(l0);
+                            out_a += scale * Va;
+                            out_b += scale * Vb;
+                            out_c += scale * Vc;
                         }
                     }
                 }
@@ -745,7 +753,7 @@ namespace tira {
         * @param samples number of stick tensor samples used for numerical integration
         */
         template <typename Type>
-        static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* evecs, Type sigma1, Type sigma2, int power,
+        static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* evecs, Type sigma1, Type sigma2, unsigned power,
             const unsigned w, const unsigned shape0, const unsigned shape1,
             const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
@@ -753,22 +761,24 @@ namespace tira {
 
             for (int x0 = 0; x0 < shape0; x0++) {
                 for (int x1 = 0; x1 < shape1; x1++) {
-                    out_a = out_b = out_c = 0;
-                    tk_stick_window_2d(lambdas, evecs, sigma1, sigma2, power, w, shape0, shape1, x0, x1, out_a, out_b, out_c);
-                    const unsigned idx = x0 * shape1 * 4 + x1 * 4;
-                    /*if (stick) {
-                        stickvote_window(lambdas, evecs, sigma, w, shape0, shape1, x0, x1, a, b, c);
+                    out_a = out_b = out_c = Type(0);
+
+                    Type a, b, c;
+                    if (stick) {
+                        tk_stick_window_2d(lambdas, evecs, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c);
                         out_a += a;
                         out_b += b;
                         out_c += c;
                     }
 
                     if (plate) {
-                        platevote_window(lambdas, sigma, w, shape0, shape1, x0, x1, a, b, c, samples);
+                        tk_platevote_window(lambdas, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c, samples);
                         out_a += a;
                         out_b += b;
                         out_c += c;
-                    }*/
+                    }
+
+                    const unsigned idx = x0 * shape1 * 4 + x1 * 4;
                     t_out[idx + 0] = out_a;
                     t_out[idx + 1] = out_b;
                     t_out[idx + 2] = out_b;
@@ -824,8 +834,8 @@ namespace tira {
                         else n.d = glm::vec3(float(du), float(dv), float(dw)) / sqrtf(n.l2);
 
 						// Degenerate cases - contribution at voter position when sigma is zero
-                        n.c1 = sigma.x == 0.0f ? (n.l2 > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : expf(-n.l2 * invsig1);
-                        n.c2 = sigma.y == 0.0f ? (n.l2 > TIRA_VOTE_EPSILON ? 0.0f : 1.0f) : expf(-n.l2 * invsig2);
+                        n.c1 = sigma.x == 0.0f ? (n.l2 > TV_EPSILON ? 0.0f : 1.0f) : expf(-n.l2 * invsig1);
+                        n.c2 = sigma.y == 0.0f ? (n.l2 > TV_EPSILON ? 0.0f : 1.0f) : expf(-n.l2 * invsig2);
                         neighbors.push_back(n);
                     }
                 }
@@ -1006,7 +1016,7 @@ namespace tira {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
             glm::mat3 V(0.0f);
-            if (samples == 0 or !(evec_len2 > TIRA_VOTE_EPSILON)) return V;
+            if (samples == 0 or !(evec_len2 > TV_EPSILON)) return V;
 
             glm::vec3 dn = d;
 
@@ -1444,7 +1454,7 @@ namespace tira {
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
-            if (samples == 0 or !(evec_len2 > TIRA_VOTE_EPSILON)) return;
+            if (samples == 0 or !(evec_len2 > TV_EPSILON)) return;
 
             float3 dn = d;
 
@@ -1481,7 +1491,7 @@ namespace tira {
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
-            if (!(evec_len2 > TIRA_VOTE_EPSILON)) return;
+            if (!(evec_len2 > TV_EPSILON)) return;
             float3 dn = d;
             glm::vec3 u, v;
             if (fabsf(evec0.z) < 0.999f) {
