@@ -481,7 +481,7 @@ namespace tira {
      * @param out_c lower-right output component
      */
     template <typename Type>
-    CUDA_CALLABLE static void tk_stick_window_2d(const Type* lambdas, const Type* thetas, const Type sigma1, const Type sigma2,
+    CUDA_CALLABLE static void tk_stick_window(const Type* lambdas, const Type* thetas, const Type sigma1, const Type sigma2,
         const unsigned power, const int w, const int s0, const int s1, const int x0, const int x1,
         Type& out_a, Type& out_b, Type& out_c) {
 
@@ -527,7 +527,7 @@ namespace tira {
      * @param n number of samples to use for numerical integration
      */
     template <typename Type>
-    CUDA_CALLABLE  static void tk_platevote_numerical(const Type rx, const Type ry, const Type sigma1, const Type sigma2, const unsigned power,
+    CUDA_CALLABLE  static void tk_plate_numerical(const Type rx, const Type ry, const Type sigma1, const Type sigma2, const unsigned power,
         Type& out_a, Type& out_b, Type& out_c, const unsigned int n = 10) {
 
         out_a = out_b = out_c = 0;
@@ -571,7 +571,7 @@ namespace tira {
      * @param samples number of stick tensor samples used for numerical integration
      */
     template <typename Type>
-    CUDA_CALLABLE static void tk_platevote_window(const Type* lambdas, Type sigma1, Type sigma2, const unsigned power,
+    CUDA_CALLABLE static void tk_plate_window(const Type* lambdas, Type sigma1, Type sigma2, const unsigned power,
         const int w, const int s0, const int s1, const int x0, const int x1,
         Type& out_a, Type& out_b, Type& out_c, const unsigned samples = 10) {
 
@@ -592,7 +592,7 @@ namespace tira {
 
                         if (l0 != Type(0)) {
                             Type Va, Vb, Vc;
-                            tk_platevote_numerical<Type>(u, v, sigma1, sigma2, power, Va, Vb, Vc, samples);
+                            tk_plate_numerical<Type>(u, v, sigma1, sigma2, power, Va, Vb, Vc, samples);
 
                             const Type scale = fabsf(l0);
                             out_a += scale * Va;
@@ -767,14 +767,14 @@ namespace tira {
 
                     Type a, b, c;
                     if (stick) {
-                        tk_stick_window_2d(lambdas, evecs, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c);
+                        tk_stick_window(lambdas, evecs, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c);
                         out_a += a;
                         out_b += b;
                         out_c += c;
                     }
 
                     if (plate) {
-                        tk_platevote_window(lambdas, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c, samples);
+                        tk_plate_window(lambdas, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c, samples);
                         out_a += a;
                         out_b += b;
                         out_c += c;
@@ -1176,8 +1176,6 @@ namespace tira {
 		
         // ------- 2D Tensor Voting -------
 
-
-
         /**
          * @brief Check if a pointer is located on the CUDA device. If out_attr is provided, fills it with the pointer attributes.
          * Treat unknown/unregistered as host.
@@ -1197,6 +1195,28 @@ namespace tira {
         }
 
         /**
+         * @brief Copy data between host and device. If dest is on device, copies from src to dest on the device. If on host, copies from src on device to dest on host.
+         * 
+         * @tparam Type data type used for the calculation
+         * @param dest destination pointer (can be on host or device)
+         * @param src source pointer (can be on host or device)
+         * @param bytes number of bytes to copy
+         */
+        template <typename Type>
+        inline void _copy_from_device(Type* dest, const Type* src, size_t bytes) {
+            if (!dest || !src || bytes == 0) return;
+
+            if (_is_device(dest)) {
+                // dest is on device, src can be on host or device
+                HANDLE_ERROR(cudaMemcpy(dest, src, bytes, cudaMemcpyDeviceToDevice));
+            }
+            else {
+                // dest is on host, src must be on device
+                HANDLE_ERROR(cudaMemcpy(dest, src, bytes, cudaMemcpyDeviceToHost));
+            }
+        }
+
+        /**
          * @brief Ensure a device pointer for writing tensor vote results. If the input pointer is on the host, allocates a device buffer and sets dest_is_dev to false.
          *  If the input pointer is already on the device, returns it directly and sets dest_is_dev to true. Caller is responsible for copying data back to host if needed
          *  and freeing any allocated device memory.
@@ -1211,7 +1231,7 @@ namespace tira {
         template <typename Type>
         inline Type* _dev_writeable(Type* dest, size_t bytes, Type*& dev_out, bool& dest_is_dev) {
             dev_out = nullptr;
-            dest
+            dest_is_dev = false;
             if (!dest || bytes == 0) return dest;
 
             dest_is_dev = _is_device(dest);
@@ -1248,42 +1268,140 @@ namespace tira {
             return d;
         }
 
-
+        /**
+         * @brief Analytical Tensor Voting (ATV) CUDA kernel for 2D tensor voting.
+         * Writes a symmetric 2x2 tensor to t_out as 4 floats per pixel.
+         */
         template <typename Type>
-        __global__ static void global_stickvote(Type* t_out, Type* L, Type* V, float sigma, int w, int shape0, int shape1) {
+        __global__ static void global_tensorvote_atv(Type* t_out, const Type* lambdas, const Type* thetas, Type sigma, int w,
+            int s0, int s1) {
 
-            int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
-            int x1 = blockDim.y * blockIdx.y + threadIdx.y;
-            if (x0 >= shape0 || x1 >= shape1)                                                          // if not within bounds of image, return
-                return;
+            const int x0 = (int)(blockDim.x * blockIdx.x + threadIdx.x);
+            const int x1 = (int)(blockDim.y * blockIdx.y + threadIdx.y);
+            if (x0 >= s0 || x1 >= s1) return;
 
-            float a, b, c;
-            stickvote_window(L, V, sigma, w, shape0, shape1, x0, x1, a, b, c);
-            t_out[x0 * shape1 * 4 + x1 * 4 + 0] += a;
-            t_out[x0 * shape1 * 4 + x1 * 4 + 1] += b;
-            t_out[x0 * shape1 * 4 + x1 * 4 + 2] += b;
-            t_out[x0 * shape1 * 4 + x1 * 4 + 3] += c;
+            const unsigned idx = (unsigned)x0 * (unsigned)s1 * 4u + (unsigned)x1 * 4u;
+
+            Type a, b, c;
+            tira::atv_window<Type>(lambdas, thetas, sigma, w, s0, s1, x0, x1, a, b, c);
+
+            t_out[idx + 0] = a;
+            t_out[idx + 1] = b;
+            t_out[idx + 2] = b;
+            t_out[idx + 3] = c;
         }
 
+        /**
+         * @brief Launch the CUDA Analytical Tensor Voting (ATV) process using precomputed eigenpars.
+         * 
+         * @tparam Type data type used for the calculation
+         * @param t_out pointer to the output array to be filled with the tensor voting result
+         * @param lambdas pointer to the precomputed eigenvalues array
+         * @param thetas pointer to the precomputed eigenangles array
+         * @param sigma1 primary sigma to control the decay
+         * @param w window size used for summing
+         * @param shape0 size of the tensor field along the first (slow) dimension
+         * @param shape1 size of the tensor field along the second (fast) dimension
+         */
         template <typename Type>
-        __global__ static void global_platevote(Type* t_out, Type* L, float sigma, int w, int s0, int s1, unsigned samples) {
+        static void tensorvote_atv(Type* t_out, const Type* lambdas, const Type* thetas, Type sigma, const unsigned w,
+            const unsigned s0, const unsigned s1) {
 
-            int x0 = blockDim.x * blockIdx.x + threadIdx.x;                                       // get the x and y image coordinates for the current thread
-            int x1 = blockDim.y * blockIdx.y + threadIdx.y;
-            if (x0 >= s0 || x1 >= s1)                                                          // if not within bounds of image, return
-                return;
+            const size_t n_pix = (size_t)s0 * (size_t)s1;
+            const size_t out_bytes = sizeof(Type) * n_pix * 4u;
+            const size_t eig_bytes = sizeof(Type) * n_pix * 2u;
 
-            float a, b, c;
-            platevote_window(L, sigma, w, s0, s1, x0, x1, a, b, c, samples);
+            // Ensure device buffers
+            Type* dev_out = nullptr;
+            bool out_is_dev = false;
+            Type* gpuOut = _dev_writeable<Type>(t_out, out_bytes, dev_out, out_is_dev);
 
-            t_out[x0 * s1 * 4 + x1 * 4 + 0] += a;
-            t_out[x0 * s1 * 4 + x1 * 4 + 1] += b;
-            t_out[x0 * s1 * 4 + x1 * 4 + 2] += b;
-            t_out[x0 * s1 * 4 + x1 * 4 + 3] += c;
+            Type* dev_L = nullptr;
+            Type* dev_T = nullptr;
+            const Type* gpuLambdas = _dev_readonly<Type>(lambdas, eig_bytes, dev_L);
+            const Type* gpuThetas = _dev_readonly<Type>(thetas, eig_bytes, dev_T);
+
+            // Launch kernel
+            dim3 threads(16, 16);
+            dim3 blocks((unsigned)((s0 + threads.x - 1) / threads.x), (unsigned)((s1 + threads.y - 1) / threads.y));
+
+            global_tensorvote_atv<Type><<<blocks, threads>>>(gpuOut, gpuLambdas, gpuThetas, sigma, (int)w, (int)s0, (int)s1);
+            HANDLE_ERROR(cudaDeviceSynchronize());
+
+            // Copy back to host if needed
+            if (!out_is_dev) {
+                _copy_from_device<Type>(t_out, gpuOut, out_bytes);
+                HANDLE_ERROR(cudaDeviceSynchronize());
+            }
+
+            // NOTE: Some variables are not freed (gpuOut, gpuLambdas, gpuThetas) because they're not always owned. 
+            // They get freed later in the outer tensorvote().
+
+            // Free temporaries
+            if (dev_out) { HANDLE_ERROR(cudaFree(dev_out)); dev_out = nullptr;  }
+            if (dev_L)   { HANDLE_ERROR(cudaFree(dev_L));   dev_L = nullptr;    }
+            if (dev_T)   { HANDLE_ERROR(cudaFree(dev_T));   dev_T = nullptr;    }
         }
-
+        
+        /**
+         * @brief Tensor Kernel (TK) voting CUDA kernel.
+         */
         template <typename Type>
-        __global__ static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* evecs, Type sigma1, Type sigma2, unsigned power,
+        __global__ static void global_tensorvote_tk(Type* t_out, const Type* lambdas, const Type* thetas, Type sigma1, Type sigma2, unsigned power,
+            int w, int s0, int s1, bool stick, bool plate, unsigned samples) {
+
+            const int x0 = (int)(blockDim.x * blockIdx.x + threadIdx.x);
+            const int x1 = (int)(blockDim.y * blockIdx.y + threadIdx.y);
+            if (x0 >= s0 || x1 >= s1) return;
+
+            const unsigned idx = (unsigned)x0 * (unsigned)s1 * 4u + (unsigned)x1 * 4u;
+
+            if (!stick && !plate) {
+                t_out[idx + 0] = Type(0);
+                t_out[idx + 1] = Type(0);
+                t_out[idx + 2] = Type(0);
+                t_out[idx + 3] = Type(0);
+                return;
+            }
+
+            Type out_a = Type(0), out_b = Type(0), out_c = Type(0);
+            Type a, b, c;
+            
+            if (stick) {
+                tira::tk_stick_window<Type>(lambdas, thetas, sigma1, sigma2, power, w, s0, s1, x0, x1, a, b, c);
+                out_a += a; out_b += b; out_c += c;
+            }
+
+            if (plate && samples > 0) {
+                tira::tk_plate_window<Type>(lambdas, sigma1, sigma2, power, w, s0, s1, x0, x1, a, b, c, samples);
+                out_a += a; out_b += b; out_c += c;
+            }
+
+            t_out[idx + 0] = out_a;
+            t_out[idx + 1] = out_b;
+            t_out[idx + 2] = out_b;
+            t_out[idx + 3] = out_c;
+        }
+        
+        /**
+         * @brief Launch the CUDA Tensor Kernel (TK) voting process using precomputed eigenpars.
+         * 
+         * @tparam Type data type used for the calculation
+         * @param t_out pointer to the output array to be filled with the tensor voting result
+         * @param lambdas pointer to the precomputed eigenvalues array
+         * @param thetas pointer to the precomputed eigenangles array
+         * @param sigma1 primary sigma (orthogonal channel)
+         * @param sigma2 secondary sigma (parallel channel)
+         * @param power refinement term exponent
+         * @param w window size used for summing
+         * @param shape0 size of the tensor field along the first (slow) dimension
+         * @param shape1 size of the tensor field along the second (fast) dimension
+         * @param stick boolean flag specifying calculation of the stick tensor vote
+         * @param plate boolean flag specifying calculation of the plate tensor vote
+         * @param samples number of stick tensor samples used for numerical integration of plate votes (only used if plate is true)
+         */
+        template <typename Type>
+        static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* thetas, Type sigma1, Type sigma2, unsigned power,
             const unsigned w, const unsigned shape0, const unsigned shape1,
             const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
@@ -1292,8 +1410,38 @@ namespace tira {
             const size_t eig_bytes = sizeof(Type) * n_pix * 2u;
 
             // Ensure device buffers
-            Type* d_out
+            Type* dev_out = nullptr;
+            bool out_is_dev = false;
+            Type* gpuOut = _dev_writeable<Type>(t_out, out_bytes, dev_out, out_is_dev);
+
+            Type* dev_L = nullptr;
+            Type* dev_T = nullptr;
+            const Type* gpuLambdas = _dev_readonly<Type>(lambdas, eig_bytes, dev_L);
+            const Type* gpuThetas = _dev_readonly<Type>(thetas, eig_bytes, dev_T);
+
+            // Launch kernels
+            dim3 threads(16, 16);
+            dim3 blocks((unsigned)((shape0 + threads.x - 1) / threads.x), (unsigned)((shape1 + threads.y - 1) / threads.y));
+
+            global_tensorvote_tk<Type><<<blocks, threads>>>(gpuOut, gpuLambdas, gpuThetas, sigma1, sigma2, power, (int)w, (int)shape0, (int)shape1, stick, plate, samples);
+            HANDLE_ERROR(cudaDeviceSynchronize());
+
+            // Copy back to host if needed
+            if (!out_is_dev) {
+                _copy_from_device<Type>(t_out, gpuOut, out_bytes);
+                HANDLE_ERROR(cudaDeviceSynchronize());
+            }
+
+            // NOTE: Some variables are not freed (gpuOut, gpuLambdas, gpuThetas) because they're not always owned. 
+            // They get freed later in the outer tensorvote().
+
+
+            // Free temporaries
+            if (dev_out) { HANDLE_ERROR(cudaFree(dev_out)); dev_out = nullptr; }
+            if (dev_L) { HANDLE_ERROR(cudaFree(dev_L)); dev_L = nullptr; }
+            if (dev_T) { HANDLE_ERROR(cudaFree(dev_T)); dev_T = nullptr; }
         }
+
         /**
          * @brief 2D tensor voting entry point for CUDA. 
          * Computes eigenpars then dispatches to TK or ATV voting kernels. Input and output can be on host or device.
@@ -1326,19 +1474,15 @@ namespace tira {
             Type* thetas = tira::cuda::evecs2polar_symmetric(t_in, lambdas, shape0 * shape1, device);
 
             if (is_atv)
-                tensorvote_atv<Type>(t_out, lambdas, thetas, sigma1, w, shape0, shape1, stick, plate, samples);
+                tensorvote_atv<Type>(t_out, lambdas, thetas, sigma1, w, shape0, shape1);
             else {
                 const unsigned p = (power < 1) ? 1u: (unsigned)power;
                 tensorvote_tk<Type>(t_out, lambdas, thetas, sigma1, sigma2, p, w, shape0, shape1, stick, plate, samples);
             }
 
             // Free eigenpair buffers
-            cudaPointerAttributes attrL{}, attrT{};
-            HANDLE_ERROR(cudaPointerGetAttributes(&attrL, lambdas));
-            HANDLE_ERROR(cudaPointerGetAttributes(&attrT, thetas));
-
-            const bool L_is_dev = (attrL.type == cudaMemoryTypeDevice);
-            const bool T_is_dev = (attrT.type == cudaMemoryTypeDevice);
+            const bool L_is_dev = _is_device(lambdas);
+            const bool T_is_dev = _is_device(thetas);
 
             if (L_is_dev) HANDLE_ERROR(cudaFree(lambdas));
             else delete[] lambdas;
