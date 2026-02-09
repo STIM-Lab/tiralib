@@ -1176,6 +1176,79 @@ namespace tira {
 		
         // ------- 2D Tensor Voting -------
 
+
+
+        /**
+         * @brief Check if a pointer is located on the CUDA device. If out_attr is provided, fills it with the pointer attributes.
+         * Treat unknown/unregistered as host.
+         * 
+         * @param ptr Pointer to check
+         * @param out_attr Optional pointer that will be filled with the attributes of the pointer (if it's a CUDA pointer)
+         * @return true if ptr is on device, false otherwise
+
+         */
+        inline bool _is_device(const void* ptr, cudaPointerAttributes* out_attr = nullptr) {
+            cudaPointerAttributes attr{};
+            HANDLE_ERROR(cudaPointerGetAttributes(&attr, ptr));
+            // cudaError_t err = cudaPointerGetAttributes(&attr, ptr);
+
+            if (out_attr) *out_attr = attr;
+            return attr.type == cudaMemoryTypeDevice;
+        }
+
+        /**
+         * @brief Ensure a device pointer for writing tensor vote results. If the input pointer is on the host, allocates a device buffer and sets dest_is_dev to false.
+         *  If the input pointer is already on the device, returns it directly and sets dest_is_dev to true. Caller is responsible for copying data back to host if needed
+         *  and freeing any allocated device memory.
+         * 
+         * @tparam Type data type used for the calculation
+         * @param dest pointer to the output buffer, can be on host or device
+         * @param bytes number of bytes needed for the output buffer
+         * @param dev_out reference to a pointer that will be set to the allocated device buffer if dest is on host, or to dest if dest is already on device
+         * @param dest_is_dev reference to a boolean that will be set to true if dest is on device, false if dest is on host
+         * @return Type* pointer to the device buffer to be used for writing results, either the same as dest if it's already on device, or a newly allocated buffer if dest is on host
+         */
+        template <typename Type>
+        inline Type* _dev_writeable(Type* dest, size_t bytes, Type*& dev_out, bool& dest_is_dev) {
+            dev_out = nullptr;
+            dest
+            if (!dest || bytes == 0) return dest;
+
+            dest_is_dev = _is_device(dest);
+            if (dest_is_dev) return dest;
+
+            Type* d = nullptr;
+            HANDLE_ERROR(cudaMalloc(&d, bytes));
+            dev_out = d;
+            return d;
+        }
+
+        /**
+         * @brief Ensure a device pointer for reading input data. If the input pointer is on the host, allocates a device buffer, copies the data to the device.
+         * Sets dev_out to the device pointer.
+         * Note: caller is responsible for freeing any allocated device memory in dev_out if src is on host.
+         * 
+         * @tparam Type data type used for the calculation
+         * @param src pointer to the input buffer, can be on host or device
+         * @param bytes number of bytes in the input buffer
+         * @param dev_out reference to a pointer that will be set to the allocated device buffer if src is on host, or to src if src is already on device
+         * @return const Type* pointer to the device buffer to be used for reading input data
+         */
+        template <typename Type>
+        inline const Type* _dev_readonly(const Type* src, size_t bytes, Type*& dev_out) {
+            dev_out = nullptr;
+            if (!src || bytes == 0) return src;
+
+            if (_is_device(src)) return src;
+
+            Type* d = nullptr;
+            HANDLE_ERROR(cudaMalloc(&d, bytes));
+            HANDLE_ERROR(cudaMemcpy(d, src, bytes, cudaMemcpyHostToDevice));
+            dev_out = d;
+            return d;
+        }
+
+
         template <typename Type>
         __global__ static void global_stickvote(Type* t_out, Type* L, Type* V, float sigma, int w, int shape0, int shape1) {
 
@@ -1209,27 +1282,71 @@ namespace tira {
             t_out[x0 * s1 * 4 + x1 * 4 + 3] += c;
         }
 
-
         template <typename Type>
-        static void tensorvote(Type* t_out, const Type* t_in, const Type sigma, const unsigned w,
-            const unsigned shape0, const unsigned shape1,
+        __global__ static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* evecs, Type sigma1, Type sigma2, unsigned power,
+            const unsigned w, const unsigned shape0, const unsigned shape1,
             const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
-            /*
-            if (device < 0) {
-                return cpu::tensorvote2((glm::mat2*)output_field,
-                            (glm::vec2*)tira::cpu::evals2_symmetric<float>(input_field, shape0 * shape1),
-                            (glm::vec2*)tira::cpu::evecs2polar_symmetric(input_field,
-                            tira::cpu::evals2_symmetric<float>(input_field, shape0 * shape1), shape0 * shape1),
-                            glm::vec2(sigma, sigma2), power, w, shape0, shape1, STICK, PLATE, samples);
-            }
-            */
+            const size_t n_pix = (size_t)shape0 * (size_t)shape1;
+            const size_t out_bytes = sizeof(Type) * n_pix * 4u;
+            const size_t eig_bytes = sizeof(Type) * n_pix * 2u;
 
+            // Ensure device buffers
+            Type* d_out
+        }
+        /**
+         * @brief 2D tensor voting entry point for CUDA. 
+         * Computes eigenpars then dispatches to TK or ATV voting kernels. Input and output can be on host or device.
+         * 
+         * @tparam Type data type used for the calculation
+         * @param t_out is a pointer to the array to be filled with the tensor voting result
+         * @param t_in  is a pointer to the input array of 2D tensors, stored in row-major order as (a,b,c) for each tensor [[a, b], [b, c]]
+         * @param sigma1 primary sigma (orthogonal channel)
+         * @param sigma2 secondary sigma (lateral channel), only used for TK voting
+         * @param power refinement term exponent, only used for TK voting
+         * @param w window size used for summing (normally about 6x sigma)
+         * @param shape0 size of the tensor field along the first (slow) dimension
+         * @param shape1 size of the tensor field along the second (fast) dimension
+         * @param stick is a boolean flag specifying calculation of the stick tensor vote
+         * @param plate is a boolean flag specifying calculation of the plate tensor vote
+         * @param samples number of stick tensor samples used for numerical integration 
+         * @param is_atv a boolean flag specifying whether to use the ATV or TK voting method
+         * @param debug a boolean flag to print debug information about the voting process
+         */
+        template <typename Type>
+        static void tensorvote(Type* t_out, const Type* t_in, const Type sigma1, const Type sigma2, const int power, const unsigned w,
+            const unsigned shape0, const unsigned shape1,
+            const bool stick = true, const bool plate = true, const unsigned samples = 10, const bool is_atv = false, const bool debug = false) {
 
-            int device;
+            int device = 0;
             HANDLE_ERROR(cudaGetDevice(&device));
+            
+            // Eigendecomposition
+            Type* lambdas = tira::cuda::evals2_symmetric(t_in, shape0 * shape1, device);
+            Type* thetas = tira::cuda::evecs2polar_symmetric(t_in, lambdas, shape0 * shape1, device);
 
-            auto start = std::chrono::high_resolution_clock::now();
+            if (is_atv)
+                tensorvote_atv<Type>(t_out, lambdas, thetas, sigma1, w, shape0, shape1, stick, plate, samples);
+            else {
+                const unsigned p = (power < 1) ? 1u: (unsigned)power;
+                tensorvote_tk<Type>(t_out, lambdas, thetas, sigma1, sigma2, p, w, shape0, shape1, stick, plate, samples);
+            }
+
+            // Free eigenpair buffers
+            cudaPointerAttributes attrL{}, attrT{};
+            HANDLE_ERROR(cudaPointerGetAttributes(&attrL, lambdas));
+            HANDLE_ERROR(cudaPointerGetAttributes(&attrT, thetas));
+
+            const bool L_is_dev = (attrL.type == cudaMemoryTypeDevice);
+            const bool T_is_dev = (attrT.type == cudaMemoryTypeDevice);
+
+            if (L_is_dev) HANDLE_ERROR(cudaFree(lambdas));
+            else delete[] lambdas;
+
+            if (T_is_dev) HANDLE_ERROR(cudaFree(thetas));
+            else delete[] thetas;
+        
+            /*auto start = std::chrono::high_resolution_clock::now();
             cudaDeviceProp props;
             HANDLE_ERROR(cudaGetDeviceProperties(&props, device));
             auto end = std::chrono::high_resolution_clock::now();
@@ -1297,17 +1414,7 @@ namespace tira {
             HANDLE_ERROR(cudaFree(gpuL));
             cudaDeviceSynchronize();
             end = std::chrono::high_resolution_clock::now();
-            float t_devicefree = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-            /*if (debug) {
-                std::cout << "Eigendecomposition:  " << t_eigendecomposition << " ms" << std::endl;
-                std::cout << "Voting: " << t_voting << " ms" << std::endl;
-                std::cout << "cudaMemcpy (H->D):  " << t_host2device << " ms" << std::endl;
-                std::cout << "cudaMemcpy (D->H):  " << t_device2host << " ms" << std::endl;
-                std::cout << "cudaMalloc: " << t_devicealloc << " ms" << std::endl;
-                std::cout << "cudaFree: " << t_devicefree << " ms" << std::endl;
-                std::cout << "cudaDeviceProps: " << t_deviceprops << " ms" << std::endl;
-            }*/
+            float t_devicefree = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();*/
         }
 
 
