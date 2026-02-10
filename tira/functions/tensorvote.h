@@ -805,6 +805,9 @@ namespace tira {
                 tensorvote_atv(t_out, lambdas, evecs, sigma1, w, shape0, shape1, stick, plate, samples);
             else
                 tensorvote_tk(t_out, lambdas, evecs, sigma1, sigma2, power, w, shape0, shape1, stick, plate, samples);
+
+            delete[] lambdas;
+            delete[] evecs;
         }
 
 
