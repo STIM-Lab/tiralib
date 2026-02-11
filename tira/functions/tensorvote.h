@@ -19,6 +19,9 @@
 #ifndef TV3_MAX_CONST_NB
 #define TV3_MAX_CONST_NB 1536
 #endif
+#ifndef TV2_MAX_CONST_NB
+#define TV2_MAX_CONST_NB 1536
+#endif
 
 namespace tira {
     /**
@@ -358,6 +361,25 @@ namespace tira {
     }
 
     /**
+     * @brief Precomputed 2D neighbor offset and wieghts (for TK voting)
+     * 
+     * Stores:
+     * - Stick precompute: normalized direction d, gaussian weights c1/c2, reflection matrix R
+     * - Plate precompute: integrated plate tensor (Va,Vb,Vc) for that offset
+     */
+    struct Neighbor2D {
+        int du, dv;                     // index offsets along x1 (u) and x0 (v)
+
+        // variables for stick voting
+        float dx, dy;                   // normalized direction from voter to receiver
+        float c1, c2;                   // exp(-l2 / sigma1^2), exp(-l2 / sigma2^2)
+        float Ra, Rb, Rc;               // precomputed rotation matrix components (R=I-2dd^T)
+
+        // variables for plate voting
+        float Va, Vb, Vc;               // plate kernel tensor for this offset: numerical integration
+    };
+    
+    /**
      * Compute the angular-and-distance modulation (eta) for our stick vote kernel.
      *
      * Kernel:
@@ -481,12 +503,71 @@ namespace tira {
      * @param out_c lower-right output component
      */
     template <typename Type>
-    CUDA_CALLABLE static void tk_stick_window(const Type* lambdas, const Type* thetas, const Type sigma1, const Type sigma2,
+    CUDA_CALLABLE static void tk_stick_window(const Type* lambdas, const Type* thetas, const Neighbor2D* NB, const Type sigma1, const Type sigma2,
         const unsigned power, const int w, const int s0, const int s1, const int x0, const int x1,
-        Type& out_a, Type& out_b, Type& out_c) {
+        Type& out_a, Type& out_b, Type& out_c, const int nb_count = 0) {
 
         out_a = out_b = out_c = Type(0);                                    // initialize the receiver value to zero
+        
+        // ---- Fast path: precomputed neighbors ----
+        if (NB && nb_count > 0) {
+            unsigned p = power;
+            if (p < 1) p = 1;
 
+            for (int k = 0; k < nb_count; ++k) {
+                const int r0 = x0 + NB[k].dv;
+                if ((unsigned)r0 >= (unsigned)s0) continue;
+
+                const int r1 = x1 + NB[k].du;
+                if ((unsigned)r1 >= (unsigned)s1) continue;
+
+                const int idx = r0 * s1 * 2 + r1 * 2;
+
+                // largest eigenvector direction
+                const Type theta = thetas[idx + 1];
+                const Type qx = cos(theta);
+                const Type qy = sin(theta);
+
+                // q · d using precomputed (dx,dy)
+                const Type qTd = qx * (Type)NB[k].dx + qy * (Type)NB[k].dy;
+
+                // eta = c1*(1-qTd^2)^p + c2*(qTd^2)^p using precomputed c1,c2
+                const Type qTd2 = qTd * qTd;
+                const Type t1 = Type(1) - qTd2;
+                const Type t2 = qTd2;
+
+                Type eta;
+                if (p == 1) {
+                    eta = (Type)NB[k].c1 * t1 + (Type)NB[k].c2 * t2;
+                } else {
+                    Type e1 = t1;
+                    Type e2 = t2;
+                    for (unsigned i = 1; i < p; ++i) { e1 *= t1; e2 *= t2; }
+                    eta = (Type)NB[k].c1 * e1 + (Type)NB[k].c2 * e2;
+                }
+
+                // Rq using precomputed R
+                const Type Rq_x = (Type)NB[k].Ra * qx + (Type)NB[k].Rb * qy;
+                const Type Rq_y = (Type)NB[k].Rb * qx + (Type)NB[k].Rc * qy;
+
+                const Type Va = Rq_x * Rq_x * eta;
+                const Type Vb = Rq_x * Rq_y * eta;
+                const Type Vc = Rq_y * Rq_y * eta;
+
+                const Type l0 = lambdas[idx + 0];
+                const Type l1 = lambdas[idx + 1];
+
+                Type scale = fabs(l1) - fabs(l0);
+                if (l1 < Type(0)) scale = scale * Type(-1);
+
+                out_a += scale * Va;
+                out_b += scale * Vb;
+                out_c += scale * Vc;
+            }
+            return;
+        }
+
+        // Original (slow) path (no precomputed neighbors)
         const int hw = w / 2;                                               // calculate the half window size
         for (int v = -hw; v <= hw; v++) {                                   // for each pixel in the window
             const int r0 = x0 + v;                                          // calculate the position relative to the voter
@@ -571,22 +652,42 @@ namespace tira {
      * @param samples number of stick tensor samples used for numerical integration
      */
     template <typename Type>
-    CUDA_CALLABLE static void tk_plate_window(const Type* lambdas, Type sigma1, Type sigma2, const unsigned power,
+    CUDA_CALLABLE static void tk_plate_window(const Type* lambdas, const Neighbor2D* NB, const Type sigma1, const Type sigma2, const unsigned power,
         const int w, const int s0, const int s1, const int x0, const int x1,
-        Type& out_a, Type& out_b, Type& out_c, const unsigned samples = 10) {
+        Type& out_a, Type& out_b, Type& out_c, const int nb_count = 0, const unsigned samples = 10) {
 
         out_a = out_b = out_c = Type(0);
         if (samples == 0) return;
         
-        const int hw = w / 2;
+        // If precomputed neighbors available, use the fast path with precomputed neighbors
+        if (NB && nb_count > 0) {
+            for (int k = 0; k < nb_count; k++) {            
+                const int r0 = x0 + NB[k].dv;
+                if ((unsigned)r0 >= (unsigned)s0) continue;
+                const int r1 = x1 + NB[k].du;
+                if ((unsigned)r1 >= (unsigned)s1) continue;
 
-        for (int v = -hw; v <= hw; v++) {                    
+                const int idx = r0 * s1 * 2 + r1 * 2;
+                const Type l0 = lambdas[idx + 0];
+
+                if (l0 == Type(0)) continue;
+
+                const Type scale = fabsf(l0);
+                out_a += scale * NB[k].Va;
+                out_b += scale * NB[k].Vb;
+                out_c += scale * NB[k].Vc;
+            }
+            return;
+        }
+
+        // Original path (no neighbor table)
+        const int hw = w / 2;
+        for (int v = -hw; v <= hw; v++) {
             const int r0 = x0 + v;
             if (r0 >= 0 && r0 < s0) {
                 for (int u = -hw; u <= hw; u++) {
                     int r1 = x1 + u;
                     if (r1 >= 0 && r1 < s1) {
-
                         const int idx = r0 * s1 * 2 + r1 * 2;
                         const Type l0 = lambdas[idx + 0];
 
@@ -594,7 +695,7 @@ namespace tira {
                             Type Va, Vb, Vc;
                             tk_plate_numerical<Type>(u, v, sigma1, sigma2, power, Va, Vb, Vc, samples);
 
-                            const Type scale = fabsf(l0);
+                            const Type scale = fabs(l0);
                             out_a += scale * Va;
                             out_b += scale * Vb;
                             out_c += scale * Vc;
@@ -604,7 +705,6 @@ namespace tira {
             }
         }
     }
-
 
     /**
     * @brief Precomputed 3D neighbor offset and weights for voting.
@@ -650,8 +750,7 @@ namespace tira {
     template<typename Dir, typename Vec>
     CUDA_CALLABLE void stickvote3_accumulate_kernel(float& m00, float& m01, float& m02,
         float& m11, float& m12, float& m22,
-        const Dir& d, const float c1, const float c2,
-        const Vec& q, const unsigned power, const float scale)
+        const Dir& d, const float c1, const float c2, const Vec& q, const unsigned power, const float scale)
     {
         const float qTd = q.x * d.x + q.y * d.y + q.z * d.z;
         const float qTd2 = qTd * qTd;
@@ -687,8 +786,69 @@ namespace tira {
      */
     namespace cpu {
 
+        // --------------- 2D Tensor Voting Functions ---------------
+
+        inline std::vector<Neighbor2D> build_neighbors2d(const int w, const float sigma1, const float sigma2, 
+            const unsigned power, const unsigned samples, const bool stick, const bool plate) {
+
+            std::vector<Neighbor2D> NB;
+            if (w <= 0) return NB;
+
+            NB.reserve((size_t)w * (size_t)w);
+            const int hw = w / 2;
+
+            const float invsig1 = (sigma1 > 0.0f) ? 1.0f / (sigma1 * sigma1) : 0.0f;
+            const float invsig2 = (sigma2 > 0.0f) ? 1.0f / (sigma2 * sigma2) : 0.0f;
+
+            for (int dv = -hw; dv <= hw; dv++) {
+                for (int du = -hw; du <= hw; du++) {
+                    Neighbor2D n{};
+                    n.du = du;
+                    n.dv = dv;
+
+                    const float l2 = float(du * du + dv * dv);
+
+                    // --- stick ---
+                    if (stick) {
+                        if (l2 == 0.0f) {
+                            n.dx = 0.0f; n.dy = 0.0f;
+                        } 
+                        else {
+                            const float invlen = 1.0f / sqrtf(l2);
+                            n.dx = float(du) * invlen;
+                            n.dy = float(dv) * invlen;
+                        }
+
+                        // zero sigma degeneracy
+                        n.c1 = (sigma1 == 0.0f) ? (l2 > TV_EPSILON ? 0.0f : 1.0f) : expf(-l2 * invsig1);
+                        n.c2 = (sigma2 == 0.0f) ? (l2 > TV_EPSILON ? 0.0f : 1.0f) : expf(-l2 * invsig2);
+
+                        // R = I - 2 dd^T
+                        n.Ra = 1.0f - 2.0f * n.dx * n.dx;
+                        n.Rb = 0.0f - 2.0f * n.dx * n.dy;
+                        n.Rc = 1.0f - 2.0f * n.dy * n.dy;
+                    } 
+                    else {
+                        n.dx = n.dy = 0.0f;
+                        n.c1 = n.c2 = 0.0f;
+                        n.Ra = n.Rb = n.Rc = 0.0f;
+                    }
+
+                    // --- plate ---
+                    if (plate && samples > 0) {
+                        float Va, Vb, Vc;
+                        tk_plate_numerical<float>((float)du, (float)dv, sigma1, sigma2, power, Va, Vb, Vc, samples);
+                        n.Va = Va; n.Vb = Vb; n.Vc = Vc;
+                    } else
+                        n.Va = n.Vb = n.Vc = 0.0f;
+                    NB.push_back(n);
+                }
+            }
+            return NB;
+        }
+
         /**
-        * Performs analyticaltensor voting on a 2D image using eigenvalues and eigenvectors.
+        * @brief Performs analytical tensor voting on a 2D image using eigenvalues and eigenvectors.
         * 
         * @tparam Type data type used for the calculation
         * @param t_out is a pointer to the array to be filled with the tensor voting result
@@ -756,10 +916,20 @@ namespace tira {
         */
         template <typename Type>
         static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* evecs, Type sigma1, Type sigma2, unsigned power,
-            const unsigned w, const unsigned shape0, const unsigned shape1,
-            const bool stick = true, const bool plate = true, const unsigned samples = 10) {
+        const unsigned w, const unsigned shape0, const unsigned shape1,
+        const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
             Type out_a, out_b, out_c;
+            
+            std::vector<Neighbor2D> NB;
+            int nb_count = 0;
+
+            const bool use_plate = plate && samples > 0;
+            if (stick || use_plate) {
+                NB = build_neighbors2d((int)w, (float)sigma1, (float)sigma2, power, samples, stick, use_plate);
+                nb_count = (int)NB.size();
+            }
+            const Neighbor2D* nb_ptr = (nb_count > 0) ? NB.data() : nullptr;
 
             for (int x0 = 0; x0 < shape0; x0++) {
                 for (int x1 = 0; x1 < shape1; x1++) {
@@ -767,14 +937,14 @@ namespace tira {
 
                     Type a, b, c;
                     if (stick) {
-                        tk_stick_window(lambdas, evecs, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c);
+                        tk_stick_window(lambdas, evecs, nb_ptr, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c, nb_count);
                         out_a += a;
                         out_b += b;
                         out_c += c;
                     }
 
                     if (plate) {
-                        tk_plate_window(lambdas, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c, samples);
+                        tk_plate_window(lambdas, nb_ptr, sigma1, sigma2, power, w, shape0, shape1, x0, x1, a, b, c, nb_count, samples);
                         out_a += a;
                         out_b += b;
                         out_c += c;
@@ -811,8 +981,7 @@ namespace tira {
         }
 
 
-
-
+        // --------------- 3D Tensor Voting Functions ---------------
 
         /**
          * @brief Build all 3D neighbor offsets and Gaussian weights for a window.
@@ -1271,6 +1440,30 @@ namespace tira {
             return d;
         }
 
+        struct DeviceNeighbors2D {
+            Neighbor2D* d_ptr = nullptr;
+            int count = 0;
+        };
+
+        static DeviceNeighbors2D _upload_neighbors2d(const std::vector<Neighbor2D>& NB) {
+            DeviceNeighbors2D dn;
+            dn.count = (int)NB.size();
+            if (dn.count <= 0) return dn;
+
+            const size_t bytes = (size_t)dn.count * sizeof(Neighbor2D);
+            HANDLE_ERROR(cudaMalloc((void**)&dn.d_ptr, bytes));
+            HANDLE_ERROR(cudaMemcpy(dn.d_ptr, NB.data(), bytes, cudaMemcpyHostToDevice));
+            return dn;
+        }
+
+        static void _free_neighbors2d(DeviceNeighbors2D& dn) {
+            if (dn.d_ptr) {
+                HANDLE_ERROR(cudaFree(dn.d_ptr));
+                dn.d_ptr = nullptr;
+            }
+            dn.count = 0;
+        }
+
         /**
          * @brief Analytical Tensor Voting (ATV) CUDA kernel for 2D tensor voting.
          * Writes a symmetric 2x2 tensor to t_out as 4 floats per pixel.
@@ -1350,8 +1543,8 @@ namespace tira {
          * @brief Tensor Kernel (TK) voting CUDA kernel.
          */
         template <typename Type>
-        __global__ static void global_tensorvote_tk(Type* t_out, const Type* lambdas, const Type* thetas, Type sigma1, Type sigma2, unsigned power,
-            int w, int s0, int s1, bool stick, bool plate, unsigned samples) {
+        __global__ static void global_tensorvote_tk(Type* t_out, const Type* lambdas, const Type* thetas, const Neighbor2D* nb, Type sigma1, Type sigma2, unsigned power,
+            int w, int s0, int s1, bool stick, bool plate, unsigned samples, int nb_count) {
 
             const int x0 = (int)(blockDim.x * blockIdx.x + threadIdx.x);
             const int x1 = (int)(blockDim.y * blockIdx.y + threadIdx.y);
@@ -1371,12 +1564,12 @@ namespace tira {
             Type a, b, c;
             
             if (stick) {
-                tira::tk_stick_window<Type>(lambdas, thetas, sigma1, sigma2, power, w, s0, s1, x0, x1, a, b, c);
+                tira::tk_stick_window<Type>(lambdas, thetas, nb, sigma1, sigma2, power, w, s0, s1, x0, x1, a, b, c, nb_count);
                 out_a += a; out_b += b; out_c += c;
             }
 
             if (plate && samples > 0) {
-                tira::tk_plate_window<Type>(lambdas, sigma1, sigma2, power, w, s0, s1, x0, x1, a, b, c, samples);
+                tira::tk_plate_window<Type>(lambdas, nb, sigma1, sigma2, power, w, s0, s1, x0, x1, a, b, c, nb_count, samples);
                 out_a += a; out_b += b; out_c += c;
             }
 
@@ -1404,9 +1597,8 @@ namespace tira {
          * @param samples number of stick tensor samples used for numerical integration of plate votes (only used if plate is true)
          */
         template <typename Type>
-        static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* thetas, Type sigma1, Type sigma2, unsigned power,
-            const unsigned w, const unsigned shape0, const unsigned shape1,
-            const bool stick = true, const bool plate = true, const unsigned samples = 10) {
+        static void tensorvote_tk(Type* t_out, const Type* lambdas, const Type* thetas, Type sigma1, Type sigma2, unsigned power, const unsigned w, 
+            const unsigned shape0, const unsigned shape1, const bool stick = true, const bool plate = true, const unsigned samples = 10) {
 
             const size_t n_pix = (size_t)shape0 * (size_t)shape1;
             const size_t out_bytes = sizeof(Type) * n_pix * 4u;
@@ -1421,12 +1613,26 @@ namespace tira {
             Type* dev_T = nullptr;
             const Type* gpuLambdas = _dev_readonly<Type>(lambdas, eig_bytes, dev_L);
             const Type* gpuThetas = _dev_readonly<Type>(thetas, eig_bytes, dev_T);
+            
+            // Build and upload neighbor list for TK voting
+            DeviceNeighbors2D dn;
+            const Neighbor2D* d_nb = nullptr;
+            int nb_count = 0;
+
+            const bool use_plate = plate && (samples > 0);
+            if (stick || use_plate) {
+                std::vector<Neighbor2D> hostNB = cpu::build_neighbors2d((int)w, (float)sigma1, (float)sigma2, power, samples, stick, use_plate);
+                dn = _upload_neighbors2d(hostNB);
+                d_nb = dn.d_ptr;
+                nb_count = dn.count;
+            }
 
             // Launch kernels
             dim3 threads(16, 16);
             dim3 blocks((unsigned)((shape0 + threads.x - 1) / threads.x), (unsigned)((shape1 + threads.y - 1) / threads.y));
 
-            global_tensorvote_tk<Type><<<blocks, threads>>>(gpuOut, gpuLambdas, gpuThetas, sigma1, sigma2, power, (int)w, (int)shape0, (int)shape1, stick, plate, samples);
+            global_tensorvote_tk<Type><<<blocks, threads>>>(gpuOut, gpuLambdas, gpuThetas, d_nb, sigma1, sigma2, power, 
+                (int)w, (int)shape0, (int)shape1, stick, plate, samples, nb_count);
             HANDLE_ERROR(cudaDeviceSynchronize());
 
             // Copy back to host if needed
@@ -1443,6 +1649,7 @@ namespace tira {
             if (dev_out) { HANDLE_ERROR(cudaFree(dev_out)); dev_out = nullptr; }
             if (dev_L) { HANDLE_ERROR(cudaFree(dev_L)); dev_L = nullptr; }
             if (dev_T) { HANDLE_ERROR(cudaFree(dev_T)); dev_T = nullptr; }
+            _free_neighbors2d(dn);
         }
 
         /**
@@ -1567,16 +1774,17 @@ namespace tira {
 
 		// ------- 3D Tensor Voting -------
 
-        struct Neighbor3D_CUDA {
+        struct DeviceNeighbor3D {
             int du, dv, dw;      // x2 (u), x1 (v), x0 (w) offsets
             float3 d;            // normalized direction
             float c1, c2;        // exp(-l2/s1^2), exp(-l2/s2^2)
         };
-        __constant__ Neighbor3D_CUDA d_neighbors_const[TV3_MAX_CONST_NB];
 
-        // Convert Neighbor3D to Neighbor3D_CUDA
-        static inline Neighbor3D_CUDA convertNeighbor3D(const Neighbor3D& n) {
-            Neighbor3D_CUDA nc;
+        __constant__ DeviceNeighbor3D d_neighbors_const[TV3_MAX_CONST_NB];
+
+        // Convert Neighbor3D to DeviceNeighbor3D
+        static inline DeviceNeighbor3D convertNeighbor3D(const Neighbor3D& n) {
+            DeviceNeighbor3D nc;
             nc.du = n.du;   nc.dv = n.dv;   nc.dw = n.dw;
             nc.d = make_float3(n.d.x, n.d.y, n.d.z);
             nc.c1 = n.c1;   nc.c2 = n.c2;
@@ -1585,7 +1793,7 @@ namespace tira {
 
         // Host helper: upload neighbor table to constant or global memory
         struct DeviceNeighbors {
-            Neighbor3D_CUDA* d_ptr = nullptr;           // null -> using constant memory
+            DeviceNeighbor3D* d_ptr = nullptr;           // null -> using constant memory
             int count = 0;
             bool used_const = false;
         };
@@ -1594,9 +1802,9 @@ namespace tira {
             DeviceNeighbors dn;
             dn.count = (int)NB.size();
 
-            std::vector<Neighbor3D_CUDA> host(NB.size());
+            std::vector<DeviceNeighbor3D> host(NB.size());
             for (size_t i = 0; i < NB.size(); ++i) host[i] = convertNeighbor3D(NB[i]);
-            const size_t host_bytes = host.size() * sizeof(Neighbor3D_CUDA);
+            const size_t host_bytes = host.size() * sizeof(DeviceNeighbor3D);
             // Upload to constant memory if it fits, otherwise to global memory
             if (host_bytes <= sizeof(d_neighbors_const)) {
                 HANDLE_ERROR(cudaMemcpyToSymbol(d_neighbors_const, host.data(), host_bytes, 0, cudaMemcpyHostToDevice));
@@ -1657,7 +1865,7 @@ namespace tira {
             Qout[i * 3 + 2] = q.z;
         }
 
-        __global__ static void global_stickvote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q, const Neighbor3D_CUDA* d_neighbors_glob,
+        __global__ static void global_stickvote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q, const DeviceNeighbor3D* d_neighbors_glob,
             int nb_count, int usedConst, unsigned int power, float norm, int s0, int s1, int s2) {
 
             int x2 = blockDim.x * blockIdx.x + threadIdx.x;                                     // get the x, y, and z volume coordinates for the current thread
@@ -1673,7 +1881,7 @@ namespace tira {
 
             // Loop over neighbors
             for (int k = 0; k < nb_count; ++k) {
-                const Neighbor3D_CUDA& nb = (usedConst ? d_neighbors_const[k] : d_neighbors_glob[k]);
+                const DeviceNeighbor3D& nb = (usedConst ? d_neighbors_const[k] : d_neighbors_glob[k]);
 
                 const int r0 = x0 + nb.dw;
                 const int r1 = x1 + nb.dv;
@@ -1702,11 +1910,8 @@ namespace tira {
             VT[base_recv] += Receiver * norm;
         }
 
-        __device__ static inline void platevote3_numerical_device(float& m00, float& m01, float& m02,
-                                                                  float& m11, float& m12, float& m22,
-                                                                  const float3 d, const float c1, const float c2,
-			                                                      unsigned power, const glm::vec3 evec0, 
-                                                                  float scale, const unsigned samples)
+        __device__ static inline void platevote3_numerical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
+            const float3 d, const float c1, const float c2, unsigned power, const glm::vec3 evec0, float scale, const unsigned samples)
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
@@ -1739,11 +1944,8 @@ namespace tira {
             m11 += scale * v11 / samples; m12 += scale * v12 / samples; m22 += scale * v22 / samples;
         }
 
-        __device__ static inline void platevote3_analytical_device(float& m00, float& m01, float& m02,
-            float& m11, float& m12, float& m22,
-            const float3 d, const float c1, const float c2,
-            const glm::vec3 evec0, float scale, const unsigned power,
-            const double K0_d, const double K1_d)
+        __device__ static inline void platevote3_analytical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
+            const float3 d, const float c1, const float c2, const glm::vec3 evec0, float scale, const unsigned power, const double K0_d, const double K1_d)
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
@@ -1848,9 +2050,9 @@ namespace tira {
 
             return;
         }
-        __global__ static void global_platevote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_small, const Neighbor3D_CUDA* d_neigbors_glob,
-            int nb_count, int usedConst, unsigned int power, float norm,
-            int s0, int s1, int s2, unsigned samples, double K0_d, double K1_d) {
+        
+        __global__ static void global_platevote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_small, const DeviceNeighbor3D* d_neigbors_glob,
+            int nb_count, int usedConst, unsigned int power, float norm, int s0, int s1, int s2, unsigned samples, double K0_d, double K1_d) {
             int x2 = blockDim.x * blockIdx.x + threadIdx.x;
             int x1 = blockDim.y * blockIdx.y + threadIdx.y;
             int x0 = blockDim.z * blockIdx.z + threadIdx.z;
@@ -1865,7 +2067,7 @@ namespace tira {
 
             // Loop over neighbors
             for (int k = 0; k < nb_count; ++k) {
-                const Neighbor3D_CUDA& nb = (usedConst ? d_neighbors_const[k] : d_neigbors_glob[k]);
+                const DeviceNeighbor3D& nb = (usedConst ? d_neighbors_const[k] : d_neigbors_glob[k]);
                 const int r0 = x0 + nb.dw;
                 const int r1 = x1 + nb.dv;
                 const int r2 = x2 + nb.du;
