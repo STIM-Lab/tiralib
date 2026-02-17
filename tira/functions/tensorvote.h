@@ -40,6 +40,8 @@ namespace tira {
         return c * tp;
     }
 
+    // -------------------- Analytical Tensor Voting (ATV) - 2D --------------------
+
     /**
      * Calculate the distance attentuation for the tensor vote, which is just a Gaussian
      * function based on the distance between the voter and receiver.
@@ -78,36 +80,6 @@ namespace tira {
     }
 
     /**
-     * Calculate the rotation matrix R for analytical tensor voting in 3D. The rotation matrix
-     * is returned as symmetric 3x3 upper triangle in column-major format:
-     * [ a  b  d ]
-     * [ b  c  e ]
-     * [ d  e  f ]
-     * 
-     * @tparam Type data type for the calculation
-     * @param dx is the x direction from the voter to the receiver
-     * @param dy is the y direction from the voter to the receiver
-     * @param dz is the z direction from the voter to the receiver
-     * @param out_a is the (0,0) component of the rotation matrix
-     * @param out_b is the (0,1) component of the rotation matrix
-     * @param out_c is the (1,1) component of the rotation matrix
-     * @param out_d is the (0,2) component of the rotation matrix
-     * @param out_e is the (1,2) component of the rotation matrix
-     * @param out_f is the (2,2) component of the rotation matrix
-     */
-    template <typename Type>
-    CUDA_CALLABLE static void atv_rotation(Type dx, Type dy, Type dz, Type& out_a, Type& out_b, Type& out_c,
-        Type& out_d, Type& out_e, Type& out_f) {
-        const Type two = Type(2);
-        out_a = Type(1) - two * dx * dx;
-        out_b = Type(0) - two * dx * dy;
-        out_c = Type(1) - two * dy * dy;
-        out_d = Type(0) - two * dx * dz;
-        out_e = Type(0) - two * dy * dz;
-        out_f = Type(1) - two * dz * dz;
-    }
-
-    /**
      * Calculate the tensor produced by a normalized 2D eigenvector. This is the outer product
      * of the vector with itself. The matrix is returned as a diagonal matrix in
      * column-major format:
@@ -128,40 +100,6 @@ namespace tira {
         out_b = evec_x * evec_y;
         out_c = evec_y * evec_y;
     }
-
-    /**
-     * @brief Calculate the tensor produced by a normalized 3D eigenvector. This is the outer product
-     * of the vector with itself. The matrix is returned as a symmetric 3x3 upper triangle in column-major format:
-     * [ a  b  d ]
-     * [ b  c  e ]
-     * [ d  e  f ]
-     * 
-     * @tparam Type data type for the calculation
-     * @param evec_x x direction of the eigenvector
-     * @param evec_y y direction of the eigenvector
-     * @param evec_z z direction of the eigenvector
-     * @param out_a is the (0,0) component of the output matrix
-     * @param out_b is the (0,1) component of the output matrix
-     * @param out_c is the (1,1) component of the output matrix
-     * @param out_d is the (0,2) component of the output matrix
-     * @param out_e is the (1,2) component of the output matrix
-     * @param out_f is the (2,2) component of the output matrix
-     */
-    template <typename Type>
-    CUDA_CALLABLE static void atv_normalized_T(Type evec_x, Type evec_y, Type evec_z,
-        Type& out_a, Type& out_b, Type& out_c, Type& out_d, Type& out_e, Type& out_f) {
-        out_a = evec_x * evec_x;
-        out_b = evec_x * evec_y;
-        out_c = evec_y * evec_y;
-        out_d = evec_x * evec_z;
-        out_e = evec_y * evec_z;
-        out_f = evec_z * evec_z;
-    }
-
-    /*
-     * The following functions are used to calculate the H matrix in the analytical tensor
-     * voting paper.
-     */
 
     /**
      * Calculates the v^T * T_d * v * T_d term of the 2D H matrix given the direction
@@ -188,51 +126,6 @@ namespace tira {
         out_a = T_a * vTv;
         out_b = T_b * vTv;
         out_c = T_c * vTv;
-    }
-
-    /**
-     * @brief Calculates the v^T * T_d * v * T_d term of the 3D H matrix given the direction
-     * vector v and the normalized matrix T_d. The result is a symmetric 3x3 upper triangle in column-major format:
-     * [ a  b  d ]
-     * [ b  c  e ]
-     * [ d  e  f ]
-     * 
-     * @tparam Type data type for the calculation
-     * @param dx is the x direction from voter to receiver
-     * @param dy is the y direction from voter to receiver
-     * @param dz is the z direction from voter to receiver
-     * @param T_a is the (0,0) component of T_d
-     * @param T_b is the (0,1) component of T_d
-     * @param T_c is the (1,1) component of T_d
-     * @param T_d is the (0,2) component of T_d
-     * @param T_e is the (1,2) component of T_d
-     * @param T_f is the (2,2) component of T_d
-     * @param out_a is the (0,0) component of the output matrix
-     * @param out_b is the (0,1) component of the output matrix
-     * @param out_c is the (1,1) component of the output matrix
-     * @param out_d is the (0,2) component of the output matrix
-     * @param out_e is the (1,2) component of the output matrix
-     * @param out_f is the (2,2) component of the output matrix
-     */
-    template <typename Type>
-    CUDA_CALLABLE void atv_vTvT( Type dx, Type dy, Type dz,
-        Type T_a, Type T_b, Type T_c, Type T_d, Type T_e, Type T_f,
-        Type& out_a, Type& out_b, Type& out_c, Type& out_d, Type& out_e, Type& out_f) {
-        // Tv
-        const Type tvx = T_a * dx + T_b * dy + T_d * dz;
-        const Type tvy = T_b * dx + T_c * dy + T_e * dz;
-        const Type tvz = T_d * dx + T_e * dy + T_f * dz;
-            
-        // v^T T v
-        const Type vTv = dx * tvx + dy * tvy + dz * tvz;
-
-        // (v^T T v) * T
-        out_a = T_a * vTv;
-        out_b = T_b * vTv;
-        out_c = T_c * vTv;
-        out_d = T_d * vTv;
-        out_e = T_e * vTv;
-        out_f = T_f * vTv;
     }
 
     /**
@@ -263,48 +156,6 @@ namespace tira {
         out_a = tvx * tvx;
         out_b = tvx * tvy;
         out_c = tvy * tvy;
-    }
-
-    /**
-     * @brief Calculates the T_d * v * v^T * T_d term of the 3D H matrix given the direction
-     * vector v and the normalized matrix T_d. The result is a symmetric 3x3 upper triangle in column-major format:
-     * [ a  b  d ]
-     * [ b  c  e ]
-     * [ d  e  f ]
-     * 
-     * @tparam Type data type for the calculation
-     * @param dx is the x direction from voter to receiver
-     * @param dy is the y direction from voter to receiver
-     * @param dz is the z direction from voter to receiver
-     * @param T_a is the (0,0) component of T_d
-     * @param T_b is the (0,1) component of T_d
-     * @param T_c is the (1,1) component of T_d
-     * @param T_d is the (0,2) component of T_d
-     * @param T_e is the (1,2) component of T_d
-     * @param T_f is the (2,2) component of T_d
-     * @param out_a is the (0,0) component of the output matrix
-     * @param out_b is the (0,1) component of the output matrix
-     * @param out_c is the (1,1) component of the output matrix
-     * @param out_d is the (0,2) component of the output matrix
-     * @param out_e is the (1,2) component of the output matrix
-     * @param out_f is the (2,2) component of the output matrix 
-     */
-    template <typename Type>
-    CUDA_CALLABLE void atv_TvvT(Type dx, Type dy, Type dz,
-        Type T_a, Type T_b, Type T_c, Type T_d, Type T_e, Type T_f,
-        Type& out_a, Type& out_b, Type& out_c, Type& out_d, Type& out_e, Type& out_f) {
-        // Tv
-        const Type tvx = T_a * dx + T_b * dy + T_d * dz;
-        const Type tvy = T_b * dx + T_c * dy + T_e * dz;
-        const Type tvz = T_d * dx + T_e * dy + T_f * dz;
-
-        // (Tv)(Tv)^T
-        out_a = tvx * tvx;
-        out_b = tvx * tvy;
-        out_c = tvy * tvy;
-        out_d = tvx * tvz;
-        out_e = tvy * tvz;
-        out_f = tvz * tvz;
     }
 
     /**
@@ -364,108 +215,6 @@ namespace tira {
         H_a += s0 * (T0_a - inv4 * (vT0vT0_a + 2 * T0vvT0_a));
         H_b += s0 * (T0_b - inv4 * (vT0vT0_b + 2 * T0vvT0_b));
         H_c += s0 * (T0_c - inv4 * (vT0vT0_c + 2 * T0vvT0_c));
-    }
-
-    /**
-     * @brief Calculates the H matrix for analytical tensor voting in 3D.
-     * The result is a symmetric 3x3 upper triangle in column-major format:
-     * [ a  b  d ]
-     * [ b  c  e ]
-     * [ d  e  f ] 
-     * 
-     * @tparam Type data type used in the calculation
-     * @param lambda0 smallest eigenvalue of the input tensor
-     * @param lambda1 middle eigenvalue of the input tensor
-     * @param lambda2 largest eigenvalue of the input tensor
-     * @param ev0x x direction of the smallest eigenvector
-     * @param ev0y y direction of the smallest eigenvector
-     * @param ev0z z direction of the smallest eigenvector
-     * @param ev1x x direction of the middle eigenvector
-     * @param ev1y y direction of the middle eigenvector
-     * @param ev1z z direction of the middle eigenvector
-     * @param ev2x x direction of the largest eigenvector
-     * @param ev2y y direction of the largest eigenvector
-     * @param ev2z z direction of the largest eigenvector
-     * @param dx  x component of the vector from voter to receiver
-     * @param dy y component of the vector from voter to receiver
-     * @param dz z component of the vector from voter to receiver
-     * @param H_a the (0,0) component of the output H matrix
-     * @param H_b the (1,0) component of the output H matrix
-     * @param H_c the (1,1) component of the output H matrix
-     * @param H_d the (2,0) component of the output H matrix
-     * @param H_e the (2,1) component of the output H matrix
-     * @param H_f the (2,2) component of the output H matrix
-     */
-    template <typename Type>
-    CUDA_CALLABLE static void atv_H(Type lambda0, Type lambda1, Type lambda2,
-        Type ev0x, Type ev0y, Type ev0z, Type ev1x, Type ev1y, Type ev1z, Type ev2x, Type ev2y, Type ev2z,
-        Type dx, Type dy, Type dz, Type& H_a, Type& H_b, Type& H_c, Type& H_d, Type& H_e, Type& H_f) {
-        // Build normalized elementary tensors
-        // T1 = e2 e2^T (stick)
-        Type T1_a, T1_b, T1_c, T1_d, T1_e, T1_f;
-        atv_normalized_T(ev2x, ev2y, ev2z, T1_a, T1_b, T1_c, T1_d, T1_e, T1_f);
-
-        // T2 = e2 e2^T + e1 e1^T (plate)
-        Type T2_a, T2_b, T2_c, T2_d, T2_e, T2_f;
-        atv_normalized_T(ev1x, ev1y, ev1z, T2_a, T2_b, T2_c, T2_d, T2_e, T2_f);
-        T2_a += T1_a;  T2_b += T1_b;  T2_c += T1_c;
-        T2_d += T1_d;  T2_e += T1_e;  T2_f += T1_f;
-
-        // T3 = e2 e2^T + e1 e1^T + e0 e0^T (ball) = I
-        Type T3_a, T3_b, T3_c, T3_d, T3_e, T3_f;
-        atv_normalized_T(ev0x, ev0y, ev0z, T3_a, T3_b, T3_c, T3_d, T3_e, T3_f);
-        T3_a += T2_a;  T3_b += T2_b;  T3_c += T2_c;
-        T3_d += T2_d;  T3_e += T2_e;  T3_f += T2_f;
-
-        // Internal terms for each K: vTvT and TvvT
-        Type vT1_a, vT1_b, vT1_c, vT1_d, vT1_e, vT1_f;
-        Type T1vv_a, T1vv_b, T1vv_c, T1vv_d, T1vv_e, T1vv_f;
-        atv_vTvT(dx, dy, dz, T1_a, T1_b, T1_c, T1_d, T1_e, T1_f, vT1_a, vT1_b, vT1_c, vT1_d, vT1_e, vT1_f);
-        atv_TvvT(dx, dy, dz, T1_a, T1_b, T1_c, T1_d, T1_e, T1_f, T1vv_a, T1vv_b, T1vv_c, T1vv_d, T1vv_e, T1vv_f);
-
-        Type vT2_a, vT2_b, vT2_c, vT2_d, vT2_e, vT2_f;
-        Type T2vv_a, T2vv_b, T2vv_c, T2vv_d, T2vv_e, T2vv_f;
-        atv_vTvT(dx, dy, dz, T2_a, T2_b, T2_c, T2_d, T2_e, T2_f, vT2_a, vT2_b, vT2_c, vT2_d, vT2_e, vT2_f);
-        atv_TvvT(dx, dy, dz, T2_a, T2_b, T2_c, T2_d, T2_e, T2_f, T2vv_a, T2vv_b, T2vv_c, T2vv_d, T2vv_e, T2vv_f);
-
-        Type vT3_a, vT3_b, vT3_c, vT3_d, vT3_e, vT3_f;
-        Type T3vv_a, T3vv_b, T3vv_c, T3vv_d, T3vv_e, T3vv_f;
-        atv_vTvT(dx, dy, dz, T3_a, T3_b, T3_c, T3_d, T3_e, T3_f, vT3_a, vT3_b, vT3_c, vT3_d, vT3_e, vT3_f);
-        atv_TvvT(dx, dy, dz, T3_a, T3_b, T3_c, T3_d, T3_e, T3_f, T3vv_a, T3vv_b, T3vv_c, T3vv_d, T3vv_e, T3vv_f);
-
-        // Saliencies for N=3 (lambda0 <= lambda1 <= lambda2)
-        const Type s1 = lambda2 - lambda1;                      // stick
-        const Type s2 = lambda1 - lambda0;                      // plate
-        const Type s3 = lambda0;                                // ball
-
-        const Type inv3 = Type(1) / Type(3);                    // 1/(K+2), K=1
-        const Type inv4 = Type(1) / Type(4);                    // K=2
-        const Type inv5 = Type(1) / Type(5);                    // K=3
-
-        // H = sum_K sK * ( T_K - 1/(K+2) * ( vTvT + 2*TvvT ) )
-        H_a = s1 * (T1_a - inv3 * (vT1_a + Type(2) * T1vv_a))
-            + s2 * (T2_a - inv4 * (vT2_a + Type(2) * T2vv_a))
-            + s3 * (T3_a - inv5 * (vT3_a + Type(2) * T3vv_a));
-
-        H_b = s1 * (T1_b - inv3 * (vT1_b + Type(2) * T1vv_b))
-            + s2 * (T2_b - inv4 * (vT2_b + Type(2) * T2vv_b))
-            + s3 * (T3_b - inv5 * (vT3_b + Type(2) * T3vv_b));
-
-        H_c = s1 * (T1_c - inv3 * (vT1_c + Type(2) * T1vv_c))
-            + s2 * (T2_c - inv4 * (vT2_c + Type(2) * T2vv_c))
-            + s3 * (T3_c - inv5 * (vT3_c + Type(2) * T3vv_c));
-
-        H_d = s1 * (T1_d - inv3 * (vT1_d + Type(2) * T1vv_d))
-            + s2 * (T2_d - inv4 * (vT2_d + Type(2) * T2vv_d))
-            + s3 * (T3_d - inv5 * (vT3_d + Type(2) * T3vv_d));
-
-        H_e = s1 * (T1_e - inv3 * (vT1_e + Type(2) * T1vv_e))
-            + s2 * (T2_e - inv4 * (vT2_e + Type(2) * T2vv_e))
-            + s3 * (T3_e - inv5 * (vT3_e + Type(2) * T3vv_e));
-
-        H_f = s1 * (T1_f - inv3 * (vT1_f + Type(2) * T1vv_f))
-            + s2 * (T2_f - inv4 * (vT2_f + Type(2) * T2vv_f))
-            + s3 * (T3_f - inv5 * (vT3_f + Type(2) * T3vv_f));
     }
 
     /**
@@ -534,93 +283,6 @@ namespace tira {
     }
 
     /**
-     * @brief Implements analytical tensor voting in 3D given:
-     *      1) a triple of eigenvalues such that l0 <= l1 <= l2
-     *      2) a triple of eigenvectors associated with these eigenvalues
-     *      3) the position of the receiver relative to the voter (where the voter is at the origin)
-     *      4) a sigma value specifying the distance attenuation of the vote
-     * This function calculates the resulting vote at the receiver location as a symmetric 3x3 upper triangle in column-major format:
-     * [ a  b  d ]
-     * [ b  c  e ]
-     * [ d  e  f ]
-     * 
-     * @tparam Type data type used in the calculation
-     * @param lambda0 smallest eigenvalue
-     * @param lambda1 middle eigenvalue
-     * @param lambda2 largest eigenvalue
-     * @param ev0x x coordinate of the smallest eigenvector
-     * @param ev0y y coordinate of the smallest eigenvector
-     * @param ev0z z coordinate of the smallest eigenvector
-     * @param ev1x x coordinate of the middle eigenvector
-     * @param ev1y y coordinate of the middle eigenvector
-     * @param ev1z z coordinate of the middle eigenvector
-     * @param ev2x x coordinate of the largest eigenvector
-     * @param ev2y y coordinate of the largest eigenvector
-     * @param ev2z z coordinate of the largest eigenvector
-     * @param rx x coordinate of receiver relative to voter location
-     * @param ry y coordinate of receiver relative to voter location
-     * @param rz z coordinate of receiver relative to voter location
-     * @param sigma distance attenuation parameter (standard deviation of a Gaussian)
-     * @param V_a (0,0) component of the resulting vote matrix
-     * @param V_b (0,1) component of the resulting vote matrix
-     * @param V_c (1,1) component of the resulting vote matrix
-     * @param V_d (0,2) component of the resulting vote matrix
-     * @param V_e (1,2) component of the resulting vote matrix
-     * @param V_f (2,2) component of the resulting vote matrix
-     */
-    template <typename Type>
-    CUDA_CALLABLE static void atv(Type lambda0, Type lambda1, Type lambda2,
-        Type ev0x, Type ev0y, Type ev0z, Type ev1x, Type ev1y, Type ev1z, Type ev2x, Type ev2y, Type ev2z,
-        Type rx, Type ry, Type rz, Type sigma,
-        Type& V_a, Type& V_b, Type& V_c, Type& V_d, Type& V_e, Type& V_f) {
-        const Type dist = std::sqrt(rx * rx + ry * ry + rz * rz);
-        const Type c = atv_attenuation(dist, sigma);
-
-        // Unit direction v from voter->receiver; handle degenerate case (dist==0) so vote reduces to identity rotation.
-        Type dx, dy, dz;
-        if (dist == Type(0))
-            dx = dy = dz = Type(0);
-        else {
-            const Type inv = Type(1) / dist;
-            dx = rx * inv;
-            dy = ry * inv;
-            dz = rz * inv;
-        }
-
-        // Rotation R = I - 2 v v^T
-        Type R_a, R_b, R_c, R_d, R_e, R_f;
-        atv_rotation(dx, dy, dz, R_a, R_b, R_c, R_d, R_e, R_f);
-
-        // H matrix (closed-form)
-        Type H_a, H_b, H_c, H_d, H_e, H_f;
-        atv_H(lambda0, lambda1, lambda2,
-              ev0x, ev0y, ev0z, ev1x, ev1y, ev1z, ev2x, ev2y, ev2z,
-              dx, dy, dz, H_a, H_b, H_c, H_d, H_e, H_f);
-
-        // Compute V = c * R H R^T, but R is symmetric, so V = c * R H R.
-        // First A = R H (full 3x3, A might not be symmetric)
-        const Type A00 = R_a * H_a + R_b * H_b + R_c * H_c;
-        const Type A01 = R_a * H_b + R_b * H_d + R_c * H_e;
-        const Type A02 = R_a * H_c + R_b * H_e + R_c * H_f;
-
-        const Type A10 = R_b * H_a + R_d * H_b + R_e * H_c;
-        const Type A11 = R_b * H_b + R_d * H_d + R_e * H_e;
-        const Type A12 = R_b * H_c + R_d * H_e + R_e * H_f;
-
-        const Type A20 = R_c * H_a + R_e * H_b + R_f * H_c;
-        const Type A21 = R_c * H_b + R_e * H_d + R_f * H_e;
-        const Type A22 = R_c * H_c + R_e * H_e + R_f * H_f;
-
-        // Then V = A R (and return upper triangle)
-        V_a = c * (A00 * R_a + A01 * R_b + A02 * R_c);   // V00
-        V_b = c * (A00 * R_b + A01 * R_d + A02 * R_e);   // V01
-        V_c = c * (A00 * R_c + A01 * R_e + A02 * R_f);   // V02
-        V_d = c * (A10 * R_b + A11 * R_d + A12 * R_e);   // V11
-        V_e = c * (A10 * R_c + A11 * R_e + A12 * R_f);   // V12
-        V_f = c * (A20 * R_c + A21 * R_e + A22 * R_f);   // V22
-    }
-
-    /**
      * Calculate the result of analytical tensor voting across a window of voters, where
      * the receiver is at the center. This function sums the contributions of all votes
      * within the window and returns the final vote result at the receiver. The receiver
@@ -683,6 +345,459 @@ namespace tira {
             }
         }
     }
+
+    // -------------------- Analytical Tensor Voting (ATV) - 3D --------------------
+
+    /**
+     * @brief Construct a full orthonormal eigenframe (e0,e1,e2) from the smallest and
+     * largest eigenvectors in 3D.
+     *
+     * ATV in 3D needs all three eigenvectors. We only store the smallest (e0) and largest (e2) eigenvectors.
+     * The middle eigenvector is then recovered as an orthogonal direction.
+     *
+     * This routine:
+     *  1) normalizes e2,
+     *  2) orthogonalizes/normalizes e0 against e2 (Gram-Schmidt),
+     *  3) sets e1 = normalize(cross(e2, e0)),
+     *  4) recomputes e0 = cross(e1, e2) for a consistent orthonormal basis.
+     *
+     * Note: eigenvector signs are irrelevant for ATV (only outer products are used).
+     */
+    template <typename Type>
+    CUDA_CALLABLE static void atv_eigenframe_3d(const Type ev0x, const Type ev0y, const Type ev0z,
+        const Type ev2x, const Type ev2y, const Type ev2z,
+        Type& e0x, Type& e0y, Type& e0z, Type& e1x, Type& e1y, Type& e1z, Type& e2x, Type& e2y, Type& e2z) {
+
+        // Normalize e2 (largest)
+        Type n2 = sqrt(ev2x * ev2x + ev2y * ev2y + ev2z * ev2z);
+        if (n2 <= Type(TV_EPSILON)) {
+            e2x = Type(1); e2y = Type(0); e2z = Type(0);
+        } else {
+            const Type inv = Type(1) / n2;
+            e2x = ev2x * inv; e2y = ev2y * inv; e2z = ev2z * inv;
+        }
+        // Start from provided e0 (smallest)
+        e0x = ev0x; e0y = ev0y; e0z = ev0z;
+        Type n0 = sqrt(e0x * e0x + e0y * e0y + e0z * e0z);
+        if (n0 <= Type(TV_EPSILON)) {
+            // Fallback: pick a vector not parallel to e2
+            Type ax = Type(0), ay = Type(0), az = Type(0);
+            const Type ax_abs = fabs(e2x), ay_abs = fabs(e2y), az_abs = fabs(e2z);
+            if (ax_abs <= ay_abs && ax_abs <= az_abs) { ax = Type(1); }
+            else if (ay_abs <= az_abs) { ay = Type(1); }
+            else { az = Type(1); }
+            // e0 = normalize(cross(axis, e2))
+            e0x = ay * e2z - az * e2y;
+            e0y = az * e2x - ax * e2z;
+            e0z = ax * e2y - ay * e2x;
+        } else {
+            // Normalize
+            const Type inv0 = Type(1) / n0;
+            e0x *= inv0; e0y *= inv0; e0z *= inv0;
+        }
+        // Gram-Schmidt: remove component along e2
+        const Type dot02 = e0x * e2x + e0y * e2y + e0z * e2z;
+        e0x -= dot02 * e2x;
+        e0y -= dot02 * e2y;
+        e0z -= dot02 * e2z;
+        // Normalize e0 again (fallback if degenerate)
+        n0 = sqrt(e0x * e0x + e0y * e0y + e0z * e0z);
+        if (n0 <= Type(TV_EPSILON)) {
+            // Choose another axis and rebuild e0
+            Type ax = Type(0), ay = Type(0), az = Type(0);
+            const Type ax_abs = fabs(e2x), ay_abs = fabs(e2y), az_abs = fabs(e2z);
+            if (ax_abs <= ay_abs && ax_abs <= az_abs) { ax = Type(1); }
+            else if (ay_abs <= az_abs) { ay = Type(1); }
+            else { az = Type(1); }
+            e0x = ay * e2z - az * e2y;
+            e0y = az * e2x - ax * e2z;
+            e0z = ax * e2y - ay * e2x;
+            n0 = sqrt(e0x * e0x + e0y * e0y + e0z * e0z);
+            if (n0 <= Type(TV_EPSILON)) {
+                // Ultimate fallback: fixed frame
+                e0x = Type(0); e0y = Type(1); e0z = Type(0);
+                n0 = Type(1);
+            }
+        }
+        {
+            const Type inv0 = Type(1) / n0;
+            e0x *= inv0; e0y *= inv0; e0z *= inv0;
+        }
+        // e1 = normalize(cross(e2, e0))
+        e1x = e2y * e0z - e2z * e0y;
+        e1y = e2z * e0x - e2x * e0z;
+        e1z = e2x * e0y - e2y * e0x;
+        Type n1 = sqrt(e1x * e1x + e1y * e1y + e1z * e1z);
+        if (n1 <= Type(TV_EPSILON)) {
+            // If e2 and e0 accidentally align, pick any perpendicular e1
+            Type ax = Type(0), ay = Type(0), az = Type(0);
+            const Type ax_abs = fabs(e2x), ay_abs = fabs(e2y), az_abs = fabs(e2z);
+            if (ax_abs <= ay_abs && ax_abs <= az_abs) { ax = Type(1); }
+            else if (ay_abs <= az_abs) { ay = Type(1); }
+            else { az = Type(1); }
+            e1x = e2y * az - e2z * ay;
+            e1y = e2z * ax - e2x * az;
+            e1z = e2x * ay - e2y * ax;
+            n1 = sqrt(e1x * e1x + e1y * e1y + e1z * e1z);
+            if (n1 <= Type(TV_EPSILON)) {
+                e1x = Type(0); e1y = Type(0); e1z = Type(1);
+                n1 = Type(1);
+            }
+        }
+        {
+            const Type inv1 = Type(1) / n1;
+            e1x *= inv1; e1y *= inv1; e1z *= inv1;
+        }
+        // Recompute e0 = cross(e1, e2) for a clean orthonormal frame
+        e0x = e1y * e2z - e1z * e2y;
+        e0y = e1z * e2x - e1x * e2z;
+        e0z = e1x * e2y - e1y * e2x;
+    }
+
+    /**
+     * Calculate the rotation matrix R for analytical tensor voting in 3D. The rotation matrix
+     * is returned as symmetric 3x3 upper triangle in column-major format:
+     * [ a  b  d ]
+     * [ b  c  e ]
+     * [ d  e  f ]
+     * 
+     * @tparam Type data type for the calculation
+     * @param dx is the x direction from the voter to the receiver
+     * @param dy is the y direction from the voter to the receiver
+     * @param dz is the z direction from the voter to the receiver
+     * @param out_a is the (0,0) component of the rotation matrix
+     * @param out_b is the (0,1) component of the rotation matrix
+     * @param out_c is the (1,1) component of the rotation matrix
+     * @param out_d is the (0,2) component of the rotation matrix
+     * @param out_e is the (1,2) component of the rotation matrix
+     * @param out_f is the (2,2) component of the rotation matrix
+     */
+    template <typename Type>
+    CUDA_CALLABLE static void atv_rotation(Type dx, Type dy, Type dz, Type& out_a, Type& out_b, Type& out_c,
+        Type& out_d, Type& out_e, Type& out_f) {
+        const Type two = Type(2);
+        out_a = Type(1) - two * dx * dx;
+        out_b = Type(0) - two * dx * dy;
+        out_c = Type(1) - two * dy * dy;
+        out_d = Type(0) - two * dx * dz;
+        out_e = Type(0) - two * dy * dz;
+        out_f = Type(1) - two * dz * dz;
+    }
+
+    /**
+     * @brief Calculate the tensor produced by a normalized 3D eigenvector. This is the outer product
+     * of the vector with itself. The matrix is returned as a symmetric 3x3 upper triangle in column-major format:
+     * [ a  b  d ]
+     * [ b  c  e ]
+     * [ d  e  f ]
+     * 
+     * @tparam Type data type for the calculation
+     * @param evec_x x direction of the eigenvector
+     * @param evec_y y direction of the eigenvector
+     * @param evec_z z direction of the eigenvector
+     * @param out_a is the (0,0) component of the output matrix
+     * @param out_b is the (0,1) component of the output matrix
+     * @param out_c is the (1,1) component of the output matrix
+     * @param out_d is the (0,2) component of the output matrix
+     * @param out_e is the (1,2) component of the output matrix
+     * @param out_f is the (2,2) component of the output matrix
+     */
+    template <typename Type>
+    CUDA_CALLABLE static void atv_normalized_T(Type evec_x, Type evec_y, Type evec_z,
+        Type& out_a, Type& out_b, Type& out_c, Type& out_d, Type& out_e, Type& out_f) {
+        out_a = evec_x * evec_x;
+        out_b = evec_x * evec_y;
+        out_c = evec_y * evec_y;
+        out_d = evec_x * evec_z;
+        out_e = evec_y * evec_z;
+        out_f = evec_z * evec_z;
+    }
+
+    /**
+     * @brief Calculates the v^T * T_d * v * T_d term of the 3D H matrix given the direction
+     * vector v and the normalized matrix T_d. The result is a symmetric 3x3 upper triangle in column-major format:
+     * [ a  b  d ]
+     * [ b  c  e ]
+     * [ d  e  f ]
+     * 
+     * @tparam Type data type for the calculation
+     * @param dx is the x direction from voter to receiver
+     * @param dy is the y direction from voter to receiver
+     * @param dz is the z direction from voter to receiver
+     * @param T_a is the (0,0) component of T_d
+     * @param T_b is the (0,1) component of T_d
+     * @param T_c is the (1,1) component of T_d
+     * @param T_d is the (0,2) component of T_d
+     * @param T_e is the (1,2) component of T_d
+     * @param T_f is the (2,2) component of T_d
+     * @param out_a is the (0,0) component of the output matrix
+     * @param out_b is the (0,1) component of the output matrix
+     * @param out_c is the (1,1) component of the output matrix
+     * @param out_d is the (0,2) component of the output matrix
+     * @param out_e is the (1,2) component of the output matrix
+     * @param out_f is the (2,2) component of the output matrix
+     */
+    template <typename Type>
+    CUDA_CALLABLE void atv_vTvT( Type dx, Type dy, Type dz,
+        Type T_a, Type T_b, Type T_c, Type T_d, Type T_e, Type T_f,
+        Type& out_a, Type& out_b, Type& out_c, Type& out_d, Type& out_e, Type& out_f) {
+        // Tv
+        const Type tvx = T_a * dx + T_b * dy + T_d * dz;
+        const Type tvy = T_b * dx + T_c * dy + T_e * dz;
+        const Type tvz = T_d * dx + T_e * dy + T_f * dz;
+            
+        // v^T T v
+        const Type vTv = dx * tvx + dy * tvy + dz * tvz;
+
+        // (v^T T v) * T
+        out_a = T_a * vTv;
+        out_b = T_b * vTv;
+        out_c = T_c * vTv;
+        out_d = T_d * vTv;
+        out_e = T_e * vTv;
+        out_f = T_f * vTv;
+    }
+
+    /**
+     * @brief Calculates the T_d * v * v^T * T_d term of the 3D H matrix given the direction
+     * vector v and the normalized matrix T_d. The result is a symmetric 3x3 upper triangle in column-major format:
+     * [ a  b  d ]
+     * [ b  c  e ]
+     * [ d  e  f ]
+     * 
+     * @tparam Type data type for the calculation
+     * @param dx is the x direction from voter to receiver
+     * @param dy is the y direction from voter to receiver
+     * @param dz is the z direction from voter to receiver
+     * @param T_a is the (0,0) component of T_d
+     * @param T_b is the (0,1) component of T_d
+     * @param T_c is the (1,1) component of T_d
+     * @param T_d is the (0,2) component of T_d
+     * @param T_e is the (1,2) component of T_d
+     * @param T_f is the (2,2) component of T_d
+     * @param out_a is the (0,0) component of the output matrix
+     * @param out_b is the (0,1) component of the output matrix
+     * @param out_c is the (1,1) component of the output matrix
+     * @param out_d is the (0,2) component of the output matrix
+     * @param out_e is the (1,2) component of the output matrix
+     * @param out_f is the (2,2) component of the output matrix 
+     */
+    template <typename Type>
+    CUDA_CALLABLE void atv_TvvT(Type dx, Type dy, Type dz,
+        Type T_a, Type T_b, Type T_c, Type T_d, Type T_e, Type T_f,
+        Type& out_a, Type& out_b, Type& out_c, Type& out_d, Type& out_e, Type& out_f) {
+        // Tv
+        const Type tvx = T_a * dx + T_b * dy + T_d * dz;
+        const Type tvy = T_b * dx + T_c * dy + T_e * dz;
+        const Type tvz = T_d * dx + T_e * dy + T_f * dz;
+
+        // (Tv)(Tv)^T
+        out_a = tvx * tvx;
+        out_b = tvx * tvy;
+        out_c = tvy * tvy;
+        out_d = tvx * tvz;
+        out_e = tvy * tvz;
+        out_f = tvz * tvz;
+    }
+
+    /**
+     * @brief Calculates the H matrix for analytical tensor voting in 3D.
+     * The result is a symmetric 3x3 upper triangle in column-major format:
+     * [ a  b  d ]
+     * [ b  c  e ]
+     * [ d  e  f ] 
+     * 
+     * @tparam Type data type used in the calculation
+     * @param lambda0 smallest eigenvalue of the input tensor
+     * @param lambda1 middle eigenvalue of the input tensor
+     * @param lambda2 largest eigenvalue of the input tensor
+     * @param ev0x x direction of the smallest eigenvector
+     * @param ev0y y direction of the smallest eigenvector
+     * @param ev0z z direction of the smallest eigenvector
+     * @param ev1x x direction of the middle eigenvector
+     * @param ev1y y direction of the middle eigenvector
+     * @param ev1z z direction of the middle eigenvector
+     * @param ev2x x direction of the largest eigenvector
+     * @param ev2y y direction of the largest eigenvector
+     * @param ev2z z direction of the largest eigenvector
+     * @param dx  x component of the vector from voter to receiver
+     * @param dy y component of the vector from voter to receiver
+     * @param dz z component of the vector from voter to receiver
+     * @param H_a the (0,0) component of the output H matrix
+     * @param H_b the (1,0) component of the output H matrix
+     * @param H_c the (1,1) component of the output H matrix
+     * @param H_d the (2,0) component of the output H matrix
+     * @param H_e the (2,1) component of the output H matrix
+     * @param H_f the (2,2) component of the output H matrix
+     */
+    template <typename Type>
+    CUDA_CALLABLE static void atv_H(Type lambda0, Type lambda1, Type lambda2,
+        Type ev0x, Type ev0y, Type ev0z, Type ev2x, Type ev2y, Type ev2z,
+        Type dx, Type dy, Type dz, Type& H_a, Type& H_b, Type& H_c, Type& H_d, Type& H_e, Type& H_f) {
+        
+        // Build a complete orthonormal frame (e0,e1,e2)
+        Type e0x, e0y, e0z, e1x, e1y, e1z, e2x, e2y, e2z;
+        atv_eigenframe_3d(ev0x, ev0y, ev0z, ev2x, ev2y, ev2z, e0x, e0y, e0z, e1x, e1y, e1z, e2x, e2y, e2z);
+
+        // T1 from largest eigenvector e2
+        Type T1_a, T1_b, T1_c, T1_d, T1_e, T1_f;
+        atv_normalized_T(e2x, e2y, e2z, T1_a, T1_b, T1_c, T1_d, T1_e, T1_f);
+
+        // T2 from e2 and e1 (plate subspace)
+        Type T2_a, T2_b, T2_c, T2_d, T2_e, T2_f;
+        atv_normalized_T(e1x, e1y, e1z, T2_a, T2_b, T2_c, T2_d, T2_e, T2_f);
+        T2_a += T1_a; T2_b += T1_b; T2_c += T1_c; T2_d += T1_d; T2_e += T1_e; T2_f += T1_f;
+
+        // T3 = Identity (ball subspace)
+        const Type T3_a = Type(1), T3_b = Type(0), T3_c = Type(1);
+        const Type T3_d = Type(0), T3_e = Type(0), T3_f = Type(1);
+
+        // Internal terms for each Tk
+        Type vT1vT1_a, vT1vT1_b, vT1vT1_c, vT1vT1_d, vT1vT1_e, vT1vT1_f;
+        atv_vTvT(dx, dy, dz, T1_a, T1_b, T1_c, T1_d, T1_e, T1_f,
+            vT1vT1_a, vT1vT1_b, vT1vT1_c, vT1vT1_d, vT1vT1_e, vT1vT1_f);
+        Type vT2vT2_a, vT2vT2_b, vT2vT2_c, vT2vT2_d, vT2vT2_e, vT2vT2_f;
+        atv_vTvT(dx, dy, dz, T2_a, T2_b, T2_c, T2_d, T2_e, T2_f,
+            vT2vT2_a, vT2vT2_b, vT2vT2_c, vT2vT2_d, vT2vT2_e, vT2vT2_f);
+        Type vT3vT3_a, vT3vT3_b, vT3vT3_c, vT3vT3_d, vT3vT3_e, vT3vT3_f;
+        atv_vTvT(dx, dy, dz, T3_a, T3_b, T3_c, T3_d, T3_e, T3_f,
+            vT3vT3_a, vT3vT3_b, vT3vT3_c, vT3vT3_d, vT3vT3_e, vT3vT3_f);
+        Type T1vvT1_a, T1vvT1_b, T1vvT1_c, T1vvT1_d, T1vvT1_e, T1vvT1_f;
+        atv_TvvT(dx, dy, dz, T1_a, T1_b, T1_c, T1_d, T1_e, T1_f,
+            T1vvT1_a, T1vvT1_b, T1vvT1_c, T1vvT1_d, T1vvT1_e, T1vvT1_f);
+        Type T2vvT2_a, T2vvT2_b, T2vvT2_c, T2vvT2_d, T2vvT2_e, T2vvT2_f;
+        atv_TvvT(dx, dy, dz, T2_a, T2_b, T2_c, T2_d, T2_e, T2_f,
+            T2vvT2_a, T2vvT2_b, T2vvT2_c, T2vvT2_d, T2vvT2_e, T2vvT2_f);
+        Type T3vvT3_a, T3vvT3_b, T3vvT3_c, T3vvT3_d, T3vvT3_e, T3vvT3_f;
+        atv_TvvT(dx, dy, dz, T3_a, T3_b, T3_c, T3_d, T3_e, T3_f,
+            T3vvT3_a, T3vvT3_b, T3vvT3_c, T3vvT3_d, T3vvT3_e, T3vvT3_f);
+
+        // Compose H
+        H_a = H_b = H_c = H_d = H_e = H_f = Type(0);
+
+        const Type s1 = lambda2 - lambda1;
+        const Type s2 = lambda1 - lambda0;
+        const Type s3 = lambda0;
+
+        const Type inv3 = Type(1) / Type(3);          // 1/(K+2), K=1
+        const Type inv4 = Type(1) / Type(4);          // K=2
+        const Type inv5 = Type(1) / Type(5);          // K=3
+
+        H_a = s1 * (T1_a - inv3 * (vT1vT1_a + Type(2) * T1vvT1_a))
+            + s2 * (T2_a - inv4 * (vT2vT2_a + Type(2) * T2vvT2_a))
+            + s3 * (T3_a - inv5 * (vT3vT3_a + Type(2) * T3vvT3_a));
+        H_b = s1 * (T1_b - inv3 * (vT1vT1_b + Type(2) * T1vvT1_b))
+            + s2 * (T2_b - inv4 * (vT2vT2_b + Type(2) * T2vvT2_b))
+            + s3 * (T3_b - inv5 * (vT3vT3_b + Type(2) * T3vvT3_b));
+        H_c = s1 * (T1_c - inv3 * (vT1vT1_c + Type(2) * T1vvT1_c))
+            + s2 * (T2_c - inv4 * (vT2vT2_c + Type(2) * T2vvT2_c))
+            + s3 * (T3_c - inv5 * (vT3vT3_c + Type(2) * T3vvT3_c));
+        H_d = s1 * (T1_d - inv3 * (vT1vT1_d + Type(2) * T1vvT1_d))
+            + s2 * (T2_d - inv4 * (vT2vT2_d + Type(2) * T2vvT2_d))
+            + s3 * (T3_d - inv5 * (vT3vT3_d + Type(2) * T3vvT3_d));
+        H_e = s1 * (T1_e - inv3 * (vT1vT1_e + Type(2) * T1vvT1_e))
+            + s2 * (T2_e - inv4 * (vT2vT2_e + Type(2) * T2vvT2_e))
+            + s3 * (T3_e - inv5 * (vT3vT3_e + Type(2) * T3vvT3_e));
+        H_f = s1 * (T1_f - inv3 * (vT1vT1_f + Type(2) * T1vvT1_f))
+            + s2 * (T2_f - inv4 * (vT2vT2_f + Type(2) * T2vvT2_f))
+            + s3 * (T3_f - inv5 * (vT3vT3_f + Type(2) * T3vvT3_f));
+    }
+
+    /**
+     * @brief Implements analytical tensor voting in 3D given:
+     *      1) a triple of eigenvalues such that l0 <= l1 <= l2
+     *      2) a triple of eigenvectors associated with these eigenvalues
+     *      3) the position of the receiver relative to the voter (where the voter is at the origin)
+     *      4) a sigma value specifying the distance attenuation of the vote
+     * This function calculates the resulting vote at the receiver location as a symmetric 3x3 upper triangle in column-major format:
+     * [ a  b  d ]
+     * [ b  c  e ]
+     * [ d  e  f ]
+     * 
+     * @tparam Type data type used in the calculation
+     * @param lambda0 smallest eigenvalue
+     * @param lambda1 middle eigenvalue
+     * @param lambda2 largest eigenvalue
+     * @param ev0x x coordinate of the smallest eigenvector
+     * @param ev0y y coordinate of the smallest eigenvector
+     * @param ev0z z coordinate of the smallest eigenvector
+     * @param ev1x x coordinate of the middle eigenvector
+     * @param ev1y y coordinate of the middle eigenvector
+     * @param ev1z z coordinate of the middle eigenvector
+     * @param ev2x x coordinate of the largest eigenvector
+     * @param ev2y y coordinate of the largest eigenvector
+     * @param ev2z z coordinate of the largest eigenvector
+     * @param rx x coordinate of receiver relative to voter location
+     * @param ry y coordinate of receiver relative to voter location
+     * @param rz z coordinate of receiver relative to voter location
+     * @param sigma distance attenuation parameter (standard deviation of a Gaussian)
+     * @param V_a (0,0) component of the resulting vote matrix
+     * @param V_b (0,1) component of the resulting vote matrix
+     * @param V_c (1,1) component of the resulting vote matrix
+     * @param V_d (0,2) component of the resulting vote matrix
+     * @param V_e (1,2) component of the resulting vote matrix
+     * @param V_f (2,2) component of the resulting vote matrix
+     */
+    template <typename Type>
+    CUDA_CALLABLE static void atv(Type lambda0, Type lambda1, Type lambda2,
+        Type ev0x, Type ev0y, Type ev0z, Type ev2x, Type ev2y, Type ev2z,
+        Type rx, Type ry, Type rz, Type sigma,
+        Type& V_a, Type& V_b, Type& V_c, Type& V_d, Type& V_e, Type& V_f) {
+        
+        // Distance attenuation
+        const Type dist = std::sqrt(rx * rx + ry * ry + rz * rz);
+        const Type c = atv_attenuation(dist, sigma);
+
+        // Unit direction v from voter->receiver; handle degenerate case (dist==0) so vote reduces to identity rotation.
+        Type dx, dy, dz;
+        if (dist == Type(0)) { dx = dy = dz = Type(0); }
+        else { dx = rx / dist; dy = ry / dist; dz = rz / dist; }
+
+        // Rotation R = I - 2 v v^T
+        Type R_a, R_b, R_c, R_d, R_e, R_f;
+        atv_rotation(dx, dy, dz, R_a, R_b, R_c, R_d, R_e, R_f);
+
+        // H matrix (closed-form)
+        Type H_a, H_b, H_c, H_d, H_e, H_f;
+        atv_H(lambda0, lambda1, lambda2, ev0x, ev0y, ev0z, ev2x, ev2y, ev2z,
+              dx, dy, dz, H_a, H_b, H_c, H_d, H_e, H_f);
+
+        // Full 3x3 similarity transform: V = c * (R * H * R)
+        const Type R00 = R_a, R01 = R_b, R02 = R_d;
+        const Type R10 = R_b, R11 = R_c, R12 = R_e;
+        const Type R20 = R_d, R21 = R_e, R22 = R_f;
+        const Type H00 = H_a, H01 = H_b, H02 = H_d;
+        const Type H10 = H_b, H11 = H_c, H12 = H_e;
+        const Type H20 = H_d, H21 = H_e, H22 = H_f;
+
+        // M = R * H
+        const Type m00 = R00 * H00 + R01 * H10 + R02 * H20;
+        const Type m01 = R00 * H01 + R01 * H11 + R02 * H21;
+        const Type m02 = R00 * H02 + R01 * H12 + R02 * H22;
+        const Type m10 = R10 * H00 + R11 * H10 + R12 * H20;
+        const Type m11 = R10 * H01 + R11 * H11 + R12 * H21;
+        const Type m12 = R10 * H02 + R11 * H12 + R12 * H22;
+        const Type m20 = R20 * H00 + R21 * H10 + R22 * H20;
+        const Type m21 = R20 * H01 + R21 * H11 + R22 * H21;
+        const Type m22 = R20 * H02 + R21 * H12 + R22 * H22;
+
+        // V = M * R
+        const Type v00 = m00 * R00 + m01 * R10 + m02 * R20;
+        const Type v01 = m00 * R01 + m01 * R11 + m02 * R21;
+        const Type v02 = m00 * R02 + m01 * R12 + m02 * R22;
+        const Type v11 = m10 * R01 + m11 * R11 + m12 * R21;
+        const Type v12 = m10 * R02 + m11 * R12 + m12 * R22;
+        const Type v22 = m20 * R02 + m21 * R12 + m22 * R22;
+
+        V_a = c * v00;
+        V_b = c * v01;
+        V_c = c * v11;
+        V_d = c * v02;
+        V_e = c * v12;
+        V_f = c * v22;
+    }
+
+    // -------------------- Tensor Kernels (TK) - 2D --------------------
 
     /**
      * @brief Precomputed 2D neighbor offset and wieghts (for TK voting)
@@ -1072,8 +1187,7 @@ namespace tira {
     * @param scale  Scale from eigenvalues at the voter.
     */
     template<typename Dir, typename Vec>
-    CUDA_CALLABLE void stickvote3_accumulate_kernel(float& m00, float& m01, float& m02,
-        float& m11, float& m12, float& m22,
+    CUDA_CALLABLE void stickvote3_accumulate_kernel(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
         const Dir& d, const float c1, const float c2, const Vec& q, const unsigned power, const float scale)
     {
         const float qTd = q.x * d.x + q.y * d.y + q.z * d.z;
@@ -1161,7 +1275,7 @@ namespace tira {
                     // --- plate ---
                     if (plate && samples > 0) {
                         float Va, Vb, Vc;
-                        tk_plate_numerical<float>((float)du, (float)dv, sigma1, sigma2, power, Va, Vb, Vc, samples);
+                        tira::tk_plate_numerical<float>((float)du, (float)dv, sigma1, sigma2, power, Va, Vb, Vc, samples);
                         n.Va = Va; n.Vb = Vb; n.Vc = Vc;
                     } else
                         n.Va = n.Vb = n.Vc = 0.0f;
@@ -1342,105 +1456,56 @@ namespace tira {
         }
         
         /**
-        * @brief Performs analytical tensor voting on a 3D volume using eigenvalues and eigenvectors.
-        *
-        * Layout of input arrays:
-        *  - lambdas: 3 per voxel (l0,l1,l2), sorted l0 <= l1 <= l2
-        *  - evecs:   6 per voxel (theta0,phi0, theta1,phi1, theta2,phi2) in spherical coords
-        *  - t_out:   9 per voxel (row-major full 3x3)
-        *
-        * @tparam Type data type used for the calculation
-        * @param t_out   output tensor voting field (9 values per voxel)
-        * @param lambdas eigenvalues (3 per voxel)
-        * @param evecs   eigenvectors in spherical angles (6 per voxel)
-        * @param sigma   attenuation sigma
-        * @param w       cubic window side length
-        * @param shape0  size along first (slow) axis
-        * @param shape1  size along second axis
-        * @param shape2  size along third (fast) axis
-        */
-        template <typename Type>
-        static void tensorvote_atv(Type* t_out, const Type* lambdas, const Type* evecs, Type sigma, const unsigned w,
-            const unsigned shape0, const unsigned shape1, const unsigned shape2,
-            const bool stick = true, const bool plate = true, const unsigned samples = 10) {
-            (void)stick; (void)plate; (void)samples;
+         * @brief 3D ATV windowed accumulation (Analytical Tensor Voting).
+         *
+         * This uses the 3D ATV closed-form vote (RHR).
+         */
+        inline glm::mat3 atv_window3(const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
+            const float sigma, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
+            
+            glm::mat3 Receiver(0.0f);
+            const int hw = int(w) / 2;
 
-            // Spherical -> Cartesian:
-            // theta: in XY plane, phi: polar angle from +Z (phi=0 => +Z)
-            auto sph_to_cart = [](Type theta, Type phi, Type& x, Type& y, Type& z) {
-                const Type st = std::sin(phi);
-                x = std::cos(theta) * st;
-                y = std::sin(theta) * st;
-                z = std::cos(phi);
-            };
+            for (int dz = -hw; dz <= hw; ++dz) {
+                const int r0 = x.x + dz;
+                if (r0 < 0 || r0 >= int(s0)) continue;
+                for (int dy = -hw; dy <= hw; ++dy) {
+                    const int r1 = x.y + dy;
+                    if (r1 < 0 || r1 >= int(s1)) continue;
+                    for (int dx = -hw; dx <= hw; ++dx) {
 
-            const int hw = (int)w / 2;
+                        const int r2 = x.z + dx;
+                        if (r2 < 0 || r2 >= int(s2)) continue;
 
-            for (unsigned x0 = 0; x0 < shape0; ++x0) {
-                for (unsigned x1 = 0; x1 < shape1; ++x1) {
-                    for (unsigned x2 = 0; x2 < shape2; ++x2) {
+                        const unsigned idx = unsigned((r0 * int(s1) + r1) * int(s2) + r2);
+                        const glm::vec3 lam = L[idx];
+                        const glm::vec3 e0  = Q_small[idx];
+                        const glm::vec3 e2  = Q_large[idx];
 
-                        // Accumulate symmetric 3x3 in upper-triangle form
-                        Type out_a = Type(0), out_b = Type(0), out_c = Type(0);
-                        Type out_d = Type(0), out_e = Type(0), out_f = Type(0);
+                        float Va, Vb, Vc, Vd, Ve, Vf;
+                        tira::atv<float>(lam.x, lam.y, lam.z, e0.x, e0.y, e0.z, e2.x, e2.y, e2.z,
+                            float(dx), float(dy), float(dz), sigma, Va, Vb, Vc, Vd, Ve, Vf);
 
-                        for (int dw = -hw; dw <= hw; ++dw) {
-                            const int r0 = (int)x0 + dw;
-                            if ((unsigned)r0 >= shape0) continue;
+                        // Upper triangle: |Va Vb Vd; Vb Vc Ve; Vd Ve Vf|
+                        Receiver[0][0] += Va; Receiver[0][1] += Vb; Receiver[0][2] += Vd;
+                        Receiver[1][0] += Vb; Receiver[1][1] += Vc; Receiver[1][2] += Ve;
+                        Receiver[2][0] += Vd; Receiver[2][1] += Ve; Receiver[2][2] += Vf;
+                    }
+                }
+            }
+            return Receiver;
+        }
 
-                            for (int dv = -hw; dv <= hw; ++dv) {
-                                const int r1 = (int)x1 + dv;
-                                if ((unsigned)r1 >= shape1) continue;
-
-                                for (int du = -hw; du <= hw; ++du) {
-                                    const int r2 = (int)x2 + du;
-                                    if ((unsigned)r2 >= shape2) continue;
-
-                                    const unsigned base = (unsigned)r0 * shape1 * shape2 + (unsigned)r1 * shape2 + (unsigned)r2;
-
-                                    // load eigenvalues (l0 <= l1 <= l2)
-                                    const unsigned li = base * 3;
-                                    const Type l0 = lambdas[li + 0];
-                                    const Type l1 = lambdas[li + 1];
-                                    const Type l2 = lambdas[li + 2];
-
-                                    // load eigenvectors in spherical angles
-                                    const unsigned vi = base * 6;
-                                    const Type th0 = evecs[vi + 0], ph0 = evecs[vi + 1];
-                                    const Type th1 = evecs[vi + 2], ph1 = evecs[vi + 3];
-                                    const Type th2 = evecs[vi + 4], ph2 = evecs[vi + 5];
-
-                                    Type ev0x, ev0y, ev0z;
-                                    Type ev1x, ev1y, ev1z;
-                                    Type ev2x, ev2y, ev2z;
-                                    sph_to_cart(th0, ph0, ev0x, ev0y, ev0z);
-                                    sph_to_cart(th1, ph1, ev1x, ev1y, ev1z);
-                                    sph_to_cart(th2, ph2, ev2x, ev2y, ev2z);
-
-                                    // vote from this voter to receiver-at-center
-                                    Type Va, Vb, Vc, Vd, Ve, Vf;
-
-                                    // Use (du,dv,dw) as receiver offset relative to voter
-                                    tira::atv<Type>(l0, l1, l2, ev0x, ev0y, ev0z, ev1x, ev1y, ev1z, ev2x, ev2y, ev2z,
-                                        (Type)du, (Type)dv, (Type)dw, sigma, Va, Vb, Vc, Vd, Ve, Vf);
-
-                                    out_a += Va; out_b += Vb; out_c += Vc;
-                                    out_d += Vd; out_e += Ve; out_f += Vf;
-                                }
-                            }
-                        }
-
-                        // Write full 3x3 (row-major) for this receiver voxel
-                        const unsigned idx = ((x0 * shape1 * shape2) + (x1 * shape2) + x2) * 9;
-                        t_out[idx + 0] = out_a;         // 00
-                        t_out[idx + 1] = out_b;         // 01
-                        t_out[idx + 2] = out_d;         // 02
-                        t_out[idx + 3] = out_b;         // 10
-                        t_out[idx + 4] = out_c;         // 11
-                        t_out[idx + 5] = out_e;         // 12
-                        t_out[idx + 6] = out_d;         // 20
-                        t_out[idx + 7] = out_e;         // 21
-                        t_out[idx + 8] = out_f;         // 22
+        /**
+         * @brief 3D Analytical Tensor Voting (ATV) on a volume.
+         */
+        inline void tensorvote3_atv(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
+            const float sigma, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2) {
+            for (unsigned x0 = 0; x0 < s0; ++x0) {
+                for (unsigned x1 = 0; x1 < s1; ++x1) {
+                    for (unsigned x2 = 0; x2 < s2; ++x2) {
+                        const unsigned idx = (x0 * s1 + x1) * s2 + x2;
+                        VT[idx] = atv_window3(L, Q_large, Q_small, sigma, w, s0, s1, s2, glm::ivec3(int(x0), int(x1), int(x2)));
                     }
                 }
             }
@@ -1462,24 +1527,19 @@ namespace tira {
          * @param x      Receiver voxel location index (x0, x1, x2).
          * @return       3x3 stick vote tensor at the receiver.
          */
-        inline glm::mat3 stickvote3(const glm::vec3* L, const glm::vec3* Q, const std::vector<Neighbor3D>& NB,
+        inline glm::mat3 tk_stickvote(const glm::vec3* L, const glm::vec3* Q, const std::vector<Neighbor3D>& NB,
             const unsigned power, const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x) {
 
-            const int x0 = x[0];
-            const int x1 = x[1];
-            const int x2 = x[2];
+            const int x0 = x[0], x1 = x[1], x2 = x[2];
 
             // Accumulate in symmetric 6-value form
 			float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
 			float m11 = 0.0f, m12 = 0.0f, m22 = 0.0f;
 
             for (const auto& n : NB) {                         // For each pixel in the window
-                const int r0 = x0 + n.dw;
-                if ((unsigned)r0 >= s0) continue;
-                const int r1 = x1 + n.dv;
-                if ((unsigned)r1 >= s1) continue;
-                const int r2 = x2 + n.du;
-                if ((unsigned)r2 >= s2) continue;
+                const int r0 = x0 + n.dw; if ((unsigned)r0 >= s0) continue;
+                const int r1 = x1 + n.dv; if ((unsigned)r1 >= s1) continue;
+                const int r2 = x2 + n.du; if ((unsigned)r2 >= s2) continue;
 
                 // Flat index of the voter
                 const unsigned base = (unsigned)r0 * s1 * s2 + (unsigned)r1 * s2 + (unsigned)r2;
@@ -1496,6 +1556,7 @@ namespace tira {
                 // Calculate the accumulated contribution of (du,dv,dw) to (x,y,z)
                 stickvote3_accumulate_kernel(m00, m01, m02, m11, m12, m22, n.d, n.c1, n.c2, q, power, scale);
             }
+
 			glm::mat3 Votee(0.0f);
 			Votee[0][0] = m00; Votee[0][1] = m01; Votee[0][2] = m02;
 			Votee[1][0] = m01; Votee[1][1] = m11; Votee[1][2] = m12;
@@ -1518,7 +1579,7 @@ namespace tira {
          * @param K1     Precomputed beta integral for J1-like term.
          * @return       3x3 plate vote tensor contribution.
          */
-        inline glm::mat3 platevote3_analytic(const glm::vec3& d, float c1, float c2, unsigned power,
+        inline glm::mat3 tk_plate_analytic(const glm::vec3& d, float c1, float c2, unsigned power,
             const glm::vec3& evec0, double K0, double K1) {
 
             glm::vec3 dn = d;
@@ -1613,7 +1674,7 @@ namespace tira {
          * @param samples  Number of angular samples for integration.
          * @return         Approximate 3x3 plate vote tensor.
          */
-        inline glm::mat3 platevote3_numerical(const glm::vec3& d, float c1, float c2, unsigned power,
+        inline glm::mat3 tk_plate_numerical(const glm::vec3& d, float c1, float c2, unsigned power,
             const glm::vec3& evec0, unsigned samples = 20) {
 
             // A zero-vector has no orientation and cannot vote
@@ -1677,26 +1738,20 @@ namespace tira {
          * @param samples  >0 for numerical integration, 0 for analytic form.
          * @return         3x3 plate vote tensor at the receiver.
          */
-        inline glm::mat3 platevote3(const glm::vec3* L, const glm::vec3* Q_small, const std::vector<Neighbor3D>& NB, const unsigned power,
+        inline glm::mat3 tk_platevote(const glm::vec3* L, const glm::vec3* Q_small, const std::vector<Neighbor3D>& NB, const unsigned power,
             const unsigned s0, const unsigned s1, const unsigned s2, const glm::ivec3 x, const unsigned samples = 0) {
 
-            const int x0 = x[0];
-            const int x1 = x[1];
-            const int x2 = x[2];
+            const int x0 = x[0], x1 = x[1], x2 = x[2];
 
             glm::mat3 Receiver(0.0f);
 
-            const double p_d = static_cast<double>(power);
-            const double K0 = boost::math::beta(0.5, p_d + 1.5);
-            const double K1 = boost::math::beta(0.5, p_d + 0.5);
+            const double K0 = boost::math::beta(0.5, double(power) + 1.5);
+            const double K1 = boost::math::beta(0.5, double(power) + 0.5);
 
             for (const auto& n : NB) {                         // For each pixel in the window
-                const int r0 = x0 + n.dw;
-                if ((unsigned)r0 >= s0) continue;
-                const int r1 = x1 + n.dv;
-                if ((unsigned)r1 >= s1) continue;
-                const int r2 = x2 + n.du;
-                if ((unsigned)r2 >= s2) continue;
+                const int r0 = x0 + n.dw; if ((unsigned)r0 >= s0) continue;
+                const int r1 = x1 + n.dv; if ((unsigned)r1 >= s1) continue;
+                const int r2 = x2 + n.du; if ((unsigned)r2 >= s2) continue;
 
                 const unsigned base = (unsigned)r0 * s1 * s2 + (unsigned)r1 * s2 + (unsigned)r2;
 
@@ -1710,10 +1765,10 @@ namespace tira {
                 glm::mat3 V;
                 if (samples > 0)
                     // Numerical integration of stick votes to form a plate vote
-                    V = platevote3_numerical(d, c1, c2, power, evec0, samples);
+                    V = tk_plate_numerical(d, c1, c2, power, evec0, samples);
                 else
                     // Analytical closed form solution from direction d
-                    V = platevote3_analytic(d, c1, c2, power, evec0, K0, K1);
+                    V = tk_plate_analytic(d, c1, c2, power, evec0, K0, K1);
 
                 Receiver[0][0] += scale * V[0][0]; Receiver[0][1] += scale * V[0][1]; Receiver[0][2] += scale * V[0][2];
                 Receiver[1][0] += scale * V[1][0]; Receiver[1][1] += scale * V[1][1]; Receiver[1][2] += scale * V[1][2];
@@ -1723,7 +1778,7 @@ namespace tira {
         }
 
         /**
-         * @brief CPU implementation of full 3D tensor voting (stick + plate).
+         * @brief Calculates a full 3D tensor voting kernel (TK) on CPU.
          *
          * For each voxel, accumulates stick and/or plate votes from a cubic
          * neighborhood using precomputed neighbors and eigen-frames.
@@ -1742,36 +1797,68 @@ namespace tira {
          * @param PLATE     If true, include plate votes.
          * @param samples   Samples for numerical plate (0 = analytic).
          */
-        inline void tensorvote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
+        inline void tensorvote_tk(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
             glm::vec2 sigma, unsigned int power, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2,
             const bool STICK = true, const bool PLATE = true, const unsigned samples = 20) {
-            const float sticknorm = 1.0 / sticknorm3(sigma.x, sigma.y, power);
-            //const float platenorm = 1.0; // / TV_PI;           //  Not too sure about this
+            
             // Pre-compute the neighbor offsets and Gaussian factors once for (w, sigmas)
             const auto NB = build_neighbors3d((int)w, sigma);
 
+            const float sticknorm = 1.0 / sticknorm3(sigma.x, sigma.y, power);
+            //const float platenorm = 1.0; // / TV_PI;           //  Not too sure about this
+            
             // O(N * w^3) complexity
             for (unsigned int x0 = 0; x0 < s0; x0++) {
                 for (unsigned int x1 = 0; x1 < s1; x1++) {
                     for (unsigned int x2 = 0; x2 < s2; x2++) {
                         glm::mat3 Vote(0.0f);
                         if (STICK)
-                            Vote += sticknorm * stickvote3(L, Q_large, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2));
+                            Vote += sticknorm * tk_stickvote(L, Q_large, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2));
                         if (PLATE)
-                            Vote += sticknorm * platevote3(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
+                            Vote += sticknorm * tk_platevote(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
                         VT[x0 * s1 * s2 + x1 * s2 + x2] = Vote;
                     }
                 }
             }
         }
+        
+        /**
+         * @brief Tensor Voting on a 3D field.
+         * 
+         * @param VT        Output volume of 3x3 vote tensors.
+         * @param L         Volume of eigenvalues (L0, L1, L2) per voxel.
+         * @param Q_large   Volume of largest eigenvectors (stick directions).
+         * @param Q_small   Volume of smallest eigenvectors (plate normals).
+         * @param sigma     (sigma1, sigma2) for stick/plate decay.
+         * @param power     refinement term.
+         * @param w         Side length of cubic voting window.
+         * @param s0        Volume size along first dimension.
+         * @param s1        Volume size along second dimension.
+         * @param s2        Volume size along third dimension.
+         * @param STICK     If true, include stick votes.
+         * @param PLATE     If true, include plate votes.
+         * @param samples   Samples for numerical plate (0 = analytic).
+         * @param is_atv    If true, use analytical tensor voting instead of TK.
+         */
+        inline void tensorvote3(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
+            glm::vec2 sigma, unsigned int power, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2,
+            const bool STICK = true, const bool PLATE = true, const unsigned samples = 20, const bool is_atv = false) {
+
+                if (is_atv) {
+                    tensorvote3_atv(VT, L, Q_large, Q_small, sigma.x, w, s0, s1, s2);
+                    return;
+                }
+                
+                tensorvote_tk(VT, L, Q_large, Q_small, sigma, power, w, s0, s1, s2, STICK, PLATE, samples);
+        }
     }
+
 
     /**
      * The CUDA namespace runs everything on the GPU. Input and output pointers can be on either the host or device.
      * If pointers are located on the host, the data will be copied to the currently active CUDA device.
      * This region is only compiled when it's passed to nvcc.
      */
-
 #ifdef __CUDACC__
     namespace cuda {
 		
