@@ -2614,7 +2614,7 @@ namespace tira {
         }
 
         static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float* largest_q, float* smallest_q,
-            float sigma, float sigma2, unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples) {
+            float sigma, float sigma2, unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples, bool is_atv) {
             
             HANDLE_ERROR(cudaSetDevice(device));
 
