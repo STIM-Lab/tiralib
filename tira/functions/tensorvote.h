@@ -1711,9 +1711,9 @@ namespace tira {
             }
 
             // Integral = sum / samples
-			const float inv_samples = 1.0f / static_cast<float>(samples);
-			m00 *= inv_samples; m01 *= inv_samples; m02 *= inv_samples;
-			m11 *= inv_samples; m12 *= inv_samples; m22 *= inv_samples;
+			const float inv = 1.0f / static_cast<float>(samples);
+			m00 *= inv; m01 *= inv; m02 *= inv;
+			m11 *= inv; m12 *= inv; m22 *= inv;
 			V[0][0] = m00; V[0][1] = m01; V[0][2] = m02;
 			V[1][0] = m01; V[1][1] = m11; V[1][2] = m12;
 			V[2][0] = m02; V[2][1] = m12; V[2][2] = m22;
@@ -1804,8 +1804,8 @@ namespace tira {
             // Pre-compute the neighbor offsets and Gaussian factors once for (w, sigmas)
             const auto NB = build_neighbors3d((int)w, sigma);
 
-            const float sticknorm = 1.0 / sticknorm3(sigma.x, sigma.y, power);
-            //const float platenorm = 1.0; // / TV_PI;           //  Not too sure about this
+            const float sticknorm = 1.0f / sticknorm3(sigma.x, sigma.y, power);
+            const float platenorm = 1.0f / TV_PI;           //  Not too sure about this
             
             // O(N * w^3) complexity
             for (unsigned int x0 = 0; x0 < s0; x0++) {
@@ -1815,7 +1815,7 @@ namespace tira {
                         if (STICK)
                             Vote += sticknorm * tk_stickvote(L, Q_large, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2));
                         if (PLATE)
-                            Vote += sticknorm * tk_platevote(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
+                            Vote += platenorm * tk_platevote(L, Q_small, NB, power, s0, s1, s2, glm::ivec3(x0, x1, x2), samples);
                         VT[x0 * s1 * s2 + x1 * s2 + x2] = Vote;
                     }
                 }
