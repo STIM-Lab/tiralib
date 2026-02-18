@@ -1861,9 +1861,7 @@ namespace tira {
      */
 #ifdef __CUDACC__
     namespace cuda {
-		
-        // ------- 2D Tensor Voting -------
-
+        
         /**
          * @brief Check if a pointer is located on the CUDA device. If out_attr is provided, fills it with the pointer attributes.
          * Treat unknown/unregistered as host.
@@ -1874,6 +1872,10 @@ namespace tira {
 
          */
         inline bool _is_device(const void* ptr, cudaPointerAttributes* out_attr = nullptr) {
+            if (!ptr) {
+                if (out_attr) *out_attr = cudaPointerAttributes{};
+                return false;
+            }
             cudaPointerAttributes attr{};
             HANDLE_ERROR(cudaPointerGetAttributes(&attr, ptr));
             // cudaError_t err = cudaPointerGetAttributes(&attr, ptr);
@@ -1955,6 +1957,9 @@ namespace tira {
             dev_out = d;
             return d;
         }
+
+
+        // ------------- 2D Tensor Voting -------------
 
         struct DeviceNeighbors2D {
             Neighbor2D* d_ptr = nullptr;
@@ -2288,7 +2293,7 @@ namespace tira {
         }
 
 
-		// ------- 3D Tensor Voting -------
+		// ------------- 3D Tensor Voting -------------
 
         struct DeviceNeighbor3D {
             int du, dv, dw;      // x2 (u), x1 (v), x0 (w) offsets
@@ -2469,10 +2474,10 @@ namespace tira {
             float3 dn = d;
             glm::vec3 u, v;
             if (fabsf(evec0.z) < 0.999f) {
-                u = glm::normalize(glm::cross(evec0, glm::vec3(0.0f, 0.0f, 1.0f)));
+                u = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), evec0));
             }
             else {
-                u = glm::normalize(glm::cross(evec0, glm::vec3(1.0f, 0.0f, 0.0f)));
+                u = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), evec0));
             }
             v = glm::cross(evec0, u);
 
@@ -2613,7 +2618,255 @@ namespace tira {
             VT[base_recv] += Receiver * norm;
         }
 
-        static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float* largest_q, float* smallest_q,
+        /**
+         * @brief 3D Analytical Tensor Voting (ATV) CUDA kernel.
+         * Writes one symmetric 3x3 tensor per voxel.
+         * Uses precomputed eigenvalues (L) and the smallest/largest eigenvectors (Q_small/Q_large).
+         */
+        __global__ static void global_tensorvote3_atv(glm::mat3* VT, const glm::vec3* L, const glm::vec3* Q_large, const glm::vec3* Q_small,
+            float sigma, int w, int s0, int s1, int s2) {
+
+            const int x2 = (int)(blockDim.x * blockIdx.x + threadIdx.x);
+            const int x1 = (int)(blockDim.y * blockIdx.y + threadIdx.y);
+            const int x0 = (int)(blockDim.z * blockIdx.z + threadIdx.z);
+            if (x0 >= s0 || x1 >= s1 || x2 >= s2) return;
+
+            const unsigned base_recv = (unsigned)x0 * (unsigned)s1 * (unsigned)s2 + (unsigned)x1 * (unsigned)s2 + (unsigned)x2;
+
+            float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
+            float m11 = 0.0f, m12 = 0.0f, m22 = 0.0f;
+
+            const int hw = w / 2;
+            for (int dz = -hw; dz <= hw; ++dz) {
+                const int r0 = x0 + dz;
+                if ((unsigned)r0 >= (unsigned)s0) continue;
+
+                for (int dy = -hw; dy <= hw; ++dy) {
+                    const int r1 = x1 + dy;
+                    if ((unsigned)r1 >= (unsigned)s1) continue;
+
+                    for (int dx = -hw; dx <= hw; ++dx) {
+                        const int r2 = x2 + dx;
+                        if ((unsigned)r2 >= (unsigned)s2) continue;
+
+                        const unsigned base_voter = (unsigned)r0 * (unsigned)s1 * (unsigned)s2 + (unsigned)r1 * (unsigned)s2 + (unsigned)r2;
+
+                        const glm::vec3 lam = L[base_voter];
+                        const glm::vec3 e0 = Q_small[base_voter]; // smallest eigenvector
+                        const glm::vec3 e2 = Q_large[base_voter]; // largest  eigenvector
+
+                        float Va, Vb, Vc, Vd, Ve, Vf;
+                        tira::atv<float>(
+                            lam.x, lam.y, lam.z,
+                            e0.x, e0.y, e0.z,
+                            e2.x, e2.y, e2.z,
+                            (float)dx, (float)dy, (float)dz,
+                            sigma,
+                            Va, Vb, Vc, Vd, Ve, Vf
+                        );
+
+                        m00 += Va; m01 += Vb; m11 += Vc;
+                        m02 += Vd; m12 += Ve; m22 += Vf;
+                    }
+                }
+            }
+
+            glm::mat3 Receiver;
+            Receiver[0][0] = m00; Receiver[0][1] = m01; Receiver[0][2] = m02;
+            Receiver[1][0] = m01; Receiver[1][1] = m11; Receiver[1][2] = m12;
+            Receiver[2][0] = m02; Receiver[2][1] = m12; Receiver[2][2] = m22;
+
+            VT[base_recv] = Receiver;
+        }
+
+        // -------------------- 3D CUDA dispatch (TK vs ATV) --------------------
+
+        static void _tensorvote3_atv(const float* lambdas, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2,
+            const float* largest_q, const float* smallest_q, float sigma, unsigned int w, bool debug) {
+
+            const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
+            const size_t out_bytes = sizeof(glm::mat3) * n_voxels;
+            const size_t vec3_bytes = sizeof(glm::vec3) * n_voxels;
+
+            if (!lambdas || !largest_q || !smallest_q) {
+                if (debug) std::cout << "tensorvote3_atv: missing lambdas/Q buffers" << std::endl;
+                return;
+            }
+
+            // Output buffer
+            glm::mat3* dev_out = nullptr;
+            bool out_is_dev = false;
+            glm::mat3* gpuOut = _dev_writeable((glm::mat3*)output_field, out_bytes, dev_out, out_is_dev);
+
+            // Inputs
+            glm::vec3* dev_L = nullptr;
+            glm::vec3* dev_Ql = nullptr;
+            glm::vec3* dev_Qs = nullptr;
+
+            const glm::vec3* gpuL = _dev_readonly((const glm::vec3*)lambdas, vec3_bytes, dev_L);
+            const glm::vec3* gpuQ_large = _dev_readonly((const glm::vec3*)largest_q, vec3_bytes, dev_Ql);
+            const glm::vec3* gpuQ_small = _dev_readonly((const glm::vec3*)smallest_q, vec3_bytes, dev_Qs);
+
+            // Launch
+            dim3 threads(32, 4, 2);
+            dim3 blocks(
+                (unsigned)((s2 + threads.x - 1) / threads.x),
+                (unsigned)((s1 + threads.y - 1) / threads.y),
+                (unsigned)((s0 + threads.z - 1) / threads.z)
+            );
+
+            global_tensorvote3_atv<<<blocks, threads>>>(gpuOut, gpuL, gpuQ_large, gpuQ_small, sigma, (int)w, (int)s0, (int)s1, (int)s2);
+            HANDLE_ERROR(cudaDeviceSynchronize());
+
+            // Copy back to host if needed
+            if (!out_is_dev) {
+                _copy_from_device((glm::mat3*)output_field, gpuOut, out_bytes);
+                HANDLE_ERROR(cudaDeviceSynchronize());
+            }
+
+            // Free temporaries
+            if (dev_out) { HANDLE_ERROR(cudaFree(dev_out)); dev_out = nullptr; }
+            if (dev_L) { HANDLE_ERROR(cudaFree(dev_L)); dev_L = nullptr; }
+            if (dev_Ql) { HANDLE_ERROR(cudaFree(dev_Ql)); dev_Ql = nullptr; }
+            if (dev_Qs) { HANDLE_ERROR(cudaFree(dev_Qs)); dev_Qs = nullptr; }
+        }
+
+        static void _tensorvote3_tk(const float* lambdas, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2,
+            const float* largest_q, const float* smallest_q, float sigma, float sigma2, unsigned int w, unsigned int power,
+            bool STICK, bool PLATE, unsigned samples, bool debug) {
+
+            const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
+            const size_t out_bytes = sizeof(glm::mat3) * n_voxels;
+            const size_t vec3_bytes = sizeof(glm::vec3) * n_voxels;
+
+            if (!lambdas) {
+                if (debug) std::cout << "tensorvote3_tk: missing lambdas buffer" << std::endl;
+                return;
+            }
+            if (STICK && !largest_q) {
+                if (debug) std::cout << "tensorvote3_tk: STICK requires largest_q" << std::endl;
+                return;
+            }
+            if (PLATE && !smallest_q) {
+                if (debug) std::cout << "tensorvote3_tk: PLATE requires smallest_q" << std::endl;
+                return;
+            }
+
+            // Build/upload neighbor table for TK voting
+            const glm::vec2 sig(sigma, sigma2);
+            std::vector<Neighbor3D> NB = cpu::build_neighbors3d((int)w, sig);
+            DeviceNeighbors d_nb = upload_neighbors(NB);
+
+            // Output buffer (kernels use +=, so zero-initialize)
+            glm::mat3* dev_out = nullptr;
+            bool out_is_dev = false;
+            glm::mat3* gpuOut = _dev_writeable((glm::mat3*)output_field, out_bytes, dev_out, out_is_dev);
+            HANDLE_ERROR(cudaMemset(gpuOut, 0, out_bytes));
+
+            // Inputs
+            glm::vec3* dev_L = nullptr;
+            glm::vec3* dev_Ql = nullptr;
+            glm::vec3* dev_Qs = nullptr;
+
+            const glm::vec3* gpuL = _dev_readonly((const glm::vec3*)lambdas, vec3_bytes, dev_L);
+            const glm::vec3* gpuQ_large = STICK ? _dev_readonly((const glm::vec3*)largest_q, vec3_bytes, dev_Ql) : nullptr;
+            const glm::vec3* gpuQ_small = PLATE ? _dev_readonly((const glm::vec3*)smallest_q, vec3_bytes, dev_Qs) : nullptr;
+
+            // CUDA grid
+            dim3 threads(32, 4, 2);
+            dim3 blocks(
+                (unsigned)((s2 + threads.x - 1) / threads.x),
+                (unsigned)((s1 + threads.y - 1) / threads.y),
+                (unsigned)((s0 + threads.z - 1) / threads.z)
+            );
+
+            const float sticknorm = 1.0f / sticknorm3(sigma, sigma2, power);
+            const float platenorm = 1.0f / (float)TV_PI;
+
+            // Analytical plate constants
+            const double p_d = static_cast<double>(power);
+            const double K0 = boost::math::beta(0.5, p_d + 1.5);
+            const double K1 = boost::math::beta(0.5, p_d + 0.5);
+
+            if (STICK) {
+                global_stickvote3<<<blocks, threads>>>(gpuOut, gpuL, gpuQ_large,
+                    d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
+                    power, sticknorm,
+                    (int)s0, (int)s1, (int)s2);
+            }
+            if (PLATE) {
+                global_platevote3<<<blocks, threads>>>(gpuOut, gpuL, gpuQ_small,
+                    d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
+                    power, platenorm,
+                    (int)s0, (int)s1, (int)s2,
+                    samples, K0, K1);
+            }
+
+            HANDLE_ERROR(cudaDeviceSynchronize());
+            free_neighbors(d_nb);
+
+            // Copy back to host if needed
+            if (!out_is_dev) {
+                _copy_from_device((glm::mat3*)output_field, gpuOut, out_bytes);
+                HANDLE_ERROR(cudaDeviceSynchronize());
+            }
+
+            // Free temporaries
+            if (dev_out) { HANDLE_ERROR(cudaFree(dev_out)); dev_out = nullptr; }
+            if (dev_L) { HANDLE_ERROR(cudaFree(dev_L)); dev_L = nullptr; }
+            if (dev_Ql) { HANDLE_ERROR(cudaFree(dev_Ql)); dev_Ql = nullptr; }
+            if (dev_Qs) { HANDLE_ERROR(cudaFree(dev_Qs)); dev_Qs = nullptr; }
+        }
+
+        /**
+         * @brief 3D tensor voting entry point for CUDA.
+         * If lambdas_in is provided, it is treated as the precomputed eigenvalues array (3 floats per voxel).
+         * Otherwise eigenvalues are computed from input_field on CPU as a fallback.
+         */
+        static void tensorvote3(const float* input_field, float* output_field, const float* lambdas_in,
+            unsigned int s0, unsigned int s1, unsigned int s2, float* largest_q, float* smallest_q,
+            float sigma, float sigma2, unsigned int w, unsigned int power,
+            int device, bool STICK, bool PLATE, bool debug, unsigned samples, bool is_atv) {
+
+            HANDLE_ERROR(cudaSetDevice(device));
+
+            const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
+
+            const float* lambdas = lambdas_in;
+            float* L_owned = nullptr;
+            if (!lambdas) {
+                // Fallback: match CPU eigenvalue routine.
+                L_owned = tira::cpu::evals3_symmetric(input_field, n_voxels);
+                lambdas = L_owned;
+            }
+
+            if (is_atv) {
+                // ATV ignores sigma2/power/stick/plate/samples (CPU behavior)
+                _tensorvote3_atv(lambdas, output_field, s0, s1, s2, largest_q, smallest_q, sigma, w, debug);
+            }
+            else {
+                const unsigned p = (power < 1u) ? 1u : power;
+                _tensorvote3_tk(lambdas, output_field, s0, s1, s2, largest_q, smallest_q,
+                    sigma, sigma2, w, p, STICK, PLATE, samples, debug);
+            }
+
+            if (L_owned) delete[] L_owned;
+        }
+
+        // Backward-compatible signature (computes eigenvalues internally)
+        static void tensorvote3(const float* input_field,
+            float* output_field, unsigned int s0, unsigned int s1, unsigned int s2,
+            float* largest_q, float* smallest_q,
+            float sigma, float sigma2, unsigned int w, unsigned int power,
+            int device, bool STICK, bool PLATE, bool debug, unsigned samples, bool is_atv) {
+
+            tensorvote3(input_field, output_field, (const float*)nullptr, 
+                s0, s1, s2, largest_q, smallest_q,
+                sigma, sigma2, w, power,
+                device, STICK, PLATE, debug, samples, is_atv);
+        }
+
+        /*static void tensorvote3(const float* input_field, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2, float* largest_q, float* smallest_q,
             float sigma, float sigma2, unsigned int w, unsigned int power, int device, bool STICK, bool PLATE, bool debug, unsigned samples, bool is_atv) {
             
             HANDLE_ERROR(cudaSetDevice(device));
@@ -2668,7 +2921,7 @@ namespace tira {
             else {
                 HANDLE_ERROR(cudaMalloc(&gpuV, evecs_bytes));
                 HANDLE_ERROR(cudaMemcpy(gpuV, V, evecs_bytes, cudaMemcpyHostToDevice));
-            }*/
+            }
             end = std::chrono::high_resolution_clock::now();
             float t_host2device = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -2691,7 +2944,7 @@ namespace tira {
                 if (PLATE)
                     spherical_to_cart3_kernel << <g, t >> > (dQ_small, (const float*)gpuV, false, n_voxels);
                 HANDLE_ERROR(cudaDeviceSynchronize());
-            }*/
+            }
            
             // Allocate output on device
             start = std::chrono::high_resolution_clock::now();
@@ -2708,7 +2961,7 @@ namespace tira {
                 (unsigned)((s0 + threads.z - 1) / threads.z)
             );
             float sticknorm = 1.0f / sticknorm3(sigma, sigma2, power);
-            float platenorm = 1.0f; // Not implemented yet
+            float platenorm = 1.0f / TV_PI; // Not implemented yet
 
             // Calculate K0 and K1 for analytical plate voting
             const double p_d = static_cast<double>(power);
@@ -2721,7 +2974,7 @@ namespace tira {
                     d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0, power, sticknorm, (int)s0, (int)s1, (int)s2);
             if (PLATE)
                 global_platevote3 << <blocks, threads >> > ((glm::mat3*)gpuOutputField, (const glm::vec3*)gpuL, (const glm::vec3*)dQ_small,
-                    d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0, power, sticknorm, (int)s0, (int)s1, (int)s2, samples, K0, K1);
+                    d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0, power, platenorm, (int)s0, (int)s1, (int)s2, samples, K0, K1);
             cudaDeviceSynchronize();
             end = std::chrono::high_resolution_clock::now();
             float t_voting = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -2765,7 +3018,7 @@ namespace tira {
                 std::cout << "cudaFree: " << t_devicefree << " ms" << std::endl;
                 std::cout << "cudaDeviceProps: " << t_deviceprops << " ms" << std::endl;
             }
-        }
+        }*/
     }
     #endif
 
