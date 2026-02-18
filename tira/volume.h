@@ -1705,6 +1705,11 @@ namespace tira {
 			return field<T>::m_data[Idx(x, y, z, c)];
 		}
 
+		// const version
+		const T& operator()(size_t x, size_t y, size_t z, size_t c = 0) const {
+			return field<T>::m_data[Idx(x, y, z, c)];
+		}
+		
 		/// <summary>
 		/// Set all values in the image to a single constant
 		/// </summary>
