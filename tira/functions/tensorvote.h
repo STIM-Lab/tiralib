@@ -2298,13 +2298,13 @@ namespace tira {
             Qout[i * 3 + 2] = q.z;
         }
 
-        __global__ static void global_stickvote3(glm::mat3* VT, const float* L, const float* Q, const DeviceNeighbor3D* d_neighbors_glob,
+        __global__ static void global_stickvote3(glm::mat3* VT, const float* L, const float* V2, const DeviceNeighbor3D* d_neighbors_glob,
             int nb_count, int usedConst, unsigned int power, float norm, int s0, int s1, int s2) {
 
-            int x2 = blockDim.x * blockIdx.x + threadIdx.x;                                     // get the x, y, and z volume coordinates for the current thread
-            int x1 = blockDim.y * blockIdx.y + threadIdx.y;
-            int x0 = blockDim.z * blockIdx.z + threadIdx.z;
-            if (x0 >= s0 || x1 >= s1 || x2 >= s2)                                               // if not within bounds of image, return
+            const int x2 = blockDim.x * blockIdx.x + threadIdx.x;
+            const int x1 = blockDim.y * blockIdx.y + threadIdx.y;
+            const int x0 = blockDim.z * blockIdx.z + threadIdx.z;
+            if (x0 >= s0 || x1 >= s1 || x2 >= s2)
                 return;
             const unsigned base_recv = (unsigned)x0 * (unsigned)s1 * (unsigned)s2 + (unsigned)x1 * (unsigned)s2 + (unsigned)x2;
 
@@ -2329,9 +2329,9 @@ namespace tira {
                 const float l1 = L[b3 + 1u];
                 const float l2 = L[b3 + 2u];
                 const float scale = copysignf(fabsf(l2) - fabsf(l1), l2);
-
+                
                 // Eigenvector at voter in spherical angles
-                const glm::vec3 q(Q[b3 + 0u], Q[b3 + 1u], Q[b3 + 2u]);
+                const glm::vec3 q(V2[b3 + 0u], V2[b3 + 1u], V2[b3 + 2u]);
                 
                 stickvote3_accumulate_kernel(m00, m01, m02, m11, m12, m22,
 					nb.d, nb.c1, nb.c2, q, power, scale);
@@ -2341,7 +2341,7 @@ namespace tira {
             glm::mat3 Receiver = glm::mat3(glm::vec3(m00, m01, m02),
                                            glm::vec3(m01, m11, m12),
                                            glm::vec3(m02, m12, m22));
-            VT[base_recv] += Receiver * norm;
+            VT[base_recv] = Receiver * norm;
         }
 
         __device__ static inline void platevote3_numerical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
@@ -2525,11 +2525,10 @@ namespace tira {
                     platevote3_analytical_device(m00, m01, m02, m11, m12, m22,
                         nb.d, nb.c1, nb.c2, evec0, scale, power, K0_d, K1_d);
             }
-            glm::mat3 Receiver;
-            Receiver[0][0] = m00; Receiver[0][1] = m01; Receiver[0][2] = m02;
-            Receiver[1][0] = m01; Receiver[1][1] = m11; Receiver[1][2] = m12;
-            Receiver[2][0] = m02; Receiver[2][1] = m12; Receiver[2][2] = m22;
-            VT[base_recv] += Receiver * norm;
+            glm::mat3 Receiver = glm::mat3(glm::vec3(m00, m01, m02),
+                                           glm::vec3(m01, m11, m12),
+                                           glm::vec3(m02, m12, m22));
+            VT[base_recv] = Receiver * norm;
         }
 
         /**
@@ -2592,7 +2591,7 @@ namespace tira {
 
         // -------------------- 3D CUDA dispatch (TK vs ATV) --------------------
 
-        static void _tensorvote3_atv(const float* lambdas, float* output_field, const float* evec1, const float* evec2, 
+        static void _tensorvote3_atv(float* output_field, const float* lambdas, const float* evec1, const float* evec2, 
             unsigned int s0, unsigned int s1, unsigned int s2, float sigma, unsigned int w) {
 
             const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
@@ -2638,22 +2637,21 @@ namespace tira {
             if (dev_V2) HANDLE_ERROR(cudaFree(dev_V2));
         }
 
-        static void _tensorvote3_tk(const float* lambdas, float* output_field, unsigned int s0, unsigned int s1, unsigned int s2,
-            const float* largest_q, const float* smallest_q, float sigma, float sigma2, unsigned int power, unsigned int w,
+        static void _tensorvote3_tk(float* output_field, const float* lambdas, const float* evec2, const float* evec0, 
+            unsigned int s0, unsigned int s1, unsigned int s2, float sigma, float sigma2, unsigned int power, unsigned int w,
             bool STICK, bool PLATE, unsigned samples) {
 
             const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
-            const size_t out_bytes = sizeof(float) * n_voxels * 6;
-            const size_t vec3_bytes = sizeof(float) * n_voxels * 3;
+            const size_t out_bytes = sizeof(glm::mat3) * n_voxels;
+            const size_t vec3_bytes = sizeof(float) * n_voxels * 3u;
 
             // Inputs
             float* dev_L = nullptr;
-            float* dev_Ql = nullptr;
-            float* dev_Qs = nullptr;
-
+            float* dev_V0 = nullptr;
+            float* dev_V2 = nullptr;
             const float* gpuL = _dev_readonly<float>(lambdas, vec3_bytes, dev_L);
-            const float* gpuQ_large = STICK ? _dev_readonly<float>(largest_q, vec3_bytes, dev_Ql) : nullptr;
-            const float* gpuQ_small = PLATE ? _dev_readonly<float>(smallest_q, vec3_bytes, dev_Qs) : nullptr;
+            const float* gpuV2 = STICK ? _dev_readonly<float>(evec2, vec3_bytes, dev_V2) : nullptr;
+            const float* gpuV0 = PLATE ? _dev_readonly<float>(evec0, vec3_bytes, dev_V0) : nullptr;
 
             // Output buffer (kernels use +=, so zero-initialize)
             bool out_is_dev = false;
@@ -2679,8 +2677,9 @@ namespace tira {
             );
             
             if (STICK) {
-                global_stickvote3<<<blocks, threads>>>(gpuOut, gpuL, gpuQ_large, d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
+                global_stickvote3<<<blocks, threads>>>(gpuOut, gpuL, gpuV2, d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
                     power, sticknorm, (int)s0, (int)s1, (int)s2);
+                    HANDLE_KERNEL_LAUNCH();
             }
             if (PLATE) {
                 double K0 = 0.0, K1 = 0.0;
@@ -2690,22 +2689,24 @@ namespace tira {
                     K0 = boost::math::beta(0.5, p_d + 1.5);
                     K1 = boost::math::beta(0.5, p_d + 0.5);
                 }
-                global_platevote3<<<blocks, threads>>>(gpuOut, gpuL, gpuQ_small, d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
+                global_platevote3<<<blocks, threads>>>(gpuOut, gpuL, gpuV0, d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
                     power, platenorm, (int)s0, (int)s1, (int)s2, samples, K0, K1);
+                    HANDLE_KERNEL_LAUNCH();
             }
             HANDLE_ERROR(cudaDeviceSynchronize());
-            free_neighbors(d_nb);
 
             // Copy back to host if needed
             if (!out_is_dev) {
                 _copy_from_device<glm::mat3>(out_mat, gpuOut, out_bytes);
-                HANDLE_ERROR(cudaFree(dev_out));
+                HANDLE_ERROR(cudaDeviceSynchronize());
             }
 
             // Free temporaries
+            if (dev_out) {HANDLE_ERROR(cudaFree(dev_out));}
             if (dev_L)  HANDLE_ERROR(cudaFree(dev_L)); 
-            if (dev_Ql) HANDLE_ERROR(cudaFree(dev_Ql));
-            if (dev_Qs) HANDLE_ERROR(cudaFree(dev_Qs));
+            if (dev_V2) HANDLE_ERROR(cudaFree(dev_V2));
+            if (dev_V0) HANDLE_ERROR(cudaFree(dev_V0));
+            free_neighbors(d_nb);
         }
 
         /**
@@ -2758,10 +2759,10 @@ namespace tira {
             }
 
             if (is_atv) {
-                _tensorvote3_atv(lambdas, output_field, middle_v, largest_v, s0, s1, s2, sigma, w);
+                _tensorvote3_atv(output_field, lambdas, middle_v, largest_v, s0, s1, s2, sigma, w);
             }
             else {
-                _tensorvote3_tk(lambdas, output_field, s0, s1, s2, largest_v, smallest_v,
+                _tensorvote3_tk(output_field, lambdas, largest_v, smallest_v, s0, s1, s2,
                     sigma, sigma2, power, w, stick, plate, samples);
             }
 
