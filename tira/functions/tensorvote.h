@@ -2679,7 +2679,6 @@ namespace tira {
             if (STICK) {
                 global_stickvote3<<<blocks, threads>>>(gpuOut, gpuL, gpuV2, d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
                     power, sticknorm, (int)s0, (int)s1, (int)s2);
-                    HANDLE_KERNEL_LAUNCH();
             }
             if (PLATE) {
                 double K0 = 0.0, K1 = 0.0;
@@ -2691,7 +2690,6 @@ namespace tira {
                 }
                 global_platevote3<<<blocks, threads>>>(gpuOut, gpuL, gpuV0, d_nb.d_ptr, d_nb.count, d_nb.used_const ? 1 : 0,
                     power, platenorm, (int)s0, (int)s1, (int)s2, samples, K0, K1);
-                    HANDLE_KERNEL_LAUNCH();
             }
             HANDLE_ERROR(cudaDeviceSynchronize());
 
