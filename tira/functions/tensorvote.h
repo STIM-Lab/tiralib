@@ -1623,9 +1623,9 @@ namespace tira {
         const glm::vec3& evec0, unsigned samples = 20) {
 
             // A zero-vector has no orientation and cannot vote
-            const float evec_len2 = glm::length(evec0);
+            const float evec_n2 = evec0.x*evec0.x + evec0.y*evec0.y + evec0.z*evec0.z;
             glm::mat3 V(0.0f);
-            if (samples == 0 or !(evec_len2 > TV_EPSILON)) return V;
+            if (samples == 0 || !(evec_n2 > TV_EPSILON)) return V;
 
             // Build an orthonomal basis (u,v) spanning the plane perpendicular to d
             glm::vec3 u, v;
@@ -1647,7 +1647,7 @@ namespace tira {
                 _sb.resize(samples);
                 const float dbeta = float(TV_PI) / float(samples);
                 for (unsigned i = 0; i < samples; ++i) {
-                    const float beta = dbeta * float(i);
+                    float beta = dbeta * float(i);
                     _cb[i] = cosf(beta);
                     _sb[i] = sinf(beta);
                 }
@@ -1759,7 +1759,7 @@ namespace tira {
             const auto NB = build_neighbors3d((int)w, sigma);
 
             const float sticknorm = 1.0f / sticknorm3(sigma.x, sigma.y, power);
-            const float platenorm = 1.0f / TV_PI;
+            const float platenorm = 1.0f / float(TV_PI);
             
             // O(N * w^3) complexity
             for (unsigned int x0 = 0; x0 < s0; x0++) {
@@ -1797,7 +1797,7 @@ namespace tira {
         inline void tensorvote3(glm::mat3* VT, const glm::mat3* Vin,
         glm::vec2 sigma, unsigned int power, const unsigned w, const unsigned s0, const unsigned s1, const unsigned s2,
         const bool stick = true, const bool plate = true, const unsigned samples = 20, const bool is_atv = false) {
-            const unsigned int n_voxels = s0 * s1 * s2;
+            const size_t n_voxels = size_t(s0 * s1 * s2);
 
             float* lambdas = tira::cpu::evals3_symmetric<float>(reinterpret_cast<const float*>(Vin), n_voxels);
             float* thetas = tira::cpu::evecs3spherical_symmetric<float>(reinterpret_cast<const float*>(Vin), lambdas, n_voxels);
@@ -2344,14 +2344,12 @@ namespace tira {
             VT[base_recv] = Receiver * norm;
         }
 
-        __device__ static inline void platevote3_numerical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
-            const float3 d, const float c1, const float c2, unsigned power, const glm::vec3 evec0, float scale, const unsigned samples)
+        __device__ static inline void plate3_numerical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
+            const float3 dn, const float c1, const float c2, unsigned power, const glm::vec3 evec0, float scale, const unsigned samples)
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
             if (samples == 0 or !(evec_len2 > TV_EPSILON)) return;
-
-            float3 dn = d;
 
             glm::vec3 u, v;
             if (fabsf(evec0.z) < 0.999f) {
@@ -2378,7 +2376,7 @@ namespace tira {
             m11 += scale * v11 / samples; m12 += scale * v12 / samples; m22 += scale * v22 / samples;
         }
 
-        __device__ static inline void platevote3_analytical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
+        __device__ static inline void plate3_analytical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
             const float3 d, const float c1, const float c2, const glm::vec3 evec0, float scale, const unsigned power, const double K0_d, const double K1_d)
         {
             // A zero-vector has no orientation and cannot vote
@@ -2519,10 +2517,10 @@ namespace tira {
 
                 // Numerical integration
                 if (samples > 0)
-                    platevote3_numerical_device(m00, m01, m02, m11, m12, m22,
+                    plate3_numerical_device(m00, m01, m02, m11, m12, m22,
                         nb.d, nb.c1, nb.c2, power, evec0, scale, samples);
                 else
-                    platevote3_analytical_device(m00, m01, m02, m11, m12, m22,
+                    plate3_analytical_device(m00, m01, m02, m11, m12, m22,
                         nb.d, nb.c1, nb.c2, evec0, scale, power, K0_d, K1_d);
             }
             glm::mat3 Receiver = glm::mat3(glm::vec3(m00, m01, m02),
@@ -2638,7 +2636,7 @@ namespace tira {
         }
 
         static void _tensorvote3_tk(float* output_field, const float* lambdas, const float* evec2, const float* evec0, 
-            unsigned int s0, unsigned int s1, unsigned int s2, float sigma, float sigma2, unsigned int power, unsigned int w,
+            unsigned int s0, unsigned int s1, unsigned int s2, float sigma1, float sigma2, unsigned int power, unsigned int w,
             bool STICK, bool PLATE, unsigned samples) {
 
             const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
@@ -2660,11 +2658,11 @@ namespace tira {
             glm::mat3* gpuOut = _dev_writeable(out_mat, out_bytes, dev_out, out_is_dev);
             HANDLE_ERROR(cudaMemset(gpuOut, 0, out_bytes));
 
-            const float sticknorm = 1.0f / sticknorm3(sigma, sigma2, power);
+            const float sticknorm = 1.0f / sticknorm3(sigma1, sigma2, power);
             const float platenorm = 1.0f / (float)TV_PI;
 
             // Build/upload neighbor table for TK voting
-            const glm::vec2 sig(sigma, sigma2);
+            const glm::vec2 sig(sigma1, sigma2);
             std::vector<Neighbor3D> NB = cpu::build_neighbors3d((int)w, sig);
             DeviceNeighbors d_nb = upload_neighbors(NB);
 
