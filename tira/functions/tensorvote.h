@@ -7,7 +7,6 @@
 #endif
 
 #include "tensor.h"
-#include "tira/volume.h"
 #include <cmath>
 #include <vector>
 #include <boost/math/special_functions/beta.hpp>
@@ -1631,8 +1630,7 @@ namespace tira {
             // Build an orthonomal basis (u,v) spanning the plane perpendicular to d
             glm::vec3 u, v;
             if (std::fabs(evec0.z) < 0.999f) {
-                // Choose any vector not colinear to d
-                u = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), evec0));
+                u = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), evec0));     // any vector not colinear to d
             }
             else {
                 u = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), evec0));
@@ -1645,17 +1643,21 @@ namespace tira {
 
             for (unsigned i = 0; i < samples; ++i) {
                 const float beta = dbeta * float(i);
-				const float cb = cosf(beta);
-				const float sb = sinf(beta);
+				const float cb = std::cos(beta);
+				const float sb = std::sin(beta);
                 const glm::vec3 q = cb * u + sb * v;
-
 				stickvote3_accumulate_kernel(m00, m01, m02, m11, m12, m22, dn, c1, c2, q, power, 1.0f);
             }
 
             // Integral = sum / samples
-			const float inv = 1.0f / static_cast<float>(samples);
-			m00 *= inv; m01 *= inv; m02 *= inv;
-			m11 *= inv; m12 *= inv; m22 *= inv;
+			// const float inv = 1.0f / static_cast<float>(samples);
+			// m00 *= inv; m01 *= inv; m02 *= inv;
+			// m11 *= inv; m12 *= inv; m22 *= inv;
+            
+            // Riemann integral over beta in [0, pi]: sum * Δβ,  Δβ = pi / samples
+            const float w = dbeta;   // = TV_PI / samples
+            m00 *= w; m01 *= w; m02 *= w;
+            m11 *= w; m12 *= w; m22 *= w;
             V = glm::mat3(glm::vec3(m00, m01, m02),
                           glm::vec3(m01, m11, m12),
                           glm::vec3(m02, m12, m22));
@@ -1713,15 +1715,12 @@ namespace tira {
                     // Analytical closed form solution from direction d
                     V = tk_plate_analytic(n.d, n.c1, n.c2, power, evec0, K0, K1);
 
-                // Accumulate only upper triangle to enforce symmetry (matches CUDA version)
-                Receiver[0][0] += scale * V[0][0]; Receiver[0][1] += scale * V[0][1]; Receiver[0][2] += scale * V[0][2];
+                // Accumulate only upper triangle to enforce symmetry
+                Receiver[0][0] += scale * V[0][0]; Receiver[0][1] += scale * V[0][1];
+                Receiver[0][2] += scale * V[0][2];
                 Receiver[1][1] += scale * V[1][1]; Receiver[1][2] += scale * V[1][2];
                 Receiver[2][2] += scale * V[2][2];
             }
-            // Enforce symmetry to match CUDA version
-            Receiver[1][0] = Receiver[0][1];
-            Receiver[2][0] = Receiver[0][2];
-            Receiver[2][1] = Receiver[1][2];
             return Receiver;
         }
 
@@ -2176,8 +2175,7 @@ namespace tira {
 
             int device = 0;
             HANDLE_ERROR(cudaGetDevice(&device));
-            
-            // Eigendecomposition
+
             Type* lambdas = tira::cuda::evals2_symmetric(t_in, shape0 * shape1, device);
             Type* thetas = tira::cuda::evecs2polar_symmetric(t_in, lambdas, shape0 * shape1, device);
 
@@ -2358,24 +2356,31 @@ namespace tira {
             float v11 = 0.0f, v12 = 0.0f, v22 = 0.0f;
 
             for (unsigned i = 0; i < samples; ++i) {
-                float beta = dbeta * (float(i));
-                float cb = cosf(beta);
-                float sb = sinf(beta);
-                glm::vec3 q = cb * u + sb * v;
+                const float beta = dbeta * (float(i));
+                float sb, cb;
+                sincosf(beta, &sb, &cb);
+
+                // build q explicitly (avoids GLM operator overloads on device)
+                float qx = cb * u.x + sb * v.x;
+                float qy = cb * u.y + sb * v.y;
+                float qz = cb * u.z + sb * v.z;
+
+                // optional but recommended: re-normalize q (cheap + makes it bulletproof)
+                const float invq = rsqrtf(qx*qx + qy*qy + qz*qz);
+                float3 q = make_float3(qx * invq, qy * invq, qz * invq);
                 stickvote3_accumulate_kernel(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, power, 1.0f);
             }
-
-            m00 += scale * v00 / samples; m01 += scale * v01 / samples; m02 += scale * v02 / samples;
-            m11 += scale * v11 / samples; m12 += scale * v12 / samples; m22 += scale * v22 / samples;
+            const float scale_w = scale * dbeta;   // dbeta = TV_PI / samples
+            m00 += scale_w * v00; m01 += scale_w * v01; m02 += scale_w * v02;
+            m11 += scale_w * v11; m12 += scale_w * v12; m22 += scale_w * v22;
         }
 
         __device__ static inline void plate3_analytical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
-            const float3 d, const float c1, const float c2, const glm::vec3 evec0, float scale, const unsigned power, const double K0_d, const double K1_d)
+            const float3 dn, const float c1, const float c2, const glm::vec3 evec0, float scale, const unsigned power, const double K0_d, const double K1_d)
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
             if (!(evec_len2 > TV_EPSILON)) return;
-            float3 dn = d;
             glm::vec3 u, v;
             if (fabsf(evec0.z) < 0.999f) {
                 u = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), evec0));
@@ -2710,9 +2715,9 @@ namespace tira {
             HANDLE_ERROR(cudaSetDevice(device));
 
             const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
-            
+
             Type* lambdas = tira::cuda::evals3_symmetric<Type>(input_field, n_voxels, device);
-            Type* thetas = tira::cuda::evecs3spherical_symmetric<Type>(input_field, lambdas, n_voxels, device);            
+            Type* thetas  = tira::cuda::evecs3spherical_symmetric<Type>(input_field, lambdas, n_voxels, device);
 
             Type* largest_v  = (stick || is_atv) ? new Type[n_voxels * 3] : nullptr;
             Type* middle_v   = is_atv ? new Type[n_voxels * 3] : nullptr;
