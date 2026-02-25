@@ -7,6 +7,7 @@
 #endif
 
 #include "tensor.h"
+#include "tira/volume.h"
 #include <cmath>
 #include <vector>
 #include <boost/math/special_functions/beta.hpp>
@@ -1623,7 +1624,7 @@ namespace tira {
         const glm::vec3& evec0, unsigned samples = 20) {
 
             // A zero-vector has no orientation and cannot vote
-            const float evec_n2 = evec0.x*evec0.x + evec0.y*evec0.y + evec0.z*evec0.z;
+            const float evec_n2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
             glm::mat3 V(0.0f);
             if (samples == 0 || !(evec_n2 > TV_EPSILON)) return V;
 
@@ -1638,28 +1639,16 @@ namespace tira {
             }
             v = glm::cross(evec0, u);
 
-            // Cache trig tables per thread (cos/sin are expensive)
-            thread_local std::vector<float> _cb;
-            thread_local std::vector<float> _sb;
-            thread_local unsigned _cached_samples = 0;
-            if (_cached_samples != samples) {
-                _cb.resize(samples);
-                _sb.resize(samples);
-                const float dbeta = float(TV_PI) / float(samples);
-                for (unsigned i = 0; i < samples; ++i) {
-                    float beta = dbeta * float(i);
-                    _cb[i] = cosf(beta);
-                    _sb[i] = sinf(beta);
-                }
-                _cached_samples = samples;
-            }
-
-            // Integrate over [0, pi] to avoid double counting q and -q
+            const float dbeta = float(TV_PI) / float(samples);
 			float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
 			float m11 = 0.0f, m12 = 0.0f, m22 = 0.0f;
 
             for (unsigned i = 0; i < samples; ++i) {
-                const glm::vec3 q = _cb[i] * u + _sb[i] * v;
+                const float beta = dbeta * float(i);
+				const float cb = cosf(beta);
+				const float sb = sinf(beta);
+                const glm::vec3 q = cb * u + sb * v;
+
 				stickvote3_accumulate_kernel(m00, m01, m02, m11, m12, m22, dn, c1, c2, q, power, 1.0f);
             }
 
@@ -1724,10 +1713,15 @@ namespace tira {
                     // Analytical closed form solution from direction d
                     V = tk_plate_analytic(n.d, n.c1, n.c2, power, evec0, K0, K1);
 
+                // Accumulate only upper triangle to enforce symmetry (matches CUDA version)
                 Receiver[0][0] += scale * V[0][0]; Receiver[0][1] += scale * V[0][1]; Receiver[0][2] += scale * V[0][2];
-                Receiver[1][0] += scale * V[1][0]; Receiver[1][1] += scale * V[1][1]; Receiver[1][2] += scale * V[1][2];
-                Receiver[2][0] += scale * V[2][0]; Receiver[2][1] += scale * V[2][1]; Receiver[2][2] += scale * V[2][2];
+                Receiver[1][1] += scale * V[1][1]; Receiver[1][2] += scale * V[1][2];
+                Receiver[2][2] += scale * V[2][2];
             }
+            // Enforce symmetry to match CUDA version
+            Receiver[1][0] = Receiver[0][1];
+            Receiver[2][0] = Receiver[0][2];
+            Receiver[2][1] = Receiver[1][2];
             return Receiver;
         }
 
@@ -2306,7 +2300,7 @@ namespace tira {
             const int x0 = blockDim.z * blockIdx.z + threadIdx.z;
             if (x0 >= s0 || x1 >= s1 || x2 >= s2)
                 return;
-            const unsigned base_recv = (unsigned)x0 * (unsigned)s1 * (unsigned)s2 + (unsigned)x1 * (unsigned)s2 + (unsigned)x2;
+            const unsigned base_r = (unsigned)x0 * (unsigned)s1 * (unsigned)s2 + (unsigned)x1 * (unsigned)s2 + (unsigned)x2;
 
             // Accumulator for the receiver voxel (symmetric 3x3 matrix)
             float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
@@ -2338,10 +2332,9 @@ namespace tira {
             }
 
             // Write back to VT
-            glm::mat3 Receiver = glm::mat3(glm::vec3(m00, m01, m02),
-                                           glm::vec3(m01, m11, m12),
-                                           glm::vec3(m02, m12, m22));
-            VT[base_recv] = Receiver * norm;
+            VT[base_r][0][0] += norm * m00; VT[base_r][0][1] += norm * m01; VT[base_r][0][2] += norm * m02;
+            VT[base_r][1][0] += norm * m01; VT[base_r][1][1] += norm * m11; VT[base_r][1][2] += norm * m12;
+            VT[base_r][2][0] += norm * m02; VT[base_r][2][1] += norm * m12; VT[base_r][2][2] += norm * m22;
         }
 
         __device__ static inline void plate3_numerical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
@@ -2491,7 +2484,7 @@ namespace tira {
             if (x0 >= s0 || x1 >= s1 || x2 >= s2)
                 return;
 
-            const unsigned base_recv = (unsigned)x0 * (unsigned)s1 * (unsigned)s2 + (unsigned)x1 * (unsigned)s2 + (unsigned)x2;
+            const unsigned base_r = (unsigned)x0 * (unsigned)s1 * (unsigned)s2 + (unsigned)x1 * (unsigned)s2 + (unsigned)x2;
 
             // Accumulator for the receiver voxel (symmetric 3x3 matrix)
             float m00 = 0.0f, m01 = 0.0f, m02 = 0.0f;
@@ -2523,10 +2516,10 @@ namespace tira {
                     plate3_analytical_device(m00, m01, m02, m11, m12, m22,
                         nb.d, nb.c1, nb.c2, evec0, scale, power, K0_d, K1_d);
             }
-            glm::mat3 Receiver = glm::mat3(glm::vec3(m00, m01, m02),
-                                           glm::vec3(m01, m11, m12),
-                                           glm::vec3(m02, m12, m22));
-            VT[base_recv] = Receiver * norm;
+            // Write back to VT
+            VT[base_r][0][0] += norm * m00; VT[base_r][0][1] += norm * m01; VT[base_r][0][2] += norm * m02;
+            VT[base_r][1][0] += norm * m01; VT[base_r][1][1] += norm * m11; VT[base_r][1][2] += norm * m12;
+            VT[base_r][2][0] += norm * m02; VT[base_r][2][1] += norm * m12; VT[base_r][2][2] += norm * m22;
         }
 
         /**
@@ -2719,8 +2712,8 @@ namespace tira {
             const size_t n_voxels = (size_t)s0 * (size_t)s1 * (size_t)s2;
             
             Type* lambdas = tira::cuda::evals3_symmetric<Type>(input_field, n_voxels, device);
-            Type* thetas = tira::cuda::evecs3spherical_symmetric<Type>(input_field, lambdas, n_voxels, device);
-            
+            Type* thetas = tira::cuda::evecs3spherical_symmetric<Type>(input_field, lambdas, n_voxels, device);            
+
             Type* largest_v  = (stick || is_atv) ? new Type[n_voxels * 3] : nullptr;
             Type* middle_v   = is_atv ? new Type[n_voxels * 3] : nullptr;
             Type* smallest_v = plate ? new Type[n_voxels * 3] : nullptr;
