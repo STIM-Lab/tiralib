@@ -15,10 +15,10 @@ namespace tira {
 	 * @tparam T
 	 */
 	template <class T>
-	class volume : public field<T> {		// the image class extends field
+	class volume : public field<T> {
 
 	protected:
-
+		/** @brief Physical voxel spacing in (x, y, z) order. */
 		std::vector<double> _spacing;
 
 		/**
@@ -80,6 +80,15 @@ namespace tira {
 			return field<T>::m_data[i];
 		}
 
+		/**
+		 * @brief Build an unsigned distance-to-boundary field and output a boundary mask.
+		 *
+		 * Boundary voxels are detected where neighboring samples have opposite signs (product <= 0).
+		 * The output distance is initialized near the boundary then propagated via FastSweep().
+		 *
+		 * @param binary_boundary is the output mask: 1 on detected boundary voxels, 0 elsewhere.
+		 * @return Unsigned distance field (same shape as input).
+		 */
 		volume<float> _dist(volume<int>& binary_boundary) {
 			// create registers to hold the size
 			int w = X();
@@ -98,9 +107,9 @@ namespace tira {
 			neighbors.emplace_back(0, 0, -1);
 
 			// indentifying boundary cells
-			for (int y = 1; y < h - 1; y++) {						// for every row in the image
-				for (int x = 1; x < w - 1; x++) {					// for every column in the image
-					for (int z = 1; z < l - 1; z++) {					// for every length in the image
+			for (int y = 1; y < h - 1; y++) {								// for every row in the image
+				for (int x = 1; x < w - 1; x++) {							// for every column in the image
+					for (int z = 1; z < l - 1; z++) {						// for every length in the image
 						for (int k = 0; k < neighbors.size(); k++) {		// for every neighbor
 
 							int nx = x + get<0>(neighbors[k]);				// calculate the x coordinate of the neighbor cell
@@ -108,8 +117,8 @@ namespace tira {
 							int nz = z + get<2>(neighbors[k]);				// calculate the z coordinate of the neighbor cell
 
 							if (m_Get(x, y, z) * m_Get(nx, ny, nz) <= 0) {				// if the product of the current cell and neighboring cell is negative (it is a boundary cell)
-								binary_boundary(x, y, z) = 1;					// this cell is a boundary cell
-								binary_boundary(nx, ny, nz) = 1;				// the neighboring cell is ALSO a boundary cell
+								binary_boundary(x, y, z) = 1;							// this cell is a boundary cell
+								binary_boundary(nx, ny, nz) = 1;						// the neighboring cell is ALSO a boundary cell
 							}
 						}
 					}
@@ -178,15 +187,13 @@ namespace tira {
 		}
 
 	public:
-		/**
-		 * @brief Default constructor creates a volume with isotropic spacing between voxels
-		 */
+		/** @brief Default constructor creates an empty volume with unit (1,1,1). */
 		volume() : field<T>() {
 			_spacing = { 1.0f, 1.0f, 1.0f };
 		}			//initialize all variables, don't allocate any memory
 
 		/**
-		 * @brief Constructor builds a volume with the specified size, number of color channels, and spacing between voxels.
+		 * @brief Construct a volume with the given dimension, number of color channels, and voxel spacing.
 		 * @param nx is the number of pixels along the x dimension (fastest)
 		 * @param ny is the number of pixels along the y dimension
 		 * @param nz is the number of pixels along the z dimension
@@ -199,7 +206,7 @@ namespace tira {
 		}
 
 		/**
-		 * @brief Constructor creates a volume from a provided array
+		 * @brief Construct a volume by copying from a raw pointer (contiguous, interleaved channels).
 		 * @param data is a pointer to the data that will be copied into the volume
 		 * @param nx is the number of voxels along the x-dimension (fastest)
 		 * @param ny is the number of voxels along the y-dimension
@@ -249,13 +256,17 @@ namespace tira {
 			_spacing = { 1.0f, 1.0f, 1.0f };
 		}
 
+		/**
+		 * @brief Construct a volume from an explicit list of slice filenames.
+		 * @param file_list Ordered list of 2D image slices.
+		 */
 		volume(std::vector<std::string> file_list) {
 			Load(file_list);
 			_spacing = { 1.0f, 1.0f, 1.0f };
 		}
 
 		/**
-		 * @brief Is the default constructor (all of the member variables are smart so this can be simple)
+		 * @brief The default destructor (storage is managed by std containers)
 		 */
 		~volume() { }
 
@@ -503,13 +514,15 @@ namespace tira {
 
 		}
 
+		/** @brief Maximum physical extent among sx(), sy(), sz(). */
 		inline double smax() const { return std::max(sx(), std::max(sy(), sz())); }
 
-		/// <summary>
-		/// Returns a single channel of the current volume as an independent one-channel volume
-		/// </summary>
-		/// <param name="c">channel to return</param>
-		/// <returns></returns>
+		/**
+		 * @brief Returns a single channel of the current volume as an independent one-channel volume
+		 * 
+		 * @param c is the channel index to extract
+		 * @return New volume with C()==1 containing the requested channel data
+		 */
 		volume<T> channel(const size_t c) const {
 			volume<T> r(X(), Y(), Z());							// create a new single-channel image
 			T* dp = r.Data();									// create a pointer to the raw result
@@ -520,10 +533,11 @@ namespace tira {
 			return r;
 		}
 
-		/// <summary>
-		/// Cast data types
-		/// </summary>
-		/// <typeparam name="V"></typeparam>
+		/**
+		 * @brief Convert this volume to another scalar type by element-wise casting.
+		 * @tparam V is the destination scalar type.
+		 * @return New volume with the same shape, with values cast to V.
+		 */
 		template<typename V>
 		operator volume<V>() {
 			volume<V> r(this->Shape());					//create a new image
@@ -531,31 +545,46 @@ namespace tira {
 			return r;									//return the new image
 		}
 
+		/** @brief Minimum value over all voxels/channels. */
 		T minv() {
 			T m = *std::min_element(field<T>::m_data.begin(), field<T>::m_data.end());
 			return m;
 		}
 
+		/** @brief Maximum value over all voxels/channels. */
 		T maxv() {
 			T m = *std::max_element(field<T>::m_data.begin(), field<T>::m_data.end());
 			return m;
 		}
 
+		/**
+		 * @brief Set voxel spacing in (x,y,z).
+		 * @param x is the spacing along x.
+		 * @param y is the spacing along y.
+		 * @param z is the spacing along z.
+		 */
 		void spacing(double x, double y, double z) {
 			std::vector<double> spacing = { x, y, z };
 			_spacing = spacing;
 		}
 
+		/** @brief Get voxel spacing in (x,y,z). */
 		std::vector<double> spacing() {
 			return _spacing;
 		}
 
+		/**
+		 * @brief Fill the volume with a synthetic checker-box pattern (single-channel).
+		 * @param X is the size in x.
+		 * @param Y is the size in y.
+		 * @param Z is the size in z.
+		 * @param boxes is the number of boxes per dimension in the checker pattern.
+		 */
 		void generate_grid(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
 			m_Init(X, Y, Z, 1);
 
 			float pixel_size[] = { 1.0f / X, 1.0f / Y, 1.0f / Z };
 
-			//unsigned char* char_data = (unsigned char*)malloc(X * Y * Z * sizeof(unsigned char));							// allocate space for the cube
 			size_t idx_z, idx_y, idx;
 			float x, y, z;
 			bool x_box, y_box, z_box;
@@ -582,9 +611,15 @@ namespace tira {
 			}
 		}
 
+		/**
+		 * @brief Fill the volume with a synthetic RGB pattern modulated by the checker-box mask.
+		 * @param X is the size in x.
+		 * @param Y is the size in y.
+		 * @param Z is the size in z.
+		 * @param boxes is the number of boxes per dimension in the mask pattern.
+		 */
 		void generate_rgb(unsigned int X = 32, unsigned int Y = 32, unsigned int Z = 32, unsigned int boxes = 1) {
 			m_Init(X, Y, Z, 3);
-
 
 			float pixel_size[] = { 1.0f / X, 1.0f / Y, 1.0f / Z };
 
@@ -617,18 +652,19 @@ namespace tira {
 			}
 		}
 
-		// This function writes an OBJ file where for every nonzero voxel 
-        // in the input volume a cube is drawn. Each cube is defined by 8 vertices 
-        // and 6 faces.
-		void convertToCubeObj(const std::string& obj_file_name) {
+		/**
+		 * @brief Export an OBJ file where each nonzero voxel is represented as an axis-aligned cube.
+		 * Each cube is defined by 8 vertices and 6 faces.
+		 * @param obj_filename Output OBJ path.
+		 */
+		void convertToCubeObj(const std::string& obj_filename) {
 			// Open the OBJ file for writing.
-			std::ofstream obj_file(obj_file_name);
+			std::ofstream obj_file(obj_filename);
 			if (!obj_file.is_open()) {
 				std::cerr << "ERROR: Unable to open OBJ file for writing.\n";
 				return;
 			}
-
-			int vertex_counter = 1; // OBJ vertices are 1-indexed.
+			int vertex_counter = 1; 		// OBJ vertices are 1-indexed.
 
 			// Loop over every voxel in the volume.
 			for (int y = 0; y < this->Y(); ++y) {
@@ -675,18 +711,16 @@ namespace tira {
 					}
 				}
 			}
-
 			obj_file.close();
-			std::cout << "Cube OBJ file written successfully: " << obj_file_name << std::endl;
+			std::cout << "Cube OBJ file written successfully: " << obj_filename << std::endl;
 		}
 
-
-		/// <summary>
-		/// Retrieve a slice of the volume as a 2D image
-		/// </summary>
-		/// <param name="i">Slice to return</param>
-		/// <param name="axis">Axis specifying the slice orientation</param>
-		/// <returns></returns>
+		/**
+		 * @brief Extract a 2D slice from the volume.
+		 * @param i is the slice index along the selected axis.
+		 * @param axis is the slice axis (0=x, 1=y, 2=z).
+		 * @return 2D image with C() channels.
+		 */
 		image<T> slice(size_t i, unsigned int axis = 2) {
 			size_t rx, ry;
 			size_t sx, sy, sz;
@@ -695,11 +729,20 @@ namespace tira {
 			if (axis == 0) {
 				rx = Y();
 				ry = Z();
+				image<T> result(rx, ry, C());					// allocate the output slice image
+
+				for (size_t zi = 0; zi < Z(); zi++) {
+					for (size_t yi = 0; yi < Y(); yi++) {
+						for (size_t ci = 0; ci < C(); ci++) {
+							result(yi, zi, ci) = m_Get(i, yi, zi, ci);
+						}
+					}
+				}
+				return result;
 			}
 			else if (axis == 1) {
 				rx = X();
 				ry = Z();
-
 				image<T> result(rx, ry, C());					// allocate the output slice image
 
 				for (size_t zi = 0; zi < Z(); zi++) {
@@ -727,6 +770,14 @@ namespace tira {
 			}
 		}
 
+		/**
+		 * @brief Compute a partial derivative using the underlying field derivative operator and scale by spacing.
+		 * @param axis Derivative axis in field indexing (see field::Derivative).
+		 * @param d Derivative dimension selector passed to field::Derivative.
+		 * @param order Finite difference order passed to field::Derivative.
+		 * @param print_coefs If true, prints finite difference coefficients.
+		 * @return Derivative volume scaled to physical units using voxel spacing.
+		 */
 		tira::volume<float> derivative(unsigned int axis, unsigned int d, unsigned int order, bool print_coefs = false){
 			tira::field<float> F = this->Derivative(axis, d, order, print_coefs);			// derivative of the field
 			tira::volume<float> D(F.Shape(), _spacing);										// create a new volume
@@ -738,25 +789,34 @@ namespace tira {
 			return D;
 		}
 
+		/**
+		 * @brief Compute gradient magnitude using field::gradmag().
+		 * @param order is the finite difference order.
+		 * @return Gradient magnitude volume.
+		 */
 		tira::volume<float> gradmag(unsigned int order) {
 			tira::field<float> F = field<float>::gradmag(order);
 			tira::volume<float> R(F.Data(), X(), Y(), Z());
 			return R;
 		}
 
-		/// <summary>
-		/// Calculates the sign() function at each point in the volume and returns the result.
-		/// </summary>
-		/// <returns></returns>
+		/** @brief Compute element-wise sign of the volume. */
 		tira::volume<float> sign() {
 			tira::field<float> F = field<float>::Sign();
 			tira::volume<float> R(F.Data(), X(), Y(), Z());
 			return R;
 		}
 
-		
+		/**
+		 * @brief Convert a signed level-set field (phi) into an approximate signed distance field.
+		 *
+		 * Distances are initialized near the zero-crossing then propagated with FastSweep(),
+		 * and finally signed using sign(phi).
+		 *
+		 * @return Signed distance field with the same shape as phi.
+		 */
 		tira::volume<T> Phi_to_sdf() {
-			tira::volume<T> phi = *this;								// original field
+			tira::volume<T> phi = *this;
 			tira::volume<T> sdf(phi.X(), phi.Y(), phi.Z(), phi.C(), _spacing);				// output SDF
 
 			float BIG = 99999;
@@ -765,9 +825,8 @@ namespace tira {
 			int X = phi.X();
 			int Y = phi.Y();
 			int Z = phi.Z();
-
 			
-			// generate the template to detect voxels that are adjacent to the boundary at phi = 0
+			// Generate the template to detect voxels that are adjacent to the boundary at phi = 0
 			std::vector<std::tuple<int, int, int>> neighbors;
 			neighbors.emplace_back(-1, -1, -1);
 			neighbors.emplace_back(-1, -1, 0);
@@ -804,7 +863,7 @@ namespace tira {
 			for (int yi = 0; yi < Y; yi++) {							// for every row in the volume
 				for (int xi = 0; xi < X; xi++) {						// for every column in the volume
 					for (int zi = 0; zi < Z; zi++) {					// for every depth slice in the volume
-						float d_min = sdf(xi, yi, zi);			// get the current approximated distance from the SDF
+						float d_min = sdf(xi, yi, zi);					// get the current approximated distance from the SDF
 						for (int k = 0; k < neighbors.size(); k++) {	// for every neighbor
 
 							int nxi = xi + get<0>(neighbors[k]);		// compute x index of neighbor
@@ -847,10 +906,7 @@ namespace tira {
 			tira::volume<float> sign_phi = phi.sign();
 			sdf = sdf * sign_phi;
 
-
 			return sdf;
-
-			//return dist;
 		}
 
 		/**
@@ -862,7 +918,6 @@ namespace tira {
 		 */
 		volume gradient(const unsigned int axis) {
 			volume output(X(), Y(), Z());
-
 			double d = _spacing[axis];
 
 			size_t i[3];
@@ -910,135 +965,104 @@ namespace tira {
 			return output;
 		}
 	
-		// Calculate gradient along dx (3D) with spacing consideration
-		tira::volume<float> gradient_dx()
-		{
+		/** @brief Calculate gradient along x using voxel spacing. */
+		tira::volume<float> gradient_dx() {
 			tira::volume<float> output(X(), Y(), Z());
-
 			double dx = _spacing[0]; // Spacing along X-direction
 
-			for (int j = 0; j < X(); j++)
-			{
-				for (int i = 0; i < Y(); i++)
-				{
-					for (int k = 0; k < Z(); k++)
-					{
+			for (int j = 0; j < X(); j++) {
+				for (int i = 0; i < Y(); i++) {
+					for (int k = 0; k < Z(); k++) {
 						int j_left = j - 1;
 						int j_right = j + 1;
 
-						if (j_left < 0)
-						{
+						if (j_left < 0) {
 							j_left = 0;
 							j_right = 1;
 							output(j, i, k) = (m_Get(j_right, i, k) - m_Get(j_left, i, k)) / dx;
 						}
-						else if (j_right >= X())
-						{
+						else if (j_right >= X()) {
 							j_right = X() - 1;
 							j_left = j_right - 1;
 							output(j, i, k) = (m_Get(j_right, i, k) - m_Get(j_left, i, k)) / dx;
 						}
-						else
-						{
+						else {
 							output(j, i, k) = (m_Get(j_right, i, k) - m_Get(j_left, i, k)) / (2.0 * dx);
 						}
 					}
 				}
 			}
-
 			return output;
 		}
 
-
-		// Calculate gradient along dy (3D) with spacing consideration
-		tira::volume<float> gradient_dy()
-		{
+		/** @brief Calculate gradient along y using voxel spacing. */
+		tira::volume<float> gradient_dy() {
 			tira::volume<float> output(X(), Y(), Z());
-
 			double dy = _spacing[1]; // Spacing along Y-direction
 
-			for (int j = 0; j < X(); j++)
-			{
-				for (int i = 0; i < Y(); i++)
-				{
-					for (int k = 0; k < Z(); k++)
-					{
+			for (int j = 0; j < X(); j++) {
+				for (int i = 0; i < Y(); i++) {
+					for (int k = 0; k < Z(); k++) {
 						int i_left = i - 1;
 						int i_right = i + 1;
 
-						if (i_left < 0)
-						{
+						if (i_left < 0) {
 							i_left = 0;
 							i_right = 1;
 							output(j, i, k) = (m_Get(j, i_right, k) - m_Get(j, i_left, k)) / dy;
 						}
-						else if (i_right >= Y())
-						{
+						else if (i_right >= Y()) {
 							i_right = Y() - 1;
 							i_left = i_right - 1;
 							output(j, i, k) = (m_Get(j, i_right, k) - m_Get(j, i_left, k)) / dy;
 						}
-						else
-						{
+						else {
 							output(j, i, k) = (m_Get(j, i_right, k) - m_Get(j, i_left, k)) / (2.0 * dy);
 						}
 					}
 				}
 			}
-
 			return output;
 		}
 
-
-		// Calculate gradient along dz (3D) with spacing consideration
-		tira::volume<float> gradient_dz()
-		{
+		/** @brief Calculate gradient along z using voxel spacing. */
+		tira::volume<float> gradient_dz() {
 			tira::volume<float> output(X(), Y(), Z());
-
 			double dz = _spacing[2]; // Spacing along Z-direction
 
-			for (int j = 0; j < X(); j++)
-			{
-				for (int i = 0; i < Y(); i++)
-				{
-					for (int k = 0; k < Z(); k++)
-					{
+			for (int j = 0; j < X(); j++) {
+				for (int i = 0; i < Y(); i++) {
+					for (int k = 0; k < Z(); k++) {
 						int k_left = k - 1;
 						int k_right = k + 1;
 
-						if (k_left < 0)
-						{
+						if (k_left < 0) {
 							k_left = 0;
 							k_right = 1;
 							output(j, i, k) = (m_Get(j, i, k_right) - m_Get(j, i, k_left)) / dz;
 						}
-						else if (k_right >= Z())
-						{
+						else if (k_right >= Z()) {
 							k_right = Z() - 1;
 							k_left = k_right - 1;
 							output(j, i, k) = (m_Get(j, i, k_right) - m_Get(j, i, k_left)) / dz;
 						}
-						else
-						{
+						else {
 							output(j, i, k) = (m_Get(j, i, k_right) - m_Get(j, i, k_left)) / (2.0 * dz);
 						}
 					}
 				}
 			}
-
 			return output;
 		}
 
-
-
-		/// <summary>
-		/// Convolves the image by a 3D mask and returns the result
-		/// </summary>
-		/// <param name="mask"></param>
-		/// <returns></returns>
+		/**
+		 * @brief 3D valid convolution with a 3D kernel volume.
+		 * @tparam D Kernel scalar type.
+		 * @param mask 3D kernel (no flipping performed).
+		 * @return Convolved volume over the valid region (output is smaller than input).
+		 */
 		template <typename D>
 		tira::volume<T>convolve3D(tira::volume<D> mask) {
-
 			tira::volume<T>result(X() - (mask.X() - 1), Y() - (mask.Y() - 1), Z() - (mask.Z() - 1));		// output image will be smaller than the input (only valid region returned)
 
 			for (size_t yi = 0; yi < result.Y(); yi++) {
@@ -1048,30 +1072,24 @@ namespace tira {
 						for (size_t vi = 0; vi < mask.Y(); vi++) {
 							for (size_t ui = 0; ui < mask.X(); ui++) {
 								for (size_t wi = 0; wi < mask.Z(); wi++) {
-
 									sum += m_Get((xi + ui), (yi + vi), (zi + wi)) * mask(ui, vi, wi);
-									
 								}
 							}
 						}
-						
 						result(xi, yi, zi) = sum;
 					}
-
 				}
 			}
-
 			return result;
 		}
 
-
-		/// <summary>
-		/// Convolves the image by a 1D mask and returns the result
-		/// </summary>
-		/// <param name="mask"></param>
-		/// <returns></returns>
+		/**
+		 * @brief Separable 3D valid convolution with a 1D kernel applied along y, then x, then z.
+		 * @param K Pointer to 1D kernel values.
+		 * @param k_size Kernel length.
+		 * @return Convolved volume over the valid region (output is smaller than input).
+		 */
 		tira::volume<float> convolve3D_separate(float* K, int k_size) {
-	
 			tira::volume<float>result_x(X(), Y() - (k_size - 1), Z());		// output image will be smaller than the input (only valid region returned)
 
 			float sum;
@@ -1086,7 +1104,6 @@ namespace tira {
 					}
 				}
 			}
-
 			tira::volume<float>result_y(result_x.X() - (k_size - 1), result_x.Y(), result_x.Z());		// output image will be smaller than the input (only valid region returned)
 
 			float sum1;
@@ -1101,7 +1118,6 @@ namespace tira {
 					}
 				}
 			}
-
 			tira::volume<float>result_z(result_y.X(), result_y.Y(), result_y.Z() - (k_size - 1));		// output image will be smaller than the input (only valid region returned)
 
 			float sum2;
@@ -1116,15 +1132,17 @@ namespace tira {
 					}
 				}
 			}
-
 			return result_z;
-
 		}
 
-		// Convolves the volume with a Gaussian kernel and returns the result. This function
-		//    adjusts the sigma value to account for the pixel size (sigma is given in terms of the pixel spacing)
+		/**
+		 * @brief Apply a separable 3D Gaussian filter (valid region by default).
+		 * @param sigma Gaussian sigma in physical units.
+		 * @param window_factor Kernel half-width factor (controls kernel size in voxels).
+		 * @param pad If true, pads before filtering so output matches original size.
+		 * @return Filtered volume.
+		 */
 		tira::volume<float> gaussian_filter(float sigma, int window_factor, bool pad = false) {
-
 			// calculate the kernel sizes along each dimension (in voxel units)
 			float sigma_x = sigma / _spacing[0];
 			int kernel_size_x = window_factor * sigma_x;
@@ -1228,7 +1246,12 @@ namespace tira {
 			return result_z;
 		}
 
-
+		/**
+		 * @brief Reinitialize a level-set function using an Osher-style PDE iteration.
+		 * @param d_tau Time step.
+		 * @param num_iters Number of iterations.
+		 * @return Reinitialized field (approximate signed distance).
+		 */
 		tira::volume<float> reinitialize_osher(float d_tau, int num_iters) {
 
 			tira::volume<float> phi = *this;
@@ -1309,7 +1332,6 @@ namespace tira {
 					}
 				}
 			}
-
 			// Return the evolved (signed distance approximation)
 			return psi;
 		}
@@ -1319,8 +1341,6 @@ namespace tira {
         /// Each dimension is scaled by 'factor', and new voxel values are interpolated
         /// <param name="factor">Upsampling factor (e.g., 2 for doubling resolution)</param>
         /// <returns>A new volume with higher resolution and interpolated values</returns>
-
-
 		tira::volume<float> Trilinear_interpolation(int factor) {
 			int new_x = X() * factor;
 			int new_y = Y() * factor;
@@ -1381,7 +1401,7 @@ namespace tira {
 		}
 
 
-		//Cubic interpolation using Catmull–Rom spline
+		// Cubic interpolation using Catmull–Rom spline
 		tira::volume<float> Tricubic_interpolation(int factor) {
 			int new_x = X() * factor;                      // Scale original X dimension by factor
 			int new_y = Y() * factor;                      // Scale original Y dimension by factor
@@ -1467,8 +1487,6 @@ namespace tira {
 			return upsampled; // Return the upsampled volume
 		}
 
-
-
 		/// <summary>
 		/// Add a border to an image
 		/// </summary>
@@ -1490,12 +1508,6 @@ namespace tira {
 			}
 			return result;
 		}
-
-		/// Add a border around the volume, specifying the width for each dimension separately
-		//tira::volume<T> border(size_t wx, size_t wy, size_t wz, T value) {
-
-		//}
-
 		
 		tira::volume<T> border_separable(size_t wx, size_t wy, size_t wz, T value) {
 			tira::volume<T> result(X() + 2 * wx, Y() + 2 * wy, Z() + 2 * wz);
@@ -1512,7 +1524,6 @@ namespace tira {
 		}
 
 		
-
 		/// <summary>
 		/// Generates a border by replicating edge pixels
 		/// </summary>
@@ -1559,16 +1570,16 @@ namespace tira {
 			return crop(w, w, w, X() - 2 * w, Y() - 2 * w, Z() - 2 * w);
 		}
 
-		/// <summary>
-		/// Crops a volume to a desired size
-		/// </summary>
-		/// <param name="x0">X boundary of the cropped image</param>
-		/// <param name="y0">Y boundary of the cropped image</param>
-		/// <param name="z0">Z boundary of the cropped image</param>
-		/// <param name="w">Width of the cropped image</param>
-		/// <param name="h">Height of the cropped image</param>
-		/// <param name="d">Depth of the cropped image</param>
-		/// <returns></returns>
+		/**
+		 * @brief Crop a subvolume.
+		 * @param x0 Start x index.
+		 * @param y0 Start y index.
+		 * @param z0 Start z index.
+		 * @param w Size in x.
+		 * @param h Size in y.
+		 * @param d Size in z.
+		 * @return Cropped volume.
+		 */
 		tira::volume<T> crop(size_t x0, size_t y0, size_t z0, size_t w, size_t h, size_t d) {
 			if (x0 + w > X() || y0 + h > Y() || z0 + d > Z()) {
 				std::cout << "ERROR: cropped volume contains an invalid region." << std::endl;
@@ -1584,39 +1595,38 @@ namespace tira {
 					memcpy(&result.m_data[dsti], &field<T>::m_data[srci], line_bytes);			// copy the data
 				}
 			}
-			
 			return result;
 		}
 
-
+		/**
+		 * @brief Save each z-slice as a 2D image on disk.
+		 * @param prefix Output filename prefix (slice index is appended).
+		 * @param format Image format extension (e.g., "bmp", "png").
+		 */
 		void save(std::string prefix, std::string format = "bmp") {
-
 			for (size_t zi = 0; zi < Z(); zi++) {							// for each z slice
-				
 				std::stringstream ss;										// get the string representation of the current number
 				ss << std::setfill('0') << std::setw(size_t(log10(Z()))) << zi;
 				std::string num = ss.str();
 
 				std::string filename = prefix + num + "." + format;			// get the file name for this slice
-
 				tira::image<T> slice_image = slice(zi);						// get an image of the slice
 				slice_image.save(filename);
 			}
 		}
 
 		/**
-		 * @brief Load a list of files and assemble them as a volume
-		 * @param file_names is a vector containing all of the file names to load
+		 * @brief Load a stack of 2D image files into the volume (z = file index).
+		 * @param file_names Ordered list of slice filenames.
+		 * @param progress If true, prints a progress bar.
 		 */
 		void Load(std::vector<std::string> file_names, const bool progress = true) {
-
 			tira::image<T> test(file_names[0]);
 
 			m_Init(test.width(), test.height(), file_names.size(), test.channels());			// allocate space for the new shape					
 	
 			// copies data from each image file to the destination data
 			for (size_t zi = 0; zi < Z(); zi++) {											// iterate through each file
-
 				tira::image<T> img(file_names[zi]);											// load the image file
 
 				for (size_t yi = 0; yi < Y(); yi++) {
@@ -1633,33 +1643,16 @@ namespace tira {
 			std::cout << std::endl;
 		}
 
+		/**
+		 * @brief Load all files in a directory as a slice stack (lexicographically sorted).
+		 * @param directory Directory containing slice images.
+		 * @warning Current code does not filter by extension; document or fix that.
+		 */
 		void LoadStack(std::string directory) {
 			if (field<T>::m_shape.size() != 0) {							// if a volume is already allocated, clear it
 				field<T>::m_shape.clear();
 				field<T>::m_data.clear();
 			}
-			// generate a list of file names from the mask
-
-			// ------------- using filesystem ---------------------- //
-			
-			// obtaining the path string from input
-			/*std::size_t pos = file_mask.rfind("*");												// position of * in file_mask
-			if (pos == std::string::npos) {
-				std::cout << "Cannot compose a volume from a single image." << std::endl;
-				exit(1);
-			}
-			std::string path(file_mask.substr(0, pos));											// gets the path of the folder containing the images
-			std::string ext(file_mask.substr(pos + 1, file_mask.length() - pos));				// stores the file format (jpg, bmp, ppm, ...)
-
-			// check if the file format is valid
-			if (ext != ".bmp" &&
-				ext != ".png" &&
-				ext != ".pbm" &&
-				ext != ".tif") {
-
-				std::cout << "File format not valid" << std::endl;
-			}
-			*/
 			std::set<std::filesystem::path> sorted_files;
 			for (auto& p : std::filesystem::directory_iterator(directory))							// iterate through each file and stores the ones with
 			{																					// desired extension in file_name vector
@@ -1678,20 +1671,25 @@ namespace tira {
 			}
 		}
 
-		
-		/// <summary>
-		/// Load a volume from an NPY file. This function makes sure that the volume has four channels (even if there is only one color channel)
-		/// </summary>
-		/// <typeparam name="D"></typeparam>
-		/// <param name="filename"></param>
+		/**
+		 * @brief Load a volume from a NumPy file.
+		 * @tparam D On-disk dtype.
+		 * @param filename Path to .npy file.
+		 * @note Ensures shape has an explicit channel dimension (adds c=1 if missing).
+		 */
 		template<typename D = T>
 		void load_npy(std::string filename) {
-			field<T>::template LoadNpy<D>(filename);										// load the numpy file using the tira::field class
+			field<T>::template LoadNpy<D>(filename);								// load the numpy file using the tira::field class
 			if (field<T>::m_shape.size() == 3)										// if the numpy array is only 2D, add a color channel of size 1
 				field<T>::m_shape.push_back(1);
 		}
 
-		/// Save the volume as a Numpy file. If there is only one channel, this function will squeeze the dimensions.
+		/**
+		 * @brief Save the volume to a NumPy file.
+		 * @tparam D On-disk dtype (used by field::SaveNpy).
+		 * @param filename Output path.
+		 * @note If C()==1, the channel dimension is squeezed.
+		 */
 		template<typename D = T>
 		void save_npy(std::string filename) {
 			std::vector<size_t> squeezed_shape = field<T>::m_shape;
@@ -1835,22 +1833,29 @@ namespace tira {
 			return result;
 		}
 
-
+		/**
+		 * @brief Resize the volume to the given dimensions.
+		 * @param x New x size.
+		 * @param y New y size.
+		 * @param z New z size.
+		 * @param c New channel count.
+		 */
 		void resize(size_t x, size_t y, size_t z, size_t c = 0) {
 			std::vector<size_t> shape = { z, y, x, c };
 			tira::field<T>::Resize(shape);
 		}
 
+		/**
+		 * @brief Resize using a field-style shape vector; missing dims are padded with 1s.
+		 * @param shape Shape in stored order {z,y,x,c}.
+		 */
 		void resize(std::vector<size_t> shape) {
 			for (size_t d = shape.size(); d < 4; d++)
 				shape.push_back(1);
 			field<T>::Resize(shape);
 		}
 
-		/// <summary>
-		/// Return a string for describing the volume on the command line
-		/// </summary>
-		/// <returns>A string summarizing the volume</returns>
+		/** @brief Human-readable summary of size, channel count, and element size. */
 		std::string str() {
 			std::stringstream ss;
 			ss << "X: " << X() << "     Y: " << Y() << "     Z: " << Z() << std::endl;
@@ -1859,7 +1864,6 @@ namespace tira {
 			return ss.str();
 		}
 		
-
 		volume<T> dist() {
 			volume<int> boundary;
 			return _dist(boundary);
@@ -1909,7 +1913,6 @@ namespace tira {
 			for (int i = 0; i < SDF.size(); i++) {
 				SDF[i] = -1 * SDF[i];
 			}
-
 
 			double val; int gridPos;
 			const int row = width;
@@ -1982,15 +1985,14 @@ namespace tira {
 			return D;
 		}
 
-		/// <summary>
-		/// Generate a color map of the image.
-		/// </summary>
-		/// <param name="minval"></param>
-		/// <param name="maxval"></param>
-		/// <param name="colormap">type of colormap to apply</param>
-		/// <returns></returns>
+		/**
+		 * @brief Map a single-channel scalar volume to an RGB volume using a colormap.
+		 * @param minval Lower bound for normalization.
+		 * @param maxval Upper bound for normalization.
+		 * @param colormap Colormap selection.
+		 * @return 3-channel (RGB) volume.
+		 */
 		volume<unsigned char> cmap(T minval, T maxval, const ColorMap colormap) {
-
 			if (C() > 1) {																	// throw an exception if the image is more than one channel
 				throw "Cannot create a color map from images with more than one channel!";
 			}
@@ -2002,16 +2004,14 @@ namespace tira {
 			return color_result;
 		}
 
-		/// <summary>
-		/// Generate a color map of the image.
-		/// </summary>
-		/// <returns></returns>
+		/**
+		 * @brief Generate a color map of the volume min/max values.
+		 * @param colormap Colormap selection (Default ColorMap::Brewer).
+		 * @return 3-channel (RGB) volume.
+		 */
 		volume<unsigned char> cmap(ColorMap colormap = ColorMap::Brewer) {
 			return cmap(minv(), maxv(), colormap);
 		}
 
 	};	// end class volume
-
-	
-
 }	// end namespace tira
