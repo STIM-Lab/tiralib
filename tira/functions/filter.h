@@ -165,11 +165,11 @@ namespace tira::cpu {
 		for (unsigned i = 0; i < ksize; i++)
 			printf("%f", kernel[i]);
 
-		ImageType* dest_x = tira::cpu::convolve2<ImageType, KernelType>(input, in_sx, in_sy, kernel, ksize, 1, out_sx, out_sy);
-		ImageType* dest_xy = tira::cpu::convolve2<ImageType, KernelType>(dest_x, out_sx, out_sy, kernel, 1, ksize, out_sx, out_sy);
+		ImageType* dest_x = convolve2<ImageType, KernelType>(input, in_sx, in_sy, kernel, ksize, 1, out_sx, out_sy);
+		ImageType* dest_xy = convolve2<ImageType, KernelType>(dest_x, out_sx, out_sy, kernel, 1, ksize, out_sx, out_sy);
 
-		delete kernel;
-		delete dest_x;
+		delete[] kernel;
+		free(dest_x);
 		return dest_xy;
 	}
 
@@ -191,8 +191,13 @@ namespace tira::cpu {
 		ImageType* dest_x = tira::cpu::convolve3<ImageType, KernelType>(input, in_sx, in_sy, in_sz, kernel_w, ksize_w, 1, 1, temp_sx, temp_sy, temp_sz);
 		ImageType* dest_xy = tira::cpu::convolve3<ImageType, KernelType>(dest_x, temp_sx, temp_sy, temp_sz, kernel_h, 1, ksize_h, 1, temp_sx, temp_sy, temp_sz);
 		ImageType* dest_xyz = tira::cpu::convolve3<ImageType, KernelType>(dest_xy, temp_sx, temp_sy, temp_sz, kernel_d, 1, 1, ksize_d, out_sx, out_sy, out_sz);
-		delete[] kernel_w, kernel_h, kernel_d;
-		delete[] dest_x, dest_xy;
+
+		delete[] kernel_w;
+		delete[] kernel_h;
+		delete[] kernel_d;
+		delete[] dest_x;
+		delete[] dest_xy;
+
 		return dest_xyz;
 	}
 };

@@ -88,9 +88,10 @@ namespace tira {
 
 			T* derivative = new T[m_data.size()];												// allocate a dynamic array for the derivative data
 
-			int S = C.size();											// store the number of sample points
-			int S2 = S / 2;												// store the number of sample points on one side of the template
-			int ci;														// current template to use
+			const size_t S = C.size();											// store the number of sample points
+			const size_t S2 = S / 2;											// store the number of sample points on one side of the template
+			size_t ci = 0;														// current template to use
+			
 			T accum;
 			int offset;
 			std::vector<size_t> c(m_shape.size());
@@ -742,7 +743,7 @@ namespace tira {
 
 			field result(m_shape, ptr);
 
-			delete ptr;
+			delete[] ptr;
 			return result;
 		}
 
@@ -1006,7 +1007,6 @@ namespace tira {
 		 * @return the total number of samples (the size of the m_data vector)
 		 */
 		size_t Size() const {
-			
 			return m_data.size();
 		}
 
