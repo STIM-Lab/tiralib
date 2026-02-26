@@ -1654,7 +1654,7 @@ namespace tira {
 			// m00 *= inv; m01 *= inv; m02 *= inv;
 			// m11 *= inv; m12 *= inv; m22 *= inv;
             
-            // Riemann integral over beta in [0, pi]: sum * Δβ,  Δβ = pi / samples
+            // Riemann integral over beta in [0, pi]: sum * dβ,  dβ = pi / samples
             const float w = dbeta;   // = TV_PI / samples
             m00 *= w; m01 *= w; m02 *= w;
             m11 *= w; m12 *= w; m22 *= w;
@@ -2267,6 +2267,17 @@ namespace tira {
             return sum;
         }
 
+        __device__ __forceinline__ float3 cross3(const float3 a, const float3 b) {
+            return make_float3(a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x);
+        }
+
+        __device__ __forceinline__ float3 normalize3(const float3 a) {
+            const float len2 = a.x*a.x + a.y*a.y + a.z*a.z;
+            if (len2 <= 0.0f) return make_float3(0.0f, 0.0f, 0.0f);
+            const float inv = rsqrtf(len2);
+            return make_float3(a.x * inv, a.y * inv, a.z * inv);
+        }
+
         __global__ static void spherical_to_cart3_kernel(float* Qout, const float* V6, bool evec_largest, size_t N) {
             size_t i = blockIdx.x * blockDim.x + threadIdx.x;
             if (i >= N) return;
@@ -2336,38 +2347,28 @@ namespace tira {
         }
 
         __device__ static inline void plate3_numerical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
-            const float3 dn, const float c1, const float c2, unsigned power, const glm::vec3 evec0, float scale, const unsigned samples)
-        {
+            const float3 dn, const float c1, const float c2, unsigned power, const float3 evec0, float scale, const unsigned samples) {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
-            if (samples == 0 or !(evec_len2 > TV_EPSILON)) return;
+            if (samples == 0u || !(evec_len2 > TV_EPSILON)) return;
 
-            glm::vec3 u, v;
-            if (fabsf(evec0.z) < 0.999f) {
-                u = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), evec0));
-            }
-            else {
-                u = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), evec0));
-            }
-            v = glm::cross(evec0, u);
+            const float invnorm = rsqrtf(evec_len2);
+            const float3 n = make_float3(evec0.x * invnorm, evec0.y * invnorm, evec0.z * invnorm);
+
+            const float3 a = (fabsf(n.z) < 0.999f) ? make_float3(0.0f,0.0f,1.0f) : make_float3(1.0f,0.0f,0.0f);
+            const float3 u = normalize3(cross3(a, n));
+            const float3 v = cross3(n, u);
 
             const float dbeta = float(TV_PI) / float(samples);
             float v00 = 0.0f, v01 = 0.0f, v02 = 0.0f;
             float v11 = 0.0f, v12 = 0.0f, v22 = 0.0f;
 
             for (unsigned i = 0; i < samples; ++i) {
-                const float beta = dbeta * (float(i));
+                const float beta = dbeta * float(i);
                 float sb, cb;
                 sincosf(beta, &sb, &cb);
 
-                // build q explicitly (avoids GLM operator overloads on device)
-                float qx = cb * u.x + sb * v.x;
-                float qy = cb * u.y + sb * v.y;
-                float qz = cb * u.z + sb * v.z;
-
-                // optional but recommended: re-normalize q (cheap + makes it bulletproof)
-                const float invq = rsqrtf(qx*qx + qy*qy + qz*qz);
-                float3 q = make_float3(qx * invq, qy * invq, qz * invq);
+                const float3 q = make_float3(cb*u.x + sb*v.x, cb*u.y + sb*v.y, cb*u.z + sb*v.z);
                 stickvote3_accumulate_kernel(v00, v01, v02, v11, v12, v22, dn, c1, c2, q, power, 1.0f);
             }
             const float scale_w = scale * dbeta;   // dbeta = TV_PI / samples
@@ -2376,25 +2377,25 @@ namespace tira {
         }
 
         __device__ static inline void plate3_analytical_device(float& m00, float& m01, float& m02, float& m11, float& m12, float& m22,
-            const float3 dn, const float c1, const float c2, const glm::vec3 evec0, float scale, const unsigned power, const double K0_d, const double K1_d)
+            const float3 dn, const float c1, const float c2, const float3 evec0, float scale, const unsigned power, const double K0_d, const double K1_d)
         {
             // A zero-vector has no orientation and cannot vote
             const float evec_len2 = evec0.x * evec0.x + evec0.y * evec0.y + evec0.z * evec0.z;
             if (!(evec_len2 > TV_EPSILON)) return;
-            glm::vec3 u, v;
-            if (fabsf(evec0.z) < 0.999f) {
-                u = glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), evec0));
-            }
-            else {
-                u = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), evec0));
-            }
-            v = glm::cross(evec0, u);
 
-            // Rotation matrix Z = [u v evec0]
-            // Zt = transpose(Z)
+            // Normalize evec0 -> n (float3)
+            const float invn = rsqrtf(evec_len2);
+            const float3 n = make_float3(evec0.x * invn, evec0.y * invn, evec0.z * invn);
+
+            // Build orthonormal basis (u, v) spanning plane orthogonal to n
+            const float3 a = (fabsf(n.z) < 0.999f) ? make_float3(0.0f, 0.0f, 1.0f) : make_float3(1.0f, 0.0f, 0.0f);
+            const float3 u = normalize3(cross3(a, n));
+            const float3 v = cross3(n, u);
+
+            // Rotation matrix Z = [u v n], so Zt = transpose(Z)
             const float Zt_00 = u.x, Zt_01 = u.y, Zt_02 = u.z;
             const float Zt_10 = v.x, Zt_11 = v.y, Zt_12 = v.z;
-            const float Zt_20 = evec0.x, Zt_21 = evec0.y, Zt_22 = evec0.z;
+            const float Zt_20 = n.x, Zt_21 = n.y, Zt_22 = n.z;
 
             // Rotate d into local frame
             const float dx = dn.x * Zt_00 + dn.y * Zt_01 + dn.z * Zt_02;
@@ -2405,80 +2406,76 @@ namespace tira {
             const float alpha = sqrtf(dx * dx + dy * dy);
             const float a2 = alpha * alpha;
             const double a2_d = fminf(static_cast<double>(a2), 1.0); // prevent issues with hyp2f1
-            float phi = atan2f(dy, dx);
+            const float phi = atan2f(dy, dx);
 
             // Compute beta and hypergeometric integrals
-            const double p_d = static_cast<double>(power);
             const double J0 = 0.5 * TV_PI * hyp2f1_neg_p_device(power, 1.5, 2.0, a2_d);
             const double J1 = TV_PI * hyp2f1_neg_p_device(power, 0.5, 1.0, a2_d);
 
             // Terms in the rotated frame (A, B)
             const float tmp_a2 = 1.0f - 2.0f * a2;
 
-            float A00 = (tmp_a2 * tmp_a2) * static_cast<float>(J0);
-            float A02 = -2.0f * alpha * dz * tmp_a2 * static_cast<float>(J0);
-            float A11 = static_cast<float>(J1 - J0);
-            float A20 = A02;
-            float A22 = 4.0f * a2 * (dz * dz) * static_cast<float>(J0);
+            const float A00 = (tmp_a2 * tmp_a2) * static_cast<float>(J0);
+            const float A02 = -2.0f * alpha * dz * tmp_a2 * static_cast<float>(J0);
+            const float A11 = static_cast<float>(J1 - J0);
+            const float A20 = A02;
+            const float A22 = 4.0f * a2 * (dz * dz) * static_cast<float>(J0);
 
             const float a2p = powf(a2, static_cast<float>(power));
             const float K0 = static_cast<float>(K0_d);
             const float K1 = static_cast<float>(K1_d);
 
-            float B00 = a2p * (tmp_a2 * tmp_a2) * K0;
-            float B02 = -2.0f * alpha * dz * tmp_a2 * a2p * K0;
-            float B11 = a2p * (K1 - K0);
-            float B20 = B02;
-            float B22 = 4.0f * a2 * (dz * dz) * a2p * K0;
+            const float B00 = a2p * (tmp_a2 * tmp_a2) * K0;
+            const float B02 = -2.0f * alpha * dz * tmp_a2 * a2p * K0;
+            const float B11 = a2p * (K1 - K0);
+            const float B22 = 4.0f * a2 * (dz * dz) * a2p * K0;
 
             // Rotate back around Z by phi
             float cph, sph;
             sincosf(phi, &sph, &cph);
 
-            float ta00 = cph * cph * A00 + sph * sph * A11;
-            float ta01 = cph * sph * (A00 - A11);
-            float ta02 = cph * A02;
-            float ta11 = sph * sph * A00 + cph * cph * A11;
-            float ta12 = sph * A02;
-            float ta22 = A22;
+            const float ta00 = cph * cph * A00 + sph * sph * A11;
+            const float ta01 = cph * sph * (A00 - A11);
+            const float ta02 = cph * A02;
+            const float ta11 = sph * sph * A00 + cph * cph * A11;
+            const float ta12 = sph * A02;
+            const float ta22 = A22;
 
-            float tb00 = cph * cph * B00 + sph * sph * B11;
-            float tb01 = cph * sph * (B00 - B11);
-            float tb02 = cph * B02;
-            float tb11 = sph * sph * B00 + cph * cph * B11;
-            float tb12 = sph * B02;
-            float tb22 = B22;
+            const float tb00 = cph * cph * B00 + sph * sph * B11;
+            const float tb01 = cph * sph * (B00 - B11);
+            const float tb02 = cph * B02;
+            const float tb11 = sph * sph * B00 + cph * cph * B11;
+            const float tb12 = sph * B02;
+            const float tb22 = B22;
 
             // Combine terms in local frame
-            float V_loc_00 = c1 * ta00 + c2 * tb00;
-            float V_loc_01 = c1 * ta01 + c2 * tb01;
-            float V_loc_02 = c1 * ta02 + c2 * tb02;
-            float V_loc_11 = c1 * ta11 + c2 * tb11;
-            float V_loc_12 = c1 * ta12 + c2 * tb12;
-            float V_loc_22 = c1 * ta22 + c2 * tb22;
+            const float V_loc_00 = c1 * ta00 + c2 * tb00;
+            const float V_loc_01 = c1 * ta01 + c2 * tb01;
+            const float V_loc_02 = c1 * ta02 + c2 * tb02;
+            const float V_loc_11 = c1 * ta11 + c2 * tb11;
+            const float V_loc_12 = c1 * ta12 + c2 * tb12;
+            const float V_loc_22 = c1 * ta22 + c2 * tb22;
 
-            // Final rotation: V_global = Z * V_local * Zt
-            float T00 = u.x * V_loc_00 + v.x * V_loc_01 + evec0.x * V_loc_02;
-            float T01 = u.x * V_loc_01 + v.x * V_loc_11 + evec0.x * V_loc_12;
-            float T02 = u.x * V_loc_02 + v.x * V_loc_12 + evec0.x * V_loc_22;
+            // Final rotation: V_global = Z * V_local * Zt, with Z columns (u, v, n)
+            const float T00 = u.x * V_loc_00 + v.x * V_loc_01 + n.x * V_loc_02;
+            const float T01 = u.x * V_loc_01 + v.x * V_loc_11 + n.x * V_loc_12;
+            const float T02 = u.x * V_loc_02 + v.x * V_loc_12 + n.x * V_loc_22;
 
-            float T10 = u.y * V_loc_00 + v.y * V_loc_01 + evec0.y * V_loc_02;
-            float T11 = u.y * V_loc_01 + v.y * V_loc_11 + evec0.y * V_loc_12;
-            float T12 = u.y * V_loc_02 + v.y * V_loc_12 + evec0.y * V_loc_22;
+            const float T10 = u.y * V_loc_00 + v.y * V_loc_01 + n.y * V_loc_02;
+            const float T11 = u.y * V_loc_01 + v.y * V_loc_11 + n.y * V_loc_12;
+            const float T12 = u.y * V_loc_02 + v.y * V_loc_12 + n.y * V_loc_22;
 
-            float T20 = u.z * V_loc_00 + v.z * V_loc_01 + evec0.z * V_loc_02;
-            float T21 = u.z * V_loc_01 + v.z * V_loc_11 + evec0.z * V_loc_12;
-            float T22 = u.z * V_loc_02 + v.z * V_loc_12 + evec0.z * V_loc_22;
+            const float T20 = u.z * V_loc_00 + v.z * V_loc_01 + n.z * V_loc_02;
+            const float T21 = u.z * V_loc_01 + v.z * V_loc_11 + n.z * V_loc_12;
+            const float T22 = u.z * V_loc_02 + v.z * V_loc_12 + n.z * V_loc_22;
 
-            // Accumulate (T * Zt) * scale
-            m00 += scale * (T00 * u.x + T01 * v.x + T02 * evec0.x);
-            m01 += scale * (T00 * u.y + T01 * v.y + T02 * evec0.y);
-            m02 += scale * (T00 * u.z + T01 * v.z + T02 * evec0.z);
-            m11 += scale * (T10 * u.y + T11 * v.y + T12 * evec0.y);
-            m12 += scale * (T10 * u.z + T11 * v.z + T12 * evec0.z);
-            m22 += scale * (T20 * u.z + T21 * v.z + T22 * evec0.z);
-
-            return;
+            // Accumulate (T * Zt) * scale, using Zt columns (u, v, n)
+            m00 += scale * (T00 * u.x + T01 * v.x + T02 * n.x);
+            m01 += scale * (T00 * u.y + T01 * v.y + T02 * n.y);
+            m02 += scale * (T00 * u.z + T01 * v.z + T02 * n.z);
+            m11 += scale * (T10 * u.y + T11 * v.y + T12 * n.y);
+            m12 += scale * (T10 * u.z + T11 * v.z + T12 * n.z);
+            m22 += scale * (T20 * u.z + T21 * v.z + T22 * n.z);
         }
         
         __global__ static void global_platevote3(glm::mat3* VT, const float* L, const float* Q_small, const DeviceNeighbor3D* d_neigbors_glob,
@@ -2511,7 +2508,7 @@ namespace tira {
                 float scale = copysignf(fabsf(l1) - fabsf(l0), l1);
 
                 // Eigenvector at voter in spherical angles
-                const glm::vec3 evec0(Q_small[b3 + 0u], Q_small[b3 + 1u], Q_small[b3 + 2u]);
+                const float3 evec0 = make_float3(Q_small[b3 + 0u], Q_small[b3 + 1u], Q_small[b3 + 2u]);
 
                 // Numerical integration
                 if (samples > 0)
