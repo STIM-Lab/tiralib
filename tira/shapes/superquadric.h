@@ -70,13 +70,12 @@ namespace tira {
 				Icosphere<Type>::_vertices[vi * 3 + 1] = l1 * y * radius;
 				Icosphere<Type>::_vertices[vi * 3 + 2] = l0 * z * radius;
 
-				Type sx = 1.0f / l2;
-				Type sy = 1.0f / l1;
-				Type sz = 1.0f / l0;
+				// Type sx = 1.0f / l2;
+				// Type sy = 1.0f / l1;
+				// Type sz = 1.0f / l0;
 				Icosphere<Type>::_normals[vi * 3 + 0] = nx;// sx* nx;
 				Icosphere<Type>::_normals[vi * 3 + 1] = ny;// sy* ny;
 				Icosphere<Type>::_normals[vi * 3 + 2] = nz;// sz* nz;
-
 			}
 			Icosphere<Type>::buildInterleavedVertices();
 		}

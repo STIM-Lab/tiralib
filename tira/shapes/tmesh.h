@@ -243,7 +243,7 @@ namespace tira{
 		 * 					will be returned in lexicographic order (x first, then xy, then xyz).
 		 * @return std::vector<float> is the array of interleaved vertex data
 		 */
-		std::vector<float> Interleave(int texcoords = 3) {
+		std::vector<float> Interleave(size_t texcoords = 3) {
 
 			size_t n_vertices = NumVertices();
 			size_t stride = 3 + 3 + texcoords;

@@ -31,7 +31,7 @@ namespace tira {
 			texcoords.push_back(0);
 			texcoords.push_back(0);
 
-			for (int i = 1; i < stacks; ++i)
+			for (unsigned int i = 1; i < stacks; ++i)
 			{
 				stackAngle = 3.14159265358979323846 / 2 - i * stackStep;      // starting from pi/2 to -pi/2
 				xy = radius * cosf(stackAngle);             // r * cos(u)
@@ -39,7 +39,7 @@ namespace tira {
 
 				// add (sectorCount+1) vertices per stack
 				// the first and last vertices have same position and normal, but different tex coords
-				for (int j = 0; j < sectors; ++j)
+				for (unsigned int j = 0; j < sectors; ++j)
 				{
 					sectorAngle = j * sectorStep;           // starting from 0 to 2pi
 
@@ -87,7 +87,7 @@ namespace tira {
 			//std::vector<int> lineIndices;
             std::vector<unsigned int> indices;
 			int k1, k2;
-			for (int i = 0; i < stacks; ++i)
+			for (unsigned int i = 0; i < stacks; ++i)
 			{
 				if (i == 0)
 					k1 = 0;
@@ -96,7 +96,7 @@ namespace tira {
 
 				k2 = k1 + sectors;      // beginning of next stack
 
-				for (int j = 0; j < sectors; ++j, ++k1, ++k2)
+				for (unsigned int j = 0; j < sectors; ++j, ++k1, ++k2)
 				{
 					// 2 triangles per sector excluding first and last stacks
 					// k1 => k2 => k1+1
