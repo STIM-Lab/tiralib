@@ -23,7 +23,21 @@ def build_directories(out_directory, cube_dim):
         
         
 # split up the images into separate stacks
-def split_stacks(in_directory, out_directory, cube_dim):
+def split_stacks(in_directory, out_directory):
+    
+    # get the list of files from the input directory
+    files = [f for f in os.listdir(in_directory) if os.path.isfile(os.path.join(in_directory, f))]
+    files.sort()
+    
+    # load the first file to determine the X and Y dimensions of the stack
+    F0 = ski.io.imread(in_directory + files[0])
+    
+    # calculate the total number of cubes in each dimension
+    cube_dim = (ceildiv(F0.shape[0], S), ceildiv(F0.shape[1], S), ceildiv(len(files), S))
+    
+    # build the directory structure
+    build_directories(out_directory, cube_dim)
+    
     # for each file in the large image stack
     for fi in range(len(files)):
         
@@ -44,6 +58,7 @@ def split_stacks(in_directory, out_directory, cube_dim):
                     
                 P = F[xi_min:xi_max, yi_min:yi_max]
                 ski.io.imsave(out_directory + cubestr(xi, yi, zi) + "/" + files[fi], P)
+    return cube_dim
                 
 # convert the image stacks to numpy files
 def stacks_to_npy(out_directory, cube_dim):
@@ -69,30 +84,21 @@ def stacks_to_npy(out_directory, cube_dim):
                 np.save(stack_filename, Stack)
         
     
+# cubify script splits a large image stack into manageable cubes of size cube_size
+def cubify(in_directory, out_directory, cube_size):  
+    
+    # build substacks
+    cube_dimension = split_stacks(in_directory, out_directory)
+    
+    # convert each stack to a NumPy file
+    stacks_to_npy(out_directory, cube_dimension)
 
-in_directory = "/home/david/tissue/kesm_small_0/images/"
-out_directory = "/home/david/test/"
 
+source_dir = "/home/david/tissue/kesm_small_0/images/"
+dest_dir = "/home/david/test/"
 S = 200
 
-# get the list of files from the input directory
-files = [f for f in os.listdir(in_directory) if os.path.isfile(os.path.join(in_directory, f))]
-files.sort()
-
-# load the first file to determine the X and Y dimensions of the stack
-F0 = ski.io.imread(in_directory + files[0])
-
-# calculate the total number of cubes in each dimension
-cube_dim = (ceildiv(F0.shape[0], S), ceildiv(F0.shape[1], S), ceildiv(len(files), S))
-
-# build the directory structure
-build_directories(out_directory, cube_dim)
-
-# build substacks
-split_stacks(in_directory, out_directory, cube_dim)
-
-# convert each stack to a NumPy file
-stacks_to_npy(out_directory, cube_dim)
+cubify(source_dir, dest_dir, S)
 
 
 
