@@ -558,6 +558,58 @@ namespace tira {
 		}
 
 		/**
+		 * @brief Compute min/max over a single channel.
+		 * @param c Channel index in [0, C()).
+		 * @param out_min Output minimum.
+		 * @param out_max Output maximum.
+		 * @param finite_only If true and T is floating-point, ignore NaN/Inf samples.
+		 */
+		void minmax_channel(size_t c, T& out_min, T& out_max, bool finite_only = true) const {
+			if (this->Size() == 0) {
+				out_min = T(0); out_max = T(0);
+				return;
+			}
+			if (c >= C()) throw std::runtime_error("volume::minmax_channel: channel out of range");
+
+			auto valid = [&](const T& v) -> bool {
+				if constexpr (std::is_floating_point_v<T>) {
+					return (!finite_only) || std::isfinite(v);
+				} else {
+					(void)finite_only;
+					return true;
+				}
+			};
+
+			bool found = false;
+			T mn = std::numeric_limits<T>::max();
+			T mx = std::numeric_limits<T>::lowest();
+
+			const size_t N = this->Size();
+			for (size_t i = c; i < N; i += C()) {
+				const T v = field<T>::m_data[i];
+				if (!valid(v)) continue;
+				if (v < mn) mn = v;
+				if (v > mx) mx = v;
+				found = true;
+			}
+
+			if (!found) {
+				// Caller decides what to do; these defaults are safe placeholders.
+				out_min = T(0);
+				out_max = T(1);
+				return;
+			}
+
+			// Avoid zero range, useful for normalization
+			if constexpr (std::is_floating_point_v<T>) {
+				if (mx == mn) mx = mn + T(1e-12);
+			}
+
+			out_min = mn;
+			out_max = mx;
+		}
+
+		/**
 		 * @brief Set voxel spacing in (x,y,z).
 		 * @param x is the spacing along x.
 		 * @param y is the spacing along y.
@@ -1493,7 +1545,7 @@ namespace tira {
 		/// <param name="w">Width of the border in pixels</param>
 		/// <param name="value">Value used to generate the border</param>
 		/// <returns></returns>
-		tira::volume<T>border(size_t w, T value) {
+		tira::volume<T> border(size_t w, T value) {
 			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
 			result = value;													// assign the border value to all pixels in the new volume
  														
@@ -1529,7 +1581,7 @@ namespace tira {
 		/// </summary>
 		/// <param name="p">Width of the border (padding) to create</param>
 		/// <returns></returns>
-		tira::volume<T>border_replicate_3D(size_t w) {
+		tira::volume<T> border_replicate_3D(size_t w) {
 
 			tira::volume<float> result(X() + w * 2, Y() + w * 2, Z() + w * 2);
 
@@ -1566,7 +1618,7 @@ namespace tira {
 
 		}
 
-		tira::volume<T>border_remove(size_t w) {
+		tira::volume<T> border_remove(size_t w) {
 			return crop(w, w, w, X() - 2 * w, Y() - 2 * w, Z() - 2 * w);
 		}
 

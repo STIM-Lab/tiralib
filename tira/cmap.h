@@ -114,6 +114,17 @@ namespace tira::cmap {
 		b = 255 * fb;
 	}
 
+	/**
+	 * @brief Apply a colormap to a scalar field, given specified minimum and maximum values for normalization.
+	 * 
+	 * @tparam Type Data type of the input scalar values.
+	 * @param input_scalar Pointer to the input scalar field values.
+	 * @param output_colors Pointer to the output array where the resulting RGB color values will be stored. The array should have a size of at least num_values * 3.
+	 * @param num_values The number of values in the input scalar field.
+	 * @param min_val The minimum value in the input scalar field.
+	 * @param max_val The maximum value in the input scalar field.
+	 * @param cmap The colormap to apply. Options: [Grey, Brewer, BrewerBlk, Magma, RainbowCycle].
+	 */
 	template<typename Type>
 	void colormap(Type* input_scalar, unsigned char* output_colors, unsigned num_values, Type min_val, Type max_val, ColorMap cmap = ColorMap::Brewer) {
 		for (unsigned int i = 0; i < num_values; i++) {
@@ -125,6 +136,15 @@ namespace tira::cmap {
 		}
 	}
 
+	/**
+	 * @brief Apply a colormap to a scalar field, automatically determining the minimum and maximum values for normalization.
+	 * 
+	 * @tparam Type Data type of the input scalar values.
+	 * @param input_scalar Pointer to the input scalar field values.
+	 * @param output_colors Pointer to the output array where the resulting RGB color values will be stored. The array should have a size of at least num_values * 3.
+	 * @param num_values The number of values in the input scalar field.
+	 * @param cmap The colormap to apply. Options: [Grey, Brewer, BrewerBlk, Magma, RainbowCycle].
+	 */
 	template<typename Type>
 	void colormap(Type* input_scalar, unsigned char* output_colors, unsigned num_values, ColorMap cmap = ColorMap::Brewer) {
 
