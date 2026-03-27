@@ -2,6 +2,10 @@ import numpy as np
 import skimage as ski
 import os
 
+## @package cubify
+#  This package contains functions for converting a large image stack
+#  into a set of cubes that can be processed in parallel.
+
 # performs a ceiling division
 def ceildiv(a, b):
     return -(a // -b)
