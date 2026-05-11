@@ -23,4 +23,12 @@ def mean_diff_norm(A, B):
 ## Calculate the scale factor that minimizes the mean Frobenius norm of: MEAN(||A - alpha * B||)
 def min_mean_diff_norm(A, B):
     
+    num = numpy.sum(A * B)          # sum of element-wise products
+    den = numpy.sum(B * B)          # sum of squared elements of B (sum of squared Frobenius norms)
+
+    # avoid division by zero
+    if den < 1e-8:
+        return 0.0
+    
+    alpha = num / den
     return alpha
