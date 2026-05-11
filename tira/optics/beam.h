@@ -8,7 +8,6 @@
 #include <random>
 
 namespace tira{
-	namespace optics{
 template<typename T>
 class beam {
 
@@ -95,7 +94,6 @@ public:
 		return result;																//return the sample array
 	}
 };
-}								//end namespace optics
 }								//end namespace tira
 
 #endif
