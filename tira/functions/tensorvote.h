@@ -1078,10 +1078,9 @@ namespace tira {
 
                 if (l0 == Type(0)) continue;
 
-                const Type scale = fabsf(l0);
-                out_a += scale * NB[k].Va;
-                out_b += scale * NB[k].Vb;
-                out_c += scale * NB[k].Vc;
+                out_a += l0 * NB[k].Va;
+                out_b += l0 * NB[k].Vb;
+                out_c += l0 * NB[k].Vc;
             }
             return;
         }
@@ -2216,13 +2215,13 @@ namespace tira {
             return nc;
         }
 
-        // Host helper: upload neighbor table to constant or global memory
         struct DeviceNeighbors {
-            DeviceNeighbor3D* d_ptr = nullptr;           // null -> using constant memory
+            DeviceNeighbor3D* d_ptr = nullptr;           // null -> use constant memory
             int count = 0;
             bool used_const = false;
         };
 
+        // Host helper: upload neighbor table to constant or global memory
         static DeviceNeighbors upload_neighbors(const std::vector<Neighbor3D>& NB) {
             DeviceNeighbors dn;
             dn.count = (int)NB.size();
