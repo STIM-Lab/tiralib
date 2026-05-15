@@ -1,6 +1,9 @@
 import numpy as np
 import skimage as ski
 import os
+from tqdm import tqdm
+from pathlib import Path
+
 
 ## @package cubify
 #  This package contains functions for converting a large image stack
@@ -27,7 +30,7 @@ def build_directories(out_directory, cube_dim):
         
         
 # split up the images into separate stacks
-def split_stacks(in_directory, out_directory):
+def split_stacks(in_directory, out_directory, cube_size):
     
     # get the list of files from the input directory
     files = [f for f in os.listdir(in_directory) if os.path.isfile(os.path.join(in_directory, f))]
@@ -37,15 +40,16 @@ def split_stacks(in_directory, out_directory):
     F0 = ski.io.imread(in_directory + files[0])
     
     # calculate the total number of cubes in each dimension
-    cube_dim = (ceildiv(F0.shape[0], S), ceildiv(F0.shape[1], S), ceildiv(len(files), S))
+    cube_dim = (ceildiv(F0.shape[0], cube_size), ceildiv(F0.shape[1], cube_size), ceildiv(len(files), cube_size))
     
     # build the directory structure
     build_directories(out_directory, cube_dim)
     
     # for each file in the large image stack
-    for fi in range(len(files)):
+    print("Splitting Images Into Sub-Directories...")
+    for fi in tqdm(range(len(files))):
         
-        zi = int(fi / S)
+        zi = int(fi / cube_size)
         # load the file
         F = ski.io.imread(in_directory + files[fi])
         for xi in range(cube_dim[0]):
@@ -57,15 +61,19 @@ def split_stacks(in_directory, out_directory):
             for yi in range(cube_dim[1]):
                 yi_min = yi * 200
                 yi_max = (yi+1) * 200
-                if yi == cube_dim[0] - 1:
-                    yi_max = F0.shape[0];
+                if yi == cube_dim[1] - 1:
+                    yi_max = F0.shape[1];
                     
                 P = F[xi_min:xi_max, yi_min:yi_max]
-                ski.io.imsave(out_directory + cubestr(xi, yi, zi) + "/" + files[fi], P)
+                ski.io.imsave(out_directory + cubestr(xi, yi, zi) + "/" + files[fi], P, check_contrast=False)
     return cube_dim
                 
 # convert the image stacks to numpy files
 def stacks_to_npy(out_directory, cube_dim):
+    print("Converting Image Stacks into .npy Arrays")
+    cubes = cube_dim[0] * cube_dim[1] * cube_dim[2]
+    pbar = tqdm(total=cubes)
+    
     for xi in range(cube_dim[0]):
         for yi in range(cube_dim[1]):
             for zi in range(cube_dim[2]):
@@ -86,23 +94,68 @@ def stacks_to_npy(out_directory, cube_dim):
                     Stack[:, :, fi] = ski.io.imread(stack_directory + files[fi])
                 stack_filename = out_directory + stack_name + ".npy"
                 np.save(stack_filename, Stack)
+                pbar.update(1)
+    pbar.close()
         
     
 # cubify script splits a large image stack into manageable cubes of size cube_size
-def cubify(in_directory, out_directory, cube_size):  
+def cubify(in_directory, out_directory, cube_size):
+    
+    if in_directory[-1] != "/":
+        in_directory = in_directory + "/"
+    if out_directory[-1] != "/":
+        out_directory = out_directory + "/"
     
     # build substacks
-    cube_dimension = split_stacks(in_directory, out_directory)
+    cube_dimension = split_stacks(in_directory, out_directory, cube_size)
     
     # convert each stack to a NumPy file
     stacks_to_npy(out_directory, cube_dimension)
 
+    
+def otsu_batch(input_npy_dir, output_mask_dir):
 
-source_dir = "/home/david/tissue/kesm_small_0/images/"
-dest_dir = "/home/david/test/"
-S = 200
+    input_npy_dir = Path(input_npy_dir)
+    output_mask_dir = Path(output_mask_dir)
 
-cubify(source_dir, dest_dir, S)
+    # make output folder
+    output_mask_dir.mkdir(parents=True, exist_ok=True)
+    
+    sorted_npy = sorted(input_npy_dir.glob("*.npy"))
+
+    # process all npy cubes
+    for ni in tqdm(range(len(sorted(input_npy_dir.glob("*.npy"))))):
+        
+        npy_file = sorted_npy[ni]
+
+        #print(f"processing : {npy_file.name}")
+
+        # load cube
+        vol = np.load(npy_file).astype(np.float32)
+
+        # compute global 3d otsu threshold
+        thresh = ski.filters.threshold_otsu(vol)
+
+        #print(f"otsu threshold : {thresh}")
+
+        # binary segmentation
+        mask = vol > thresh
+
+        # convert boolean to uint8
+        mask = mask.astype(np.uint8)
+
+        # save binary cube
+        out_file = output_mask_dir / f"{npy_file.stem}_otsu3d.npy"
+        np.save(out_file, mask)
+
+    #print("otsu 3d thresholding complete")
+
+
+#source_dir = "/home/david/tissue/kesm_small_0/images/"
+#dest_dir = "/home/david/test/"
+#S = 200
+
+#cubify(source_dir, dest_dir, S)
 
 
 
