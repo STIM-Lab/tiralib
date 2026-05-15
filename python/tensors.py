@@ -1,10 +1,11 @@
 import tensors_lib.phantoms as phantoms
 import tensors_lib.metrics as metrics
+import tensors_lib.plots as plots
 import numpy as np
 import math
 
-# calculate the structure tensor for the input array
-def structure(image):
+# calculate the structure tensor for the input array, optionally adding noise to the tensor components
+def structure(image, noise=0.0):
     # Calculate the image gradient
     dIdy = np.gradient(image, axis=0, edge_order=2)
     dIdx = np.gradient(image, axis=1, edge_order=2)
@@ -15,9 +16,41 @@ def structure(image):
     T[:, :, 0, 0] = dIdx * dIdx        
     T[:, :, 1, 1] = dIdy * dIdy
     T[:, :, 0, 1] = dIdx * dIdy        
+
+    if noise > 0:
+        T[:, :, 0, 0] = T[:, :, 0, 0] + np.abs(np.random.normal(0.0, noise, T[:, :, 0, 0].shape))
+        T[:, :, 1, 1] = T[:, :, 1, 1] + np.abs(np.random.normal(0.0, noise, T[:, :, 1, 1].shape))
+        T[:, :, 0, 1] = T[:, :, 0, 1] + np.random.normal(0.0, noise, T[:, :, 0, 1].shape)
+
     T[:, :, 1, 0] = T[:, :, 0, 1]
 
     return T
+
+def add_noise(T, sigma, max_retries=5):
+    """Add Gaussian noise to a tensor field, retrying until the result is PSD.
+
+    For each pixel, independent noise is sampled and added to all three unique
+    components (T00, T01, T11). If the noisy tensor at any pixel is not PSD
+    (i.e. has a negative eigenvalue), that pixel is resampled up to max_retries
+    times before falling back to the original noiseless tensor at that pixel.
+    """
+    H, W = T.shape[:2]
+    T_noisy = T.copy()
+
+    for i in range(H):
+        for j in range(W):
+            t = T[i, j]
+            for _ in range(max_retries):
+                noise = np.random.normal(0.0, sigma, (2, 2))
+                noise = (noise + noise.T) / 2  # keep symmetric
+                candidate = t + noise
+                if np.all(np.linalg.eigvalsh(candidate) >= 0):
+                    T_noisy[i, j] = candidate
+                    break
+            # If no valid sample found, keep the original tensor (already PSD)
+
+    return T_noisy
+
 
 def atv_vote2(T, sigma=3):
     """Executes ATV over an entire input tensor field T."""
