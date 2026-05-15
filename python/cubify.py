@@ -32,6 +32,11 @@ def build_directories(out_directory, cube_dim):
 # split up the images into separate stacks
 def split_stacks(in_directory, out_directory, cube_size):
     
+    if in_directory[-1] != "/":
+        in_directory = in_directory + "/"
+    if out_directory[-1] != "/":
+        out_directory = out_directory + "/"
+    
     # get the list of files from the input directory
     files = [f for f in os.listdir(in_directory) if os.path.isfile(os.path.join(in_directory, f))]
     files.sort()
@@ -53,14 +58,14 @@ def split_stacks(in_directory, out_directory, cube_size):
         # load the file
         F = ski.io.imread(in_directory + files[fi])
         for xi in range(cube_dim[0]):
-            xi_min = xi * 200
-            xi_max = (xi+1) * 200
+            xi_min = xi * cube_size
+            xi_max = (xi+1) * cube_size
             if xi == cube_dim[0] - 1:
                 xi_max = F0.shape[0];
                 
             for yi in range(cube_dim[1]):
-                yi_min = yi * 200
-                yi_max = (yi+1) * 200
+                yi_min = yi * cube_size
+                yi_max = (yi+1) * cube_size
                 if yi == cube_dim[1] - 1:
                     yi_max = F0.shape[1];
                     
