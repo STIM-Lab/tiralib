@@ -28,17 +28,16 @@ def optimize_atv(G, I, bounds=(0.5, 20.0)):
 # using differential evolution.
 def optimize_tk(G, I, bounds=None, seed=42):
     if bounds is None:
-        bounds = [(1.0, 30.0), (0.0, 20.0), (1, 30), (0, 1)]
+        bounds = [(1.0, 30.0), (0.0, 20.0), (1, 30)]
 
     def objective(params):
         s1, s2, pw = float(params[0]), float(params[1]), max(1, int(round(params[2])))
-        plate = bool(round(params[3]))
-        return metrics.simf(G, ts.tk_vote2(I, sigma1=s1, sigma2=s2, power=pw, plate=plate, N=20))
+        return metrics.simf(G, ts.tk_vote2(I, sigma1=s1, sigma2=s2, power=pw, plate=True, N=20))
 
     res = differential_evolution(objective, bounds=bounds, seed=seed,
                                  maxiter=150, popsize=5, tol=1e-3, polish=False)
-    s1, s2, pw, plate = res.x[0], res.x[1], max(1, int(round(res.x[2]))), bool(round(res.x[3]))
-    return s1, s2, pw, plate, ts.tk_vote2(I, sigma1=s1, sigma2=s2, power=pw, plate=plate, N=20), res.fun
+    s1, s2, pw = res.x[0], res.x[1], max(1, int(round(res.x[2])))
+    return s1, s2, pw, ts.tk_vote2(I, sigma1=s1, sigma2=s2, power=pw, plate=True, N=20), res.fun
 
 
 # Minimizes the same TK objective using dual annealing — a hybrid of fast simulated annealing
