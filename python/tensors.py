@@ -26,6 +26,42 @@ def structure(image, noise=0.0):
 
     return T
 
+import numpy as np
+
+
+def add_dual_noise(T, s_theta, s_eig1=None, s_eig2=None):
+    """"
+    Add Gaussian noise to the orientation and eigenvalues of a tensor field T, ensuring the result remains PSD.
+    Reconstruct the PSD tensor from the noisy eigenvectors and eigenvalues.
+    """
+    if s_eig1 == None:
+        s_eig1 = s_theta
+    if s_eig2 == None:
+        s_eig2 = s_eig1
+    
+    H, W = T.shape[:2]
+    evals, evecs = np.linalg.eigh(T)  # evals: (H,W,2), evecs columns are eigenvectors
+
+    # add independent Gaussian noise to each eigenvalue, clip to keep PSD
+    l0 = np.maximum(0.0, evals[:, :, 0] + np.random.normal(0.0, s_eig1, (H, W)))
+    l1 = np.maximum(0.0, evals[:, :, 1] + np.random.normal(0.0, s_eig2, (H, W)))
+
+    # rotate eigenvectors by a noisy angle
+    theta = np.arctan2(evecs[:, :, 1, 0], evecs[:, :, 0, 0])
+    theta += np.random.normal(0.0, s_theta, (H, W))
+
+    cos_t = np.cos(theta)
+    sin_t = np.sin(theta)
+
+    # reconstruct symmetric PSD tensor: T = l0*v0*v0^T + l1*v1*v1^T -> where v0=[cos,sin], v1=[-sin,cos]
+    T_noisy = np.zeros_like(T)
+    T_noisy[:, :, 0, 0] = l0 * cos_t**2 + l1 * sin_t**2
+    T_noisy[:, :, 1, 1] = l0 * sin_t**2 + l1 * cos_t**2
+    T_noisy[:, :, 0, 1] = (l0 - l1) * cos_t * sin_t
+    T_noisy[:, :, 1, 0] = T_noisy[:, :, 0, 1]
+
+    return T_noisy
+
 def add_noise(T, sigma, max_retries=5):
     """Add Gaussian noise to a tensor field, retrying until the result is PSD.
 
@@ -291,7 +327,7 @@ def tk_vote2(T, sigma1=3, sigma2=0, power=1, plate=True, N=10):
 
             # --- Plate Vote Execution ---
             if plate:
-                scale_plate = l0 if N == 0 else scale_stick
+                scale_plate = l0
                 
                 if scale_plate != 0:
                     vf_slice[:, :, 0, 0] += scale_plate * PF[:, :, 0, 0]
