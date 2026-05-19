@@ -28,6 +28,13 @@ def structure(image, noise=0.0):
 
 import numpy as np
 
+def _eccentricity(evals):
+    """Ellipse eccentricity sqrt(1 - (b/a)^2) from eigh-sorted eigenvalues (ascending)."""
+    a = np.abs(evals[..., 1])       # largest eigenvalue
+    b = np.abs(evals[..., 0])       # smallest eigenvalue
+    safe_a = np.where(a > 1e-12, a, 1.0)
+    ratio  = np.clip(b / safe_a, 0.0, 1.0)
+    return np.where(a > 1e-12, np.sqrt(1.0 - ratio ** 2), 0.0) # or one?
 
 def add_dual_noise(T, s_theta, s_eig1=None, s_eig2=None):
     """"
