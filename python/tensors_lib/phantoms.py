@@ -38,4 +38,36 @@ def dropout(Field, fraction):
     Field[mask] = 0
     
     return Field
+
+
+## create a grid of alternating horizontal/vertical stick tensors
+# even cells -> T = [[1, 0], [0, 0]]
+# odd cells  -> T = [[0, 0], [0, 1]]
+# cell_size controls the size of the alternating blocks -> smaller, higher frequency
+def tensor_grid(N, cell_size=1, noise=0.0):
+    T = numpy.zeros((N, N, 2, 2), dtype=numpy.float32)
+    
+    i, j = numpy.indices((N, N))                            # create coordinate grids
+    
+    mask = ((i // cell_size) + (j // cell_size)) % 2 == 0   # true: even blocks, false: odd blocks
+    
+    # horizontal sticks in True mask regions
+    T[mask, 0, 0] = 1.0  # Ixx
+    T[mask, 1, 1] = 0.0  # Iyy
+    T[mask, 0, 1] = 0.0  # Ixy
+    T[mask, 1, 0] = 0.0  
+    
+    # vertical sticks in False mask regions
+    T[~mask, 0, 0] = 0.0  # Ixx
+    T[~mask, 1, 1] = 1.0  # Iyy
+    T[~mask, 0, 1] = 0.0  # Ixy
+    T[~mask, 1, 0] = 0.0
+    
+    # add optional symmetric Gaussian noise
+    if noise != 0:
+        noise_tensor = numpy.random.normal(0, noise, T.shape)
+        noise_tensor[:, :, 0, 1] = noise_tensor[:, :, 1, 0]
+        T += noise_tensor
+        
+    return T
     
