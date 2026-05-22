@@ -2196,6 +2196,85 @@ namespace tira {
         }
 
 
+        /**
+         * @brief TK voting with a pre-built host neighbor table (skips cpu::build_neighbors2d).
+         *
+         * Uploads host_nb directly to device without rebuilding the table from sigma/power.
+         * Use this when the neighbor table has been constructed externally (e.g. via numpy)
+         * to avoid the O(w^2 * N) scalar C++ build loop on the host.
+         */
+        template <typename Type>
+        static void tensorvote_prebuilt(
+            Type* t_out, const Type* t_in,
+            const Neighbor2D* host_nb, int nb_count,
+            const Type sigma1, const Type sigma2, const int power, const unsigned w,
+            const unsigned shape0, const unsigned shape1,
+            const bool stick = true, const bool plate = true, const unsigned samples = 10)
+        {
+            const size_t n_pix     = (size_t)shape0 * (size_t)shape1;
+            const size_t out_bytes = sizeof(Type) * n_pix * 4u;
+            const size_t eig_bytes = sizeof(Type) * n_pix * 2u;
+
+            int device = 0;
+            HANDLE_ERROR(cudaGetDevice(&device));
+
+            // Eigendecomposition on GPU
+            Type* lambdas = tira::cuda::evals2_symmetric(t_in, n_pix, device);
+            Type* thetas  = tira::cuda::evecs2polar_symmetric(t_in, lambdas, n_pix, device);
+
+            // Output buffer
+            Type* dev_out = nullptr;
+            bool  out_is_dev = false;
+            Type* gpuOut = _dev_writeable<Type>(t_out, out_bytes, dev_out, out_is_dev);
+
+            // Eigenpair buffers (already on device from evals2/evecs2)
+            Type* dev_L = nullptr;
+            Type* dev_T = nullptr;
+            const Type* gpuLambdas = _dev_readonly<Type>(lambdas, eig_bytes, dev_L);
+            const Type* gpuThetas  = _dev_readonly<Type>(thetas,  eig_bytes, dev_T);
+
+            // Upload pre-built neighbor table
+            DeviceNeighbors2D dn;
+            dn.count = 0;
+            dn.d_ptr = nullptr;
+            const Neighbor2D* d_nb = nullptr;
+            if (nb_count > 0 && host_nb) {
+                const size_t nb_bytes_sz = (size_t)nb_count * sizeof(Neighbor2D);
+                HANDLE_ERROR(cudaMalloc((void**)&dn.d_ptr, nb_bytes_sz));
+                HANDLE_ERROR(cudaMemcpy(dn.d_ptr, host_nb, nb_bytes_sz, cudaMemcpyHostToDevice));
+                dn.count = nb_count;
+                d_nb     = dn.d_ptr;
+            }
+
+            dim3 threads(16, 16);
+            dim3 blocks((unsigned)((shape0 + threads.x - 1) / threads.x),
+                        (unsigned)((shape1 + threads.y - 1) / threads.y));
+
+            global_tensorvote_tk<Type><<<blocks, threads>>>(
+                gpuOut, gpuLambdas, gpuThetas, d_nb,
+                sigma1, sigma2, (unsigned)power,
+                (int)w, (int)shape0, (int)shape1,
+                stick, plate, samples, nb_count);
+            HANDLE_ERROR(cudaDeviceSynchronize());
+
+            if (!out_is_dev) {
+                _copy_from_device<Type>(t_out, gpuOut, out_bytes);
+                HANDLE_ERROR(cudaDeviceSynchronize());
+            }
+
+            // Free temporaries
+            if (dev_out) { HANDLE_ERROR(cudaFree(dev_out)); dev_out = nullptr; }
+            if (dev_L)   { HANDLE_ERROR(cudaFree(dev_L));   dev_L   = nullptr; }
+            if (dev_T)   { HANDLE_ERROR(cudaFree(dev_T));   dev_T   = nullptr; }
+            _free_neighbors2d(dn);
+
+            const bool L_is_dev = _is_device(lambdas);
+            const bool T_is_dev = _is_device(thetas);
+            if (L_is_dev) HANDLE_ERROR(cudaFree(lambdas)); else delete[] lambdas;
+            if (T_is_dev) HANDLE_ERROR(cudaFree(thetas));  else delete[] thetas;
+        }
+
+
 		// ------------- 3D Tensor Voting -------------
 
         struct DeviceNeighbor3D {
