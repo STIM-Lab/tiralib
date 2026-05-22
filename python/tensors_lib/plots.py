@@ -55,7 +55,7 @@ def polar_ecc_diff(gt_T, pred_T, use_mask=False):
     return ecc_diff_flat
 
 
-def polar_diff(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim=None):
+def polar_diff(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim=None, show_colorbar=True):
     """
     Plot eigenvector angular difference (theta) vs eigenvalue magnitude difference (rho)
     on a polar axis, colored by the signed eccentricity difference (gt − pred).
@@ -84,24 +84,30 @@ def polar_diff(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim
         ecc_lim = float(np.max(np.abs(ecc_diff_flat))) if len(ecc_diff_flat) > 0 else 1.0
         ecc_lim = max(ecc_lim, 1e-9)
 
-    scatter = ax.scatter(theta_flat, rho_flat, c=ecc_diff_flat, alpha=0.5, cmap='magma', s=5,
+    scatter = ax.scatter(theta_flat, rho_flat, c=ecc_diff_flat, alpha=0.5, cmap='managua', s=8, #edgecolors='black',
                          vmin=-ecc_lim, vmax=ecc_lim)
 
     ax.set_rmax(rmax_val)
+    ax.xaxis.grid(True, color='#b0b0b0')
     ax.set_rticks(np.linspace(rmax_val / 4, rmax_val, 4))
     ax.yaxis.set_major_formatter(plt.FormatStrFormatter('%.3f'))
     ax.tick_params(labelsize=7)
     ax.set_thetamin(0)
     ax.set_thetamax(90)
-    ax.set_title(title, va='bottom', fontsize=10, pad=20)
-    ax.set_xlabel("Orientation Diff (Degrees)", labelpad=14, fontsize=8)
+    ax.spines['polar'].set_edgecolor('#b0b0b0')
+    ax.spines['start'].set_edgecolor('#b0b0b0')
+    ax.spines['end'].set_edgecolor('#b0b0b0')
+    if title:
+        ax.set_title(title, va='bottom', fontsize=10, pad=20)
+    ax.set_xlabel("Largest Eigenvalue Diff", labelpad=14, fontsize=8)
 
-    cbar = plt.colorbar(scatter, ax=ax, pad=0.1, shrink=0.7)
-    cbar.set_label("Eccentricity Diff (gt − pred)", fontsize=8)
-    cbar.ax.tick_params(labelsize=7)
+    if show_colorbar:
+        cbar = plt.colorbar(scatter, ax=ax, pad=0.1, shrink=0.7)
+        cbar.set_label("Eccentricity Diff (gt − pred)", fontsize=8)
+        cbar.ax.tick_params(labelsize=7)
 
 
-def sif_error(gt_T, pred_T, ax, title="", use_mask=False, clim=None, **_):
+def sif_error(gt_T, pred_T, ax, title="", use_mask=False, clim=None, show_colorbar=True, **_):
     """
     Plot the SIF error map between gt_T and pred_T on ax.
 
@@ -116,10 +122,11 @@ def sif_error(gt_T, pred_T, ax, title="", use_mask=False, clim=None, **_):
     vmin, vmax = clim if clim is not None else (None, None)
     im = ax.imshow(err, cmap='magma', vmin=vmin, vmax=vmax)
     ax.set_title(title, fontsize=10)
-    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    if show_colorbar:
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 
-def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw=None, figsize_per_plot=(4, 4), data_fn=None, color_data_fn=None, params_dict=None, axes=None):
+def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw=None, figsize_per_plot=(4, 4), data_fn=None, color_data_fn=None, params_dict=None, subtitle_dict=None, axes=None, show_subplot_titles=True):
     """
     Call plot_fn for each field in fields_dict against gt_T and show them in a row.
 
@@ -167,8 +174,12 @@ def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw
         all_color = np.concatenate([np.ravel(color_data_fn(gt_T, field)) for field in fields_dict.values()])
         color_clim = max(float(np.max(np.abs(all_color))), 1e-9)
 
-    for ax, (name, field) in zip(axes, fields_dict.items()):
-        plot_fn(gt_T, field, ax, title=name, use_mask=use_mask, clim=clim, color_clim=color_clim)
+    for i, (ax, (name, field)) in enumerate(zip(axes, fields_dict.items())):
+        is_last = (i == n - 1)
+        subplot_title = name if show_subplot_titles else ""
+        plot_fn(gt_T, field, ax, title=subplot_title, use_mask=use_mask, clim=clim, color_clim=color_clim, show_colorbar=is_last)
+        if subtitle_dict and name in subtitle_dict:
+            ax.set_title(ax.get_title() + "\n" + subtitle_dict[name], fontsize=10)
         if params_dict and name in params_dict and params_dict[name]:
             ax.text(0.5, -0.22, params_dict[name], transform=ax.transAxes,
                     ha='center', va='top', fontsize=10, color='dimgray')
@@ -199,10 +210,14 @@ def tensor_orientation(gt_T, pred_T, ax, title="", use_mask=False, clim=None, co
     theta[neg] = np.pi - np.abs(theta[neg])
     theta /= np.pi                              # normalize to [0, 1] for HSV
 
-    C = matplotlib.colormaps["hsv"](theta)
+    C = matplotlib.colormaps["hsv"](theta)         # RGBA in [0,1]
+    zero_mask = evals[..., 1] < 1e-12              # largest eigenvalue ~ 0 -> zero tensor
+    C[zero_mask] = [1, 1, 1, 1]                    # white
 
-    ecc = ts._eccentricity(evals)[..., np.newaxis]
-    C = ecc * C + (1 - ecc)                    # desaturate isotropic regions toward white
+    #ecc = ts._eccentricity(evals)[..., np.newaxis]
+    #C = ecc * C + (1 - ecc)                    # desaturate isotropic regions toward white
 
-    im = ax.imshow(np.clip(C[..., :3], 0, 1), origin="lower")
-    ax.set_title(title, fontsize=10)
+    im = ax.imshow(np.clip(C[..., :3], 0, 1))
+
+    if title:
+        ax.set_title(title, fontsize=10)

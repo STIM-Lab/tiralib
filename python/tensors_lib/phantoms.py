@@ -68,6 +68,37 @@ def tensor_grid(N, cell_size=1, noise=0.0):
         noise_tensor = numpy.random.normal(0, noise, T.shape)
         noise_tensor[:, :, 0, 1] = noise_tensor[:, :, 1, 0]
         T += noise_tensor
-        
+
+    return T
+
+
+## Create a cross-shaped 2D stick tensor field (horizontal and vertical lines through center).
+# Intersection cell takes the horizontal tensor. All other tensors are zero.
+# @shape is a (rows, cols) tuple
+# @th_hor is the stick angle in degrees for the horizontal line (default: 0 -> T=[[1,0],[0,0]])
+# @th_vert is the stick angle in degrees for the vertical line (default: 90 -> T=[[0,0],[0,1]])
+# @width is the line thickness in pixels (symmetric around center row/col)
+def cross(shape, th_hor=0, th_vert=numpy.pi/2, width=1):
+    rows, cols = shape
+    T = numpy.zeros((rows, cols, 2, 2), dtype=numpy.float32)
+
+    h_vec = numpy.array([numpy.cos(th_hor), numpy.sin(th_hor)])
+    v_vec = numpy.array([numpy.cos(th_vert), numpy.sin(th_vert)])
+    T_h = numpy.outer(h_vec, h_vec)
+    T_v = numpy.outer(v_vec, v_vec)
+
+    half = width // 2
+    row_center = rows // 2
+    col_center = cols // 2
+
+    row_lo = max(row_center - half, 0)
+    row_hi = min(row_center + half + (width % 2), rows)
+    col_lo = max(col_center - half, 0)
+    col_hi = min(col_center + half + (width % 2), cols)
+
+    T[row_lo:row_hi, :] = T_h.astype(numpy.float32)
+    T[:, col_lo:col_hi] = T_v.astype(numpy.float32)
+    T[row_lo:row_hi, col_lo:col_hi] = T_h.astype(numpy.float32)
+
     return T
     

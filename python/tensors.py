@@ -4,6 +4,20 @@ import tensors_lib.plots as plots
 import numpy as np
 import math
 
+def eigmag(T):
+    
+    eigenValues, eigenVectors = np.linalg.eigh(T)
+    magValues = np.abs(eigenValues)
+    
+    idx = np.argsort(magValues, -1)
+    
+    sortedValues = np.take_along_axis(eigenValues, idx, -1)
+    sortedVectors = np.zeros_like(eigenVectors)
+    sortedVectors[..., 0, :] = np.take_along_axis(eigenVectors[..., 0, :], idx, -1)
+    sortedVectors[..., 1, :] = np.take_along_axis(eigenVectors[..., 1, :], idx, -1)
+    
+    return sortedValues, sortedVectors
+
 # calculate the structure tensor for the input array, optionally adding noise to the tensor components
 def structure(image, noise=0.0):
     # Calculate the image gradient
@@ -95,8 +109,18 @@ def add_noise(T, sigma, max_retries=5):
     return T_noisy
 
 
+def blur(T, sigma):
+    """Gaussian blur of tensor field T. sigma=0 returns T unchanged."""
+    if sigma == 0:
+        return T.copy()
+    import scipy.ndimage
+    return scipy.ndimage.gaussian_filter(T, sigma=(sigma, sigma, 0, 0), mode="constant")
+
+
 def atv_vote2(T, sigma=3):
     """Executes ATV over an entire input tensor field T."""
+    if sigma == 0:
+        return T.copy()
     # Perform eigendecomposition of the field
     evals, evecs = np.linalg.eigh(T)
     
