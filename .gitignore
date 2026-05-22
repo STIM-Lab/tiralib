@@ -52,3 +52,16 @@ Thumbs.db
 *.mov
 *.wmv
 
+# ImGui layout state
+imgui.ini
+
+# Compiled Python extensions
+*.so
+*.pyd
+
+# CUDA extension build artifacts
+python/cuda_ext/build/
+
+# Scratch files
+python/test.py
+
