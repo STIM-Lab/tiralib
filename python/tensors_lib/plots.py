@@ -5,7 +5,7 @@ import tensors as ts
 
 
 
-def _polar_diff_compute(gt_T, pred_T, use_mask=False):
+def _polar_diff_compute(gt_T, pred_T):
     """Compute theta, rho, and signed eccentricity difference for the polar_diff plot."""
 
     # scale predicted tensors to match the energy of the GT
@@ -13,7 +13,7 @@ def _polar_diff_compute(gt_T, pred_T, use_mask=False):
     pred_T_scaled = alpha * pred_T
     gt_sym   = 0.5 * (gt_T   + np.swapaxes(gt_T,   -1, -2))
     pred_sym = 0.5 * (pred_T_scaled + np.swapaxes(pred_T_scaled, -1, -2))
-
+    
     gt_evals,   gt_evecs   = np.linalg.eigh(gt_sym)
     pred_evals, pred_evecs = np.linalg.eigh(pred_sym)
 
@@ -33,29 +33,22 @@ def _polar_diff_compute(gt_T, pred_T, use_mask=False):
     rho_flat      = rho.flatten()
     ecc_diff_flat = ecc_diff.flatten()
 
-    if use_mask:
-        gap  = np.abs(gt_evals[..., 1]) - np.abs(gt_evals[..., 0])
-        mask = ((l1_gt > 1e-8) & (gap > 1e-6)).flatten()
-        theta_flat    = theta_flat[mask]
-        rho_flat      = rho_flat[mask]
-        ecc_diff_flat = ecc_diff_flat[mask]
-
     return theta_flat, rho_flat, ecc_diff_flat
 
 
-def polar_rho(gt_T, pred_T, use_mask=False):
+def polar_rho(gt_T, pred_T):
     """Return rho (eigenvalue magnitude difference) values used in polar_diff, for range computation."""
-    _, rho_flat, _ = _polar_diff_compute(gt_T, pred_T, use_mask)
+    _, rho_flat, _ = _polar_diff_compute(gt_T, pred_T)
     return rho_flat
 
 
-def polar_ecc_diff(gt_T, pred_T, use_mask=False):
+def polar_ecc_diff(gt_T, pred_T):
     """Return eccentricity difference values used in polar_diff, for color range computation."""
-    _, _, ecc_diff_flat = _polar_diff_compute(gt_T, pred_T, use_mask)
+    _, _, ecc_diff_flat = _polar_diff_compute(gt_T, pred_T)
     return ecc_diff_flat
 
 
-def polar_diff(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim=None, show_colorbar=True):
+def polar_diff(gt_T, pred_T, ax, title="", clim=None, color_clim=None, show_colorbar=True):
     """
     Plot eigenvector angular difference (theta) vs eigenvalue magnitude difference (rho)
     on a polar axis, colored by the signed eccentricity difference (gt − pred).
@@ -65,12 +58,12 @@ def polar_diff(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim
         pred_T:     Predicted tensor field, shape (H, W, 2, 2)
         ax:         Polar matplotlib axis
         title:      Plot title
-        use_mask:   If True, mask background pixels where gt_T has no dominant structure
+        
         clim:       (vmin, vmax) tuple; vmax is used as rmax for the polar axis
         color_clim: Symmetric colorbar half-range for eccentricity difference; if None,
                     computed from this subplot's data
     """
-    theta_flat, rho_flat, ecc_diff_flat = _polar_diff_compute(gt_T, pred_T, use_mask)
+    theta_flat, rho_flat, ecc_diff_flat = _polar_diff_compute(gt_T, pred_T)
 
     if clim is not None:
         rmax_val = clim[1]
@@ -87,11 +80,11 @@ def polar_diff(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim
     scatter = ax.scatter(theta_flat, rho_flat, c=ecc_diff_flat, alpha=0.5, cmap='managua', s=8, #edgecolors='black',
                          vmin=-ecc_lim, vmax=ecc_lim)
 
-    ax.set_rmax(rmax_val)
+    ax.set_rlim(0, rmax_val)
     ax.xaxis.grid(True, color='#b0b0b0')
     ax.set_rticks(np.linspace(rmax_val / 4, rmax_val, 4))
-    ax.yaxis.set_major_formatter(plt.FormatStrFormatter('%.3f'))
-    ax.tick_params(labelsize=7)
+    ax.yaxis.set_major_formatter(plt.FormatStrFormatter('%.2f'))
+    ax.tick_params(labelsize=5)
     ax.set_thetamin(0)
     ax.set_thetamax(90)
     ax.spines['polar'].set_edgecolor('#b0b0b0')
@@ -107,7 +100,7 @@ def polar_diff(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim
         cbar.ax.tick_params(labelsize=7)
 
 
-def sif_error(gt_T, pred_T, ax, title="", use_mask=False, clim=None, show_colorbar=True, **_):
+def sif_error(gt_T, pred_T, ax, title="", clim=None, show_colorbar=True, **_):
     """
     Plot the SIF error map between gt_T and pred_T on ax.
 
@@ -126,16 +119,15 @@ def sif_error(gt_T, pred_T, ax, title="", use_mask=False, clim=None, show_colorb
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 
-def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw=None, figsize_per_plot=(4, 4), data_fn=None, color_data_fn=None, params_dict=None, subtitle_dict=None, axes=None, show_subplot_titles=True):
+def plot_fields(fields_dict, gt_T, plot_fn, title="", subplot_kw=None, figsize_per_plot=(4, 4), data_fn=None, color_data_fn=None, params_dict=None, subtitle_dict=None, axes=None, show_subplot_titles=True):
     """
     Call plot_fn for each field in fields_dict against gt_T and show them in a row.
 
     Args:
         fields_dict:      Dict mapping name -> tensor field, shape (H, W, 2, 2)
         gt_T:             Ground truth tensor field, shape (H, W, 2, 2)
-        plot_fn:          Callable with signature plot_fn(gt_T, pred_T, ax, title, use_mask, clim, color_clim)
+        plot_fn:          Callable with signature plot_fn(gt_T, pred_T, ax, title, clim, color_clim)
         title:            Optional figure-level title shown at the top
-        use_mask:         Passed through to plot_fn
         subplot_kw:       Extra kwargs for plt.subplots (e.g. {'projection': 'polar'})
         figsize_per_plot: (width, height) per subplot panel; ignored when axes is provided
         data_fn:          Optional callable (gt_T, pred_T) -> array; if provided, the global
@@ -152,6 +144,7 @@ def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw
     """
     n  = len(fields_dict)
 
+    # create a new figure if axes are not provided
     if axes is not None:
         fig      = axes[0].get_figure()
         show_fig = False
@@ -163,6 +156,7 @@ def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw
             axes = [axes]
         show_fig  = True
 
+    # 
     clim = None
     if data_fn is not None:
         all_vals = np.concatenate([np.ravel(data_fn(gt_T, field)) for field in fields_dict.values()])
@@ -177,7 +171,7 @@ def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw
     for i, (ax, (name, field)) in enumerate(zip(axes, fields_dict.items())):
         is_last = (i == n - 1)
         subplot_title = name if show_subplot_titles else ""
-        plot_fn(gt_T, field, ax, title=subplot_title, use_mask=use_mask, clim=clim, color_clim=color_clim, show_colorbar=is_last)
+        plot_fn(gt_T, field, ax, title=subplot_title, clim=clim, color_clim=color_clim, show_colorbar=is_last)
         if subtitle_dict and name in subtitle_dict:
             ax.set_title(ax.get_title() + "\n" + subtitle_dict[name], fontsize=10)
         if params_dict and name in params_dict and params_dict[name]:
@@ -195,7 +189,7 @@ def plot_fields(fields_dict, gt_T, plot_fn, title="", use_mask=False, subplot_kw
         plt.show(block=False)
 
 
-def tensor_orientation(gt_T, pred_T, ax, title="", use_mask=False, clim=None, color_clim=None, **_):
+def tensor_orientation(gt_T, pred_T, ax, title="", clim=None, color_clim=None, **_):
     """
     Visualize the dominant eigenvector orientation of pred_T on ax.
     Hue encodes angle in [0, pi], saturation is scaled by eccentricity.
