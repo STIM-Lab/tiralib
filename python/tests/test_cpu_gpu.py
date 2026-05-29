@@ -4,23 +4,19 @@ test_cpu_gpu.py
 Compares CPU (ts.tk_vote2) vs GPU (tk_vote2_cuda / tk_vote2_cuda_prebuilt_flat)
 tensor voting on sample fields, checking correctness and timing.
 
-KNOWN NORMALIZATION DIFFERENCE
--------------------------------
-Python tk_vote2 multiplies both stick and plate contributions by:
+NORMALIZATION (post-fix)
+------------------------
+Both CPU and CUDA paths apply the same stick normalization:
 
-    eta_val = (2^2p * (p!)^2) / (pi * (2p)! * (sigma1^2 + sigma2^2))
+    eta_s = (2^2p * (p!)^2) / (pi * (2p)! * (sigma1^2 + sigma2^2))
 
-The CUDA kernel does NOT apply this factor — it is missing from tk_stickvote_2d
-and tk_plate_numerical in the C++ header. So CPU and GPU outputs are proportional,
-not equal. For a pure-stick field the ratio is exactly eta_val; for mixed fields
-the ratio is not a single constant.
-
-This test computes the ratio and checks structural agreement (same shape of
-voted field, correct sign pattern, ratio within expected range).
+and the numerical plate uses Riemann weight dβ = π/N, so it converges to the
+analytical plate prefactor 1/(σ₁²+σ₂²). CPU and GPU outputs are now directly
+comparable element-by-element (within float32 precision, ~1e-6 relative).
 
 Run:
     cd python/
-    python test_cpu_gpu.py
+    python tests/test_cpu_gpu.py
 """
 
 import sys
@@ -110,7 +106,6 @@ def check(label, passed):
 
 def compare(field_name, T, sigma1, sigma2, power, N=20, time_it=True, n_time=5):
     s1, s2, pw = sigma1, sigma2, power
-    eta = eta_val(s1, s2, pw)
 
     cpu = ts.tk_vote2(T, sigma1=s1, sigma2=s2, power=pw, plate=True, N=N)
     gpu = tk_vote2_cuda(T, sigma1=s1, sigma2=s2, power=pw, plate=True, N=N)
@@ -122,20 +117,19 @@ def compare(field_name, T, sigma1, sigma2, power, N=20, time_it=True, n_time=5):
     gpu_pre = tk_vote2_cuda_prebuilt_flat(I_flat, nb, s1, s2, pw, plate=True, N=N,
                                           out_dtype=T.dtype)
 
-    r_mean, r_std, r_min, r_max = ratio_stats(cpu, gpu)
+    max_abs = np.abs(cpu - gpu).max()
+    ref     = max(np.abs(cpu).max(), 1e-12)
+    rel     = max_abs / ref
 
     print(f"\n  {field_name}  |  sigma1={s1}, sigma2={s2}, power={pw}")
-    print(f"    cpu/gpu ratio:  mean={r_mean:.4f}  std={r_std:.4f}"
-          f"  min={r_min:.4f}  max={r_max:.4f}")
-    print(f"    eta_val        = {eta:.4f}   (expected ratio for pure-stick)")
+    print(f"    cpu vs gpu:  max abs diff = {max_abs:.4e}  rel = {rel*100:.5f}%")
 
     # gpu vs gpu_pre must match exactly (same computation, same table)
     diff_pre = np.abs(gpu - gpu_pre).max()
     check("gpu == gpu_prebuilt (max diff < 1e-5)", diff_pre < 1e-5)
 
-    # cpu / gpu ratio should be close to eta_val for stick-dominated fields
-    ratio_ok = abs(r_mean - eta) / eta < 0.15
-    check(f"cpu/gpu ratio within 15% of eta_val ({eta:.3f})", ratio_ok)
+    # CPU and CUDA should agree to float32 precision
+    check(f"cpu ≈ gpu (rel < 0.01%)", rel < 1e-4)
 
     # Both outputs should be symmetric
     cpu_sym = np.abs(cpu[:, :, 0, 1] - cpu[:, :, 1, 0]).max()
@@ -173,10 +167,10 @@ def main():
         return
 
     print("""
-  Normalization note:
-    Python tk_vote2 scales outputs by eta_val; the CUDA kernel does not.
-    So cpu_output ≈ eta_val * gpu_output (exact for pure-stick fields).
-    Both GPU paths (standard and prebuilt-NB) should agree exactly.
+  Normalization:
+    Both CPU and CUDA now apply η_s = (2^2p (p!)^2)/(π (2p)! (σ₁²+σ₂²))
+    on the stick contribution, and the numerical plate uses Riemann
+    weight dβ = π/N. CPU and CUDA should match to float32 precision.
 """)
 
     H, W = 64, 64

@@ -825,6 +825,29 @@ namespace tira {
         }
         return c1 * e1 + c2 * e2;
     }
+
+    /**
+     * Global normalization eta_s for the 2D stick vote.
+     *
+     *   eta_s = (2^(2p) * (p!)^2) / (pi * (2p)! * (sigma1^2 + sigma2^2))
+     *
+     * Matches the Python tk_vote2 convention (see python/tensors.py) and the
+     * derivation in docs/VotingMath2.ipynb. Applied to stick contributions and
+     * to the plate numerical integral (which is built from stick samples).
+     *
+     * Computed via the overflow-free identity
+     *   (2^(2p) (p!)^2) / (2p)! = prod_{k=1..p} (2k / (2k-1))
+     * since the direct factorial form overflows float32 at p >= 17.
+     */
+    template <typename Type>
+    CUDA_CALLABLE static Type tk_stick_norm_2d(Type sigma1, Type sigma2, unsigned power) {
+        if (power < 1) power = 1;
+        Type ratio = Type(1);
+        for (unsigned k = 1; k <= power; ++k) {
+            ratio *= Type(2 * k) / Type(2 * k - 1);
+        }
+        return ratio / (Type(TV_PI) * (sigma1 * sigma1 + sigma2 * sigma2));
+    }
     
     /**
      * Compute the 2D stick vote tensor contribution at a receiver position relative
@@ -869,8 +892,12 @@ namespace tira {
         // Dot product q · d
         const Type qTd = qx * dx + qy * dy;
 
-        // Our-method decay / refinement term
-        const Type eta = tk_stick_eta_2d(dist, qTd, sigma1, sigma2, power);
+        // Decay / refinement term D(qTd, l, sigma, p) (variable name "eta" is legacy)
+        const Type D_val = tk_stick_eta_2d(dist, qTd, sigma1, sigma2, power);
+
+        // Global stick normalization eta_s — matches Python tk_vote2 convention
+        const Type eta_s = tk_stick_norm_2d<Type>(sigma1, sigma2, power);
+        const Type factor = D_val * eta_s;
 
         // Reflection/rotation matrix R = I - 2 d d^T
         Type R_a, R_b, R_c;
@@ -880,10 +907,10 @@ namespace tira {
         const Type Rq_x = R_a * qx + R_b * qy;
         const Type Rq_y = R_b * qx + R_c * qy;
 
-        // Output vote tensor: (Rq)(Rq)^T scaled by eta
-        Va = Rq_x * Rq_x * eta;
-        Vb = Rq_x * Rq_y * eta;
-        Vc = Rq_y * Rq_y * eta;
+        // Output vote tensor: eta_s * D * (Rq)(Rq)^T
+        Va = Rq_x * Rq_x * factor;
+        Vb = Rq_x * Rq_y * factor;
+        Vc = Rq_y * Rq_y * factor;
     }
 
     /**
@@ -920,6 +947,9 @@ namespace tira {
             unsigned p = power;
             if (p < 1) p = 1;
 
+            // Global stick normalization eta_s — applied to every stick vote
+            const Type eta_s = tk_stick_norm_2d<Type>(sigma1, sigma2, p);
+
             for (int k = 0; k < nb_count; ++k) {
                 const int r0 = x0 + NB[k].dv;
                 if ((unsigned)r0 >= (unsigned)s0) continue;
@@ -937,28 +967,29 @@ namespace tira {
                 // q · d using precomputed (dx,dy)
                 const Type qTd = qx * (Type)NB[k].dx + qy * (Type)NB[k].dy;
 
-                // eta = c1*(1-qTd^2)^p + c2*(qTd^2)^p using precomputed c1,c2
+                // Decay D = c1*(1-qTd^2)^p + c2*(qTd^2)^p using precomputed c1,c2
                 const Type qTd2 = qTd * qTd;
                 const Type t1 = Type(1) - qTd2;
                 const Type t2 = qTd2;
 
-                Type eta;
+                Type D_val;
                 if (p == 1) {
-                    eta = (Type)NB[k].c1 * t1 + (Type)NB[k].c2 * t2;
+                    D_val = (Type)NB[k].c1 * t1 + (Type)NB[k].c2 * t2;
                 } else {
                     Type e1 = t1;
                     Type e2 = t2;
                     for (unsigned i = 1; i < p; ++i) { e1 *= t1; e2 *= t2; }
-                    eta = (Type)NB[k].c1 * e1 + (Type)NB[k].c2 * e2;
+                    D_val = (Type)NB[k].c1 * e1 + (Type)NB[k].c2 * e2;
                 }
 
                 // Rq using precomputed R
                 const Type Rq_x = (Type)NB[k].Ra * qx + (Type)NB[k].Rb * qy;
                 const Type Rq_y = (Type)NB[k].Rb * qx + (Type)NB[k].Rc * qy;
 
-                const Type Va = Rq_x * Rq_x * eta;
-                const Type Vb = Rq_x * Rq_y * eta;
-                const Type Vc = Rq_y * Rq_y * eta;
+                const Type factor = D_val * eta_s;
+                const Type Va = Rq_x * Rq_x * factor;
+                const Type Vb = Rq_x * Rq_y * factor;
+                const Type Vc = Rq_y * Rq_y * factor;
 
                 const Type l0 = lambdas[idx + 0];
                 const Type l1 = lambdas[idx + 1];
@@ -1032,12 +1063,11 @@ namespace tira {
             out_b += b;
             out_c += c;
         }
-        const Type inv_n = Type(1) / static_cast<Type>(n);
-
-        // multiply by 2 to account for the entire integral (2 * pi)
-        out_a *= 2 * inv_n;
-        out_b *= 2 * inv_n;
-        out_c *= 2 * inv_n;
+        // Riemann weight dβ = π/n for integral of stick S(β) over β ∈ [0, π]
+        const Type w_beta = Type(TV_PI) / static_cast<Type>(n);
+        out_a *= w_beta;
+        out_b *= w_beta;
+        out_c *= w_beta;
     }
 
     /**

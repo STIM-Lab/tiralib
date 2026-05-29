@@ -5,28 +5,24 @@ Correctness and benchmark comparison between:
   - Python implementations (tensors.py: tk_vote2, atv_vote2)
   - CUDA pybind11 extensions (tensorvote_tk.so, tensorvote_atv.so)
 
-KNOWN NORMALIZATION DIFFERENCE (TK only):
-  The Python tk_vote2 applies a normalization constant eta_val to both stick
-  and plate contributions:
+NORMALIZATION:
+  Both paths now apply the same normalization (η_s for stick, derived analytical
+  prefactor for plate). After the 2D-normalization fixes:
 
-      eta_val = (2^(2p) * (p!)^2) / (pi * (2p)! * (sigma1^2 + sigma2^2))
+      eta_s = (2^(2p) * (p!)^2) / (pi * (2p)! * (sigma1^2 + sigma2^2))
 
-  The C++ tira::tk_stickvote_2d / tk_plate_numerical do NOT apply this factor.
-  As a result, the outputs are proportional but not equal:
+  is applied in the C++ kernel (tira/functions/tensorvote.h via tk_stick_norm_2d)
+  and the numerical-plate Riemann weight is dβ = π/N (matches the analytical
+  closed form 1/(σ₁²+σ₂²)·(c1(I−M/4) + c2 M/4)).
 
-      Python_stick = eta_val   * CUDA_stick
-      Python_plate = c_plate   * CUDA_plate   where c_plate = 1/(pi*(s1^2+s2^2)) = eta_val/2
+  CPU and CUDA TK outputs should now agree to within float32 precision (≈1e-6
+  relative) on stick, plate, and mixed fields, with NO rescaling required.
 
-  When both stick and plate are enabled simultaneously the output is a
-  weighted sum of each component, so the combined scaling is not a single
-  constant. For a pure stick field (l0==0) the ratio is exactly eta_val.
-  For a pure ball/plate field the ratio is c_plate.
-
-  ATV has no such difference — both Python and CUDA ATV are consistent.
+  ATV: unchanged, consistent across both paths.
 
 Run with:
   cd /home/helium/repos/tiralib/python
-  /home/helium/repos/tensor/.venv/bin/python3 test_cuda_vs_python.py
+  /home/helium/repos/tensor/.venv/bin/python3 tests/test_cuda_vs_python.py
 """
 
 import sys
@@ -171,12 +167,10 @@ def main():
 
     ETA = eta_val(SIGMA1, SIGMA2, POWER)
     print(f"\n  Parameters: sigma1={SIGMA1}, sigma2={SIGMA2}, power={POWER}, N_samples={N_SAMPLES}")
-    print(f"  eta_val (stick normalization) = {ETA:.6f}")
-    print(f"  c_plate (plate normalization) = {1.0/(math.pi*(SIGMA1**2+SIGMA2**2)):.6f}")
-    print(f"\n  NOTE: Python tk_vote2 applies eta_val; CUDA TK does NOT.")
-    print(f"  For TK comparisons we rescale CUDA output by eta_val (pure stick field)")
-    print(f"  or skip normalization and report the raw ratio.")
-    print(f"\n  Timing: {N_RUNS} runs, {WARMUP} warmup")
+    print(f"  eta_s (stick normalization, both CPU+CUDA) = {ETA:.6f}")
+    print(f"  plate analytic prefactor = 1/(σ₁²+σ₂²)    = {1.0/(SIGMA1**2+SIGMA2**2):.6f}")
+    print(f"\n  Both paths apply the same normalization — expect direct equality.")
+    print(f"  Timing: {N_RUNS} runs, {WARMUP} warmup")
 
     # ── Section 1: ATV correctness & benchmark sweep ──────────────────────────
     print(f"\n{'#'*60}")
@@ -209,10 +203,9 @@ def main():
         else:
             print("  ATV CUDA extension not available — skipping.")
 
-    # ── Section 2: TK — pure stick, rescaled comparison ───────────────────────
+    # ── Section 2: TK — pure stick, direct equality ───────────────────────────
     print(f"\n{'#'*60}")
-    print("  SECTION 2: TK Voting — pure stick field")
-    print(f"  (Python = eta_val * CUDA; rescaling CUDA by eta_val)")
+    print("  SECTION 2: TK Voting — pure stick field (direct equality)")
     print(f"{'#'*60}")
 
     for H, W in sizes:
@@ -237,15 +230,14 @@ def main():
             report_comparison(
                 f"TK stick-only ({H}x{W})", py_tk, cu_tk,
                 py_ms, py_std, cu_ms, cu_std,
-                scale_cuda_by=ETA,
+                scale_cuda_by=None,
             )
         else:
             print("  TK CUDA extension not available — skipping.")
 
-    # ── Section 3: Raw speedup on mixed field (no rescaling) ──────────────────
+    # ── Section 3: TK mixed field — direct equality + speedup ────────────────
     print(f"\n{'#'*60}")
-    print("  SECTION 3: TK raw speedup — mixed field, no rescaling")
-    print(f"  (outputs not numerically compared due to normalization mismatch)")
+    print("  SECTION 3: TK Voting — mixed (stick + plate) field")
     print(f"{'#'*60}")
 
     for H, W in sizes:
@@ -253,6 +245,10 @@ def main():
         field = make_mixed_field(H, W)
 
         if CUDA_TK_AVAILABLE:
+            py_tk = ts.tk_vote2(field, sigma1=SIGMA1, sigma2=SIGMA2,
+                                power=POWER, plate=True, N=N_SAMPLES)
+            cu_tk = tk_vote2_cuda(field, sigma1=SIGMA1, sigma2=SIGMA2,
+                                   power=POWER, plate=True, N=N_SAMPLES)
             py_ms, py_std = time_fn(
                 lambda: ts.tk_vote2(field, sigma1=SIGMA1, sigma2=SIGMA2,
                                     power=POWER, plate=True, N=N_SAMPLES),
@@ -261,9 +257,11 @@ def main():
                 lambda: tk_vote2_cuda(field, sigma1=SIGMA1, sigma2=SIGMA2,
                                        power=POWER, plate=True, N=N_SAMPLES),
                 n_runs=N_RUNS, warmup=WARMUP)
-            speedup = py_ms / cu_ms if cu_ms > 0 else float('inf')
-            print(f"    Python: {py_ms:.2f} +/- {py_std:.2f} ms  |  "
-                  f"CUDA: {cu_ms:.2f} +/- {cu_std:.2f} ms  |  {speedup:.1f}x speedup")
+            report_comparison(
+                f"TK mixed ({H}x{W})", py_tk, cu_tk,
+                py_ms, py_std, cu_ms, cu_std,
+                scale_cuda_by=None,
+            )
         else:
             print("  TK CUDA extension not available — skipping.")
 
@@ -299,14 +297,13 @@ def main():
     print("""
   ATV:
     - Correct: YES (max relative error < 0.1%, explained by float32/64 gap)
-    - CUDA is consistently faster across all field sizes
-    - At 256x256: ~1500x speedup vs Python
+    - CUDA consistently faster across all field sizes
 
   TK:
-    - The Python tk_vote2 normalizes outputs by eta_val; the C++ kernel does not.
-    - After rescaling CUDA by eta_val, stick-only TK agrees to < 1% (float32/64).
+    - CPU and CUDA now apply the same normalization (η_s on stick,
+      analytic plate prefactor 1/(σ₁²+σ₂²), Riemann weight π/N on
+      numerical plate). Direct equality expected to float32 precision.
     - Structural correctness of the CUDA TK kernel is confirmed.
-    - At 256x256: ~700x speedup vs Python
 
   CUDA wins decisively at 64x64 and above.
   At 16x16, CUDA overhead is still positive but margins are smaller.
