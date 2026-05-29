@@ -103,7 +103,7 @@ def stacks_to_npy(out_directory, cube_dim):
     pbar.close()
         
     
-# cubify script splits a large image stack into manageable cubes of size cube_size
+## cubify script splits a large image stack into manageable cubes of size cube_size
 def cubify(in_directory, out_directory, cube_size):
     
     if in_directory[-1] != "/":
@@ -153,14 +153,24 @@ def otsu_batch(input_npy_dir, output_mask_dir):
         out_file = output_mask_dir / f"{npy_file.stem}_otsu3d.npy"
         np.save(out_file, mask)
 
-    #print("otsu 3d thresholding complete")
-
-
-#source_dir = "/home/david/tissue/kesm_small_0/images/"
-#dest_dir = "/home/david/test/"
-#S = 200
-
-#cubify(source_dir, dest_dir, S)
+## This function executes the RSF GPU code for each volume in a specified directory.
+#  The volumes are assumed consist of (1) a raw image volume and (2) an initial
+#  binary segmentation.
+#
+#  @param exec_dir is the directory of the rsf_gpu executable
+#  @param bin_dir is the directory containing the initial binary segmentation
+#  @param raw_dir is the directory containing the raw image volumes corresponding to the binary segmentations
+#  @param sigma_l is the standard deviation of the blur kernel used in the localization function
+#  @param sigma_k is the standard deviation of the blur kernel used in the fitting function
+#  @param T is the number of time steps to simulate
+#  @param dt is the size of each time step
+#  @param wr is the weight for the regularization term
+#  @param ws is the weight for the smoothing term
+#  @param wf is the weight for the fitting term
+#  @param cuda is a true/false value defining whether or not the GPU is used
+#  @param dp is a triple defining the size of the volume along each spatial dimension
+def rsf_batch(exec_dir, bin_dir, raw_dir, sigma_l=2.0, sigma_k=2.0, T=1000, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.3, ws=0.3, wf=0.3, cuda=True):
+    # write batch function here
 
 
 

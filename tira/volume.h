@@ -355,8 +355,11 @@ namespace tira {
 		}
 
 		/**
-		 * @brief Run the fast sweeping algorithm to expand a distance field through an entire volume
-		 * @param contour_distance is the initial distance field (usually specified near the contour surface)
+		 * @brief Run the fast sweeping algorithm to spread an initial field containing a combination of sampled
+		 * distances and negative infinity values. The non-negative values are used as starting points to calculate
+		 * a signed distance field.
+		 * @param contour_distance is the initial distance field (usually specified near the contour surface). Finite
+		 * values are propogated into pixels containing infinite values to produce the final SDF.
 		 */
 		void FastSweep(volume<float>& contour_distance) {
 
@@ -507,7 +510,7 @@ namespace tira {
 			for (int j = 0; j < y; j++) {
 				for (int i = 0; i < x; i++) {
 					for (int k = 0; k < z; k++) {
-						dist(i, j, k) = dist1d[k * (x * y) + j * x + i];
+						contour_distance(i, j, k) = dist1d[k * (x * y) + j * x + i];
 					}
 				}
 			}
