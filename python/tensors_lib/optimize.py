@@ -28,7 +28,7 @@ def _build_neighbor_table(w, sigma1, sigma2, power):
       alpha = arctan2(dj, di)  (note: X0=di, X1=dj in the meshgrid)
       cos2a = cos(2*alpha), sin2a = sin(2*alpha)
       M00 = 0.25 * (cos2a + 2),  M01 = 0.25 * sin2a,  M11 = 0.25 * (2 - cos2a)
-      c_norm = 1 / (pi * (sigma1² + sigma2²))
+      c_norm = 1 / (sigma1² + sigma2²)
       PF[0,0] = c_norm * (c1 * (1 - M00) + c2 * M00)
       PF[0,1] = c_norm * (c1 * (0 - M01) + c2 * M01)
       PF[1,1] = c_norm * (c1 * (1 - M11) + c2 * M11)
@@ -50,7 +50,7 @@ def _build_neighbor_table(w, sigma1, sigma2, power):
     hw = w // 2
     invsig1_sq = 1.0 / (sigma1 * sigma1) if sigma1 > 0 else 0.0
     invsig2_sq = 1.0 / (sigma2 * sigma2) if sigma2 > 0 else 0.0
-    c_norm = 1.0 / (math.pi * (sigma1 ** 2 + sigma2 ** 2))
+    c_norm = 1.0 / (sigma1 ** 2 + sigma2 ** 2)
 
     # Normalization eta for stick vote (scalar, same as tk_vote2)
     num = math.pi * math.factorial(2 * power)
@@ -103,12 +103,10 @@ def _build_neighbor_table(w, sigma1, sigma2, power):
             M11 = 0.25 * (2.0 - cos2a)
 
             if l2 == 0.0:
-                # At the self-vote position: c1 is the sigma1-decay at l=0.
-                # For sigma2=0 the center value comes from d2_center logic in tk_vote2.
-                d2_center = 1.0 if sigma2 > 0 else 0.0
-                # Plate at center: same formula applies with c1=exp(0), c2=d2_center
-                _c1 = math.exp(0.0) if sigma1 > 0 else 1.0
-                _c2 = d2_center
+                # Self-vote (ℓ=0): convention from VotingMath2.ipynb sets
+                # exp(-ℓ²/σ²) = 1 at ℓ=0 regardless of σ.
+                _c1 = 1.0
+                _c2 = 1.0
             else:
                 _c1 = c1
                 _c2 = c2
@@ -180,9 +178,11 @@ def tk_vote2_fast(field, sigma1=3, sigma2=0, power=1):
     L_sq = X0 ** 2 + X1 ** 2
     L    = np.sqrt(L_sq)
 
-    # Decay arrays (shape w×w)
+    # Decay arrays (shape w×w). Convention: exp(-ℓ²/σ²) = 1 at ℓ=0 regardless of σ.
     d1 = np.exp(-L_sq / sigma1 ** 2) if sigma1 > 0 else np.zeros_like(L)
     d2 = np.exp(-L_sq / sigma2 ** 2) if sigma2 > 0 else np.zeros_like(L)
+    d1[pad, pad] = 1.0
+    d2[pad, pad] = 1.0
 
     # Normalization for stick vote
     num     = math.pi * math.factorial(2 * power)
@@ -199,7 +199,7 @@ def tk_vote2_fast(field, sigma1=3, sigma2=0, power=1):
     R22 = 1.0 - 2.0 * Dy ** 2
 
     # Analytical plate field (N=0) — w×w (precomputed once, identical to reference)
-    c_norm   = 1.0 / (math.pi * (sigma1 ** 2 + sigma2 ** 2))
+    c_norm   = 1.0 / (sigma1 ** 2 + sigma2 ** 2)
     ALPHA    = np.arctan2(X1, X0)   # arctan2(row_offset, col_offset)
     TWO_A    = 2.0 * ALPHA
     COS_2A   = np.cos(TWO_A)
@@ -355,26 +355,32 @@ def optimize_tk(G, I, bounds=None, seed=42, cuda=False):
                 I_flat, nb, s1, s2, pw, plate=True, N=20, out_dtype=out_dtype)
 
         def objective(params):
+            if not np.all(np.isfinite(params)):
+                return np.inf
             s1, s2, pw = float(params[0]), float(params[1]), max(1, int(round(params[2])))
             B = vote_fn_cuda(s1, s2, pw)
             if B.shape != G.shape:
                 return np.inf
-            return metrics.simf(G, B)
+            val = metrics.simf(G, B)
+            return val if np.isfinite(val) else np.inf
 
         res = differential_evolution(objective, bounds=bounds, seed=seed,
-                                     maxiter=300, popsize=15, tol=1e-5, polish=True)
+                                     maxiter=500, popsize=15, tol=1e-5, polish=True)
         s1, s2, pw = res.x[0], res.x[1], max(1, int(round(res.x[2])))
         return s1, s2, pw, vote_fn_cuda(s1, s2, pw), res.fun
     else:
         def objective(params):
+            if not np.all(np.isfinite(params)):
+                return np.inf
             s1, s2, pw = float(params[0]), float(params[1]), max(1, int(round(params[2])))
             B = ts.tk_vote2(I, sigma1=s1, sigma2=s2, power=pw, plate=True, N=20)
             if B.shape != G.shape:
                 return np.inf
-            return metrics.simf(G, B)
+            val = metrics.simf(G, B)
+            return val if np.isfinite(val) else np.inf
 
         res = differential_evolution(objective, bounds=bounds, seed=seed,
-                                     maxiter=300, popsize=15, tol=1e-5, polish=True)
+                                     maxiter=500, popsize=30, tol=1e-5, polish=True)
         s1, s2, pw = res.x[0], res.x[1], max(1, int(round(res.x[2])))
         return s1, s2, pw, ts.tk_vote2(I, sigma1=s1, sigma2=s2, power=pw, plate=True, N=20), res.fun
 

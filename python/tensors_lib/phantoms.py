@@ -88,56 +88,8 @@ def tensor_grid(N, cell_size=1, noise=0.0):
     return T
 
 
-def cross(shape, th_hor=0, th_vert=numpy.pi/2, width=1):
-    """Create a cross-shaped 2D stick tensor field.
-
-    Horizontal and vertical lines pass through the center; the intersection cell
-    takes the horizontal tensor and all other tensors are zero.
-
-    Parameters
-    ----------
-    shape : tuple of int
-        Output shape as ``(rows, cols)``.
-    th_hor : float, optional
-        Stick angle in radians for the horizontal line. Default is 0
-        (``T = [[1, 0], [0, 0]]``).
-    th_vert : float, optional
-        Stick angle in radians for the vertical line. Default is ``pi/2``
-        (``T = [[0, 0], [0, 1]]``).
-    width : int, optional
-        Line thickness in pixels, symmetric around the center row/col.
-        Default is 1.
-
-    Returns
-    -------
-    T : ndarray
-        Tensor field of shape ``(rows, cols, 2, 2)`` with dtype ``float32``.
-    """
-    rows, cols = shape
-    T = numpy.zeros((rows, cols, 2, 2), dtype=numpy.float32)
-
-    h_vec = numpy.array([numpy.cos(th_hor), numpy.sin(th_hor)])
-    v_vec = numpy.array([numpy.cos(th_vert), numpy.sin(th_vert)])
-    T_h = numpy.outer(h_vec, h_vec)
-    T_v = numpy.outer(v_vec, v_vec)
-
-    half = width // 2
-    row_center = rows // 2
-    col_center = cols // 2
-
-    row_lo = max(row_center - half, 0)
-    row_hi = min(row_center + half + (width % 2), rows)
-    col_lo = max(col_center - half, 0)
-    col_hi = min(col_center + half + (width % 2), cols)
-
-    T[row_lo:row_hi, :] = T_v.astype(numpy.float32)
-    #T[:, col_lo:col_hi] = T_h.astype(numpy.float32)
-    #T[row_lo:row_hi, col_lo:col_hi] = T_v.astype(numpy.float32)
-
-    return T
-
-
 def _stick_outer(theta):
+    """Compute the outer product of a stick direction vector."""
     v = numpy.array([numpy.cos(theta), numpy.sin(theta)])
     return numpy.outer(v, v)
 
@@ -146,8 +98,8 @@ def crossing(shape, th1=0.0, th2=numpy.pi / 2, width=1):
     """True 2D crossing: two bars with orientations that sum at the junction.
 
     At the intersection, ``T = T(th1) + T(th2)`` — a legitimate plate-like tensor
-    that TK is designed to recover via plate voting. Blur cannot reconstruct this
-    from either single-orientation neighborhood.
+    that TK is designed to recover via plate voting. (Blur cannot reconstruct this
+    from either single-orientation neighborhood.)
 
     Parameters
     ----------

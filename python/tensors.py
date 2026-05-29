@@ -1,4 +1,5 @@
 import tensors_lib.phantoms as phantoms
+import tensors_lib.noise as noise
 import tensors_lib.metrics as metrics
 import tensors_lib.plots as plots
 import numpy as np
@@ -40,8 +41,6 @@ def structure(image, noise=0.0):
 
     return T
 
-import numpy as np
-
 def _eccentricity(evals):
     """Ellipse eccentricity sqrt(1 - (b/a)^2) from eigh-sorted eigenvalues (ascending)."""
     a = np.abs(evals[..., 1])       # largest eigenvalue
@@ -49,64 +48,6 @@ def _eccentricity(evals):
     safe_a = np.where(a > 1e-12, a, 1.0)
     ratio  = np.clip(b / safe_a, 0.0, 1.0)
     return np.where(a > 1e-12, np.sqrt(1.0 - ratio ** 2), 0.0) # or one?
-
-def add_dual_noise(T, s_theta, s_eig1=None, s_eig2=None):
-    """"
-    Add Gaussian noise to the orientation and eigenvalues of a tensor field T, ensuring the result remains PSD.
-    Reconstruct the PSD tensor from the noisy eigenvectors and eigenvalues.
-    """
-    if s_eig1 == None:
-        s_eig1 = s_theta
-    if s_eig2 == None:
-        s_eig2 = s_eig1
-    
-    H, W = T.shape[:2]
-    evals, evecs = np.linalg.eigh(T)  # evals: (H,W,2), evecs columns are eigenvectors
-
-    # add independent Gaussian noise to each eigenvalue, clip to keep PSD
-    l0 = np.maximum(0.0, evals[:, :, 0] + np.random.normal(0.0, s_eig1, (H, W)))
-    l1 = np.maximum(0.0, evals[:, :, 1] + np.random.normal(0.0, s_eig2, (H, W)))
-
-    # rotate eigenvectors by a noisy angle
-    theta = np.arctan2(evecs[:, :, 1, 0], evecs[:, :, 0, 0])
-    theta += np.random.normal(0.0, s_theta, (H, W))
-
-    cos_t = np.cos(theta)
-    sin_t = np.sin(theta)
-
-    # reconstruct symmetric PSD tensor: T = l0*v0*v0^T + l1*v1*v1^T -> where v0=[cos,sin], v1=[-sin,cos]
-    T_noisy = np.zeros_like(T)
-    T_noisy[:, :, 0, 0] = l0 * cos_t**2 + l1 * sin_t**2
-    T_noisy[:, :, 1, 1] = l0 * sin_t**2 + l1 * cos_t**2
-    T_noisy[:, :, 0, 1] = (l0 - l1) * cos_t * sin_t
-    T_noisy[:, :, 1, 0] = T_noisy[:, :, 0, 1]
-
-    return T_noisy
-
-def add_noise(T, sigma, max_retries=5):
-    """Add Gaussian noise to a tensor field, retrying until the result is PSD.
-
-    For each pixel, independent noise is sampled and added to all three unique
-    components (T00, T01, T11). If the noisy tensor at any pixel is not PSD
-    (i.e. has a negative eigenvalue), that pixel is resampled up to max_retries
-    times before falling back to the original noiseless tensor at that pixel.
-    """
-    H, W = T.shape[:2]
-    T_noisy = T.copy()
-
-    for i in range(H):
-        for j in range(W):
-            t = T[i, j]
-            for _ in range(max_retries):
-                noise = np.random.normal(0.0, sigma, (2, 2))
-                noise = (noise + noise.T) / 2  # keep symmetric
-                candidate = t + noise
-                if np.all(np.linalg.eigvalsh(candidate) >= 0):
-                    T_noisy[i, j] = candidate
-                    break
-            # If no valid sample found, keep the original tensor (already PSD)
-
-    return T_noisy
 
 
 def blur(T, sigma):
@@ -247,14 +188,19 @@ def tk_vote2(T, sigma1=3, sigma2=0, power=1, plate=True, N=10):
     Dx = np.divide(X0, L, out=np.zeros_like(X0), where=L!=0)
     Dy = np.divide(X1, L, out=np.zeros_like(X1), where=L!=0)
     
+    # Decay attenuations c1, c2 at every offset. Convention (VotingMath2.ipynb):
+    #   exp(-ℓ²/σ²) = 0 if ℓ > 0 and σ = 0
+    #   exp(-ℓ²/σ²) = 1 if ℓ = 0 (any σ, including σ = 0)
+    # So when σ=0 we use zeros for ℓ>0, then overwrite the center to 1 below.
     d1 = np.exp(-L_sq / sigma1**2) if sigma1 > 0 else np.zeros_like(L)
     d2 = np.exp(-L_sq / sigma2**2) if sigma2 > 0 else np.zeros_like(L)
-    
+    d1[pad, pad] = 1.0
+    d2[pad, pad] = 1.0
+
     # Normalization factor (eta)
     num = np.pi * math.factorial(2 * power)
     den = 2**(2 * power) * (math.factorial(power)**2)
     eta_val = den / (num * (sigma1**2 + sigma2**2))
-    d2_center = 1.0 if sigma2 > 0 else 0.0
 
     # Base rotation matrix components
     R11 = 1.0 - 2.0 * Dx**2
@@ -266,7 +212,7 @@ def tk_vote2(T, sigma1=3, sigma2=0, power=1, plate=True, N=10):
         PF = np.zeros((w, w, 2, 2))
         if N == 0:
             # Analytical Plate Field
-            c = 1.0 / (np.pi * (sigma1**2 + sigma2**2))
+            c = 1.0 / (sigma1**2 + sigma2**2)
             ALPHA = np.arctan2(X1, X0)
             TWO_ALPHA = 2 * ALPHA
             COS_2A = np.cos(TWO_ALPHA)
@@ -299,16 +245,16 @@ def tk_vote2(T, sigma1=3, sigma2=0, power=1, plate=True, N=10):
                 V01 = eta_val * DECAY * (nRq_x * nRq_y)
                 V11 = eta_val * DECAY * (nRq_y * nRq_y)
 
-                # Center patch for numerical L=0
-                center_val = eta_val * d2_center
-                V00[pad, pad] = center_val * (nx * nx)
-                V01[pad, pad] = center_val * (nx * ny)
-                V11[pad, pad] = center_val * (ny * ny)
+                # At the center (L=0): R=I, qTd=0, so DECAY=d1=1 and (Rq)(Rq)^T = qq^T.
+                # The general expressions above already produce eta_val * (nx*nx, nx*ny, ny*ny)
+                # there since d1[pad,pad]=1 was forced above. No center-patch needed.
 
-                PF[:, :, 0, 0] += V00 / N
-                PF[:, :, 0, 1] += V01 / N
-                PF[:, :, 1, 0] += V01 / N
-                PF[:, :, 1, 1] += V11 / N
+                # Riemann weight dβ = π/N for integral over [0, π]
+                w_beta = np.pi / N
+                PF[:, :, 0, 0] += V00 * w_beta
+                PF[:, :, 0, 1] += V01 * w_beta
+                PF[:, :, 1, 0] += V01 * w_beta
+                PF[:, :, 1, 1] += V11 * w_beta
 
     # 4. Allocate Output and Accumulate Loop
     VF = np.pad(np.zeros(T.shape), ((pad, pad), (pad, pad), (0, 0), (0, 0)))
@@ -344,13 +290,11 @@ def tk_vote2(T, sigma1=3, sigma2=0, power=1, plate=True, N=10):
                 S00 = scale_stick * eta_val * DECAY * (Rq_x * Rq_x)
                 S01 = scale_stick * eta_val * DECAY * (Rq_x * Rq_y)
                 S11 = scale_stick * eta_val * DECAY * (Rq_y * Rq_y)
-                
-                # Center patch for stick L=0
-                center_val = scale_stick * eta_val * d2_center
-                S00[pad, pad] = center_val * (qx * qx)
-                S01[pad, pad] = center_val * (qx * qy)
-                S11[pad, pad] = center_val * (qy * qy)
-                
+
+                # At the center (L=0): R=I, qTd=0, DECAY=d1=1, (Rq)(Rq)^T=qq^T.
+                # Since d1[pad,pad]=1 above, the general expression already gives the
+                # correct self-vote: scale_stick * eta_val * (qx*qx, qx*qy, qy*qy).
+
                 vf_slice[:, :, 0, 0] += S00
                 vf_slice[:, :, 0, 1] += S01
                 vf_slice[:, :, 1, 0] += S01

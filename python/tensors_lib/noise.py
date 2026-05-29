@@ -67,3 +67,65 @@ def add_isotropic_background(field, density=0.02, magnitude=0.5, seed=None):
     field[mask] = I2
 
     return field
+
+
+def add_dual_noise(T, s_theta, s_eig1=None, s_eig2=None, seed=None):
+    """"
+    Add Gaussian noise to the orientation and eigenvalues of a tensor field T, ensuring the result remains PSD.
+    Reconstruct the PSD tensor from the noisy eigenvectors and eigenvalues.
+    """
+    if s_eig1 == None:
+        s_eig1 = s_theta
+    if s_eig2 == None:
+        s_eig2 = s_eig1
+
+    rng = numpy.random.default_rng(seed)
+    H, W = T.shape[:2]
+    evals, evecs = numpy.linalg.eigh(T)  # evals: (H,W,2), evecs columns are eigenvectors
+
+    # add independent Gaussian noise to each eigenvalue, clip to keep PSD
+    l0 = numpy.maximum(0.0, evals[:, :, 0] + rng.normal(0.0, s_eig1, (H, W)))
+    l1 = numpy.maximum(0.0, evals[:, :, 1] + rng.normal(0.0, s_eig2, (H, W)))
+
+    # rotate eigenvectors by a noisy angle
+    theta = numpy.arctan2(evecs[:, :, 1, 0], evecs[:, :, 0, 0])
+    theta += rng.normal(0.0, s_theta, (H, W))
+
+    cos_t = numpy.cos(theta)
+    sin_t = numpy.sin(theta)
+
+    # reconstruct symmetric PSD tensor: T = l0*v0*v0^T + l1*v1*v1^T -> where v0=[cos,sin], v1=[-sin,cos]
+    T_noisy = numpy.zeros_like(T)
+    T_noisy[:, :, 0, 0] = l0 * cos_t**2 + l1 * sin_t**2
+    T_noisy[:, :, 1, 1] = l0 * sin_t**2 + l1 * cos_t**2
+    T_noisy[:, :, 0, 1] = (l0 - l1) * cos_t * sin_t
+    T_noisy[:, :, 1, 0] = T_noisy[:, :, 0, 1]
+
+    return T_noisy
+
+
+def add_noise(T, sigma, max_retries=5, seed=None):
+    """Add Gaussian noise to a tensor field, retrying until the result is PSD.
+
+    For each pixel, independent noise is sampled and added to all three unique
+    components (T00, T01, T11). If the noisy tensor at any pixel is not PSD
+    (i.e. has a negative eigenvalue), that pixel is resampled up to max_retries
+    times before falling back to the original noiseless tensor at that pixel.
+    """
+    rng = numpy.random.default_rng(seed)
+    H, W = T.shape[:2]
+    T_noisy = T.copy()
+
+    for i in range(H):
+        for j in range(W):
+            t = T[i, j]
+            for _ in range(max_retries):
+                noise = rng.normal(0.0, sigma, (2, 2))
+                noise = (noise + noise.T) / 2  # keep symmetric
+                candidate = t + noise
+                if numpy.all(numpy.linalg.eigvalsh(candidate) >= 0):
+                    T_noisy[i, j] = candidate
+                    break
+            # If no valid sample found, keep the original tensor (already PSD)
+
+    return T_noisy

@@ -29,6 +29,7 @@ Field layout convention
 
 import sys
 import os
+import math
 import numpy as np
 import tensors as ts
 
@@ -126,7 +127,9 @@ def _build_nb_numpy(sigma1, sigma2, power, samples, w):
     Rc = (1.0 - 2.0 * dy * dy).astype(np.float32)
 
     # Plate kernel: vectorized numerical integration matching tk_plate_numerical.
-    # Result = (2/N) * sum_{n=0}^{N-1} tk_stickvote_2d(du, dv, theta_n)
+    # Result = (π/N) * sum_{n=0}^{N-1} eta_s * D(β_n) * (R q_n)(R q_n)^T
+    # Riemann weight dβ = π/N for the integral over β ∈ [0, π]; eta_s is the
+    # global stick normalization shared with tk_stick_norm_2d in the CUDA kernel.
     n_nb   = len(du)
     Va_acc = np.zeros(n_nb, dtype=np.float64)
     Vb_acc = np.zeros(n_nb, dtype=np.float64)
@@ -140,6 +143,9 @@ def _build_nb_numpy(sigma1, sigma2, power, samples, w):
     dx_f64 = dx.astype(np.float64)
     dy_f64 = dy.astype(np.float64)
 
+    eta_s = (2 ** (2 * power) * math.factorial(power) ** 2) / (
+        np.pi * math.factorial(2 * power) * (sigma1 ** 2 + sigma2 ** 2))
+
     dtheta = np.pi / samples
     for n in range(samples):
         theta = n * dtheta
@@ -152,20 +158,22 @@ def _build_nb_numpy(sigma1, sigma2, power, samples, w):
         t2   = qTd2
 
         if power == 1:
-            eta = c1_f64 * t1 + c2_f64 * t2
+            D_val = c1_f64 * t1 + c2_f64 * t2
         else:
-            eta = c1_f64 * (t1 ** power) + c2_f64 * (t2 ** power)
+            D_val = c1_f64 * (t1 ** power) + c2_f64 * (t2 ** power)
 
         Rq_x = Ra_f64 * qx + Rb_f64 * qy
         Rq_y = Rb_f64 * qx + Rc_f64 * qy
 
-        Va_acc += eta * Rq_x * Rq_x
-        Vb_acc += eta * Rq_x * Rq_y
-        Vc_acc += eta * Rq_y * Rq_y
+        factor = eta_s * D_val
+        Va_acc += factor * Rq_x * Rq_x
+        Vb_acc += factor * Rq_x * Rq_y
+        Vc_acc += factor * Rq_y * Rq_y
 
-    Va = (Va_acc * 2.0 / samples).astype(np.float32)
-    Vb = (Vb_acc * 2.0 / samples).astype(np.float32)
-    Vc = (Vc_acc * 2.0 / samples).astype(np.float32)
+    w_beta = np.pi / samples
+    Va = (Va_acc * w_beta).astype(np.float32)
+    Vb = (Vb_acc * w_beta).astype(np.float32)
+    Vc = (Vc_acc * w_beta).astype(np.float32)
 
     nb = np.empty(n_nb, dtype=_NB_DTYPE)
     nb['du'] = du;  nb['dv'] = dv
