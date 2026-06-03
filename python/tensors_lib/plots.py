@@ -77,7 +77,7 @@ def polar_diff(gt_T, pred_T, ax, title="", clim=None, color_clim=None, show_colo
         ecc_lim = float(np.max(np.abs(ecc_diff_flat))) if len(ecc_diff_flat) > 0 else 1.0
         ecc_lim = max(ecc_lim, 1e-9)
 
-    scatter = ax.scatter(theta_flat, rho_flat, c=ecc_diff_flat, alpha=0.5, cmap='managua', s=8, #edgecolors='black',
+    scatter = ax.scatter(theta_flat, rho_flat, c=ecc_diff_flat, alpha=0.5, cmap='managua', s=10, edgecolors='black',
                          vmin=-ecc_lim, vmax=ecc_lim)
 
     ax.set_rlim(0, rmax_val)
@@ -189,15 +189,27 @@ def plot_fields(fields_dict, gt_T, plot_fn, title="", subplot_kw=None, figsize_p
         plt.show(block=False)
 
 
-def tensor_orientation(gt_T, pred_T, ax, title="", clim=None, color_clim=None, **_):
+def tensor_orientation(gt_T, pred_T, ax, title="", clim=None, color_clim=None, minor=False, **_):
     """
-    Visualize the dominant eigenvector orientation of pred_T on ax.
+    Visualize an eigenvector orientation of pred_T on ax.
     Hue encodes angle in [0, pi], saturation is scaled by eccentricity.
-    """
-    evals, evecs = np.linalg.eigh(pred_T)
 
-    # angle of the dominant (largest) eigenvector
-    theta = np.arctan2(evecs[..., 1, 1], evecs[..., 0, 1])
+    minor=False -> dominant (largest-eigenvalue) eigenvector.
+    minor=True  -> minor (smallest-eigenvalue) eigenvector.
+    """
+    # Degenerate vote fields (e.g. sigma collapsing to an empty grid) produce a
+    # zero-size tensor array. Render blank instead of crashing on mag.max().
+    if pred_T.size == 0 or pred_T.shape[0] == 0 or pred_T.shape[1] == 0:
+        ax.imshow(np.ones((1, 1, 3)))
+        if title:
+            ax.set_title(title, fontsize=10)
+        return
+
+    evals, evecs = np.linalg.eigh(pred_T)         # ascending: [...,0]=minor, [...,1]=major
+
+    # angle of the selected eigenvector
+    col = 0 if minor else 1
+    theta = np.arctan2(evecs[..., 1, col], evecs[..., 0, col])
 
     # fold (-pi, 0) into (0, pi) to handle sign ambiguity of eigenvectors
     neg = theta < 0
@@ -208,10 +220,41 @@ def tensor_orientation(gt_T, pred_T, ax, title="", clim=None, color_clim=None, *
     zero_mask = evals[..., 1] < 1e-12              # largest eigenvalue ~ 0 -> zero tensor
     C[zero_mask] = [1, 1, 1, 1]                    # white
 
-    #ecc = ts._eccentricity(evals)[..., np.newaxis]
-    #C = ecc * C + (1 - ecc)                    # desaturate isotropic regions toward white
+    # Desaturate isotropic / low-magnitude regions toward white so the plot
+    # shows orientation ONLY where the tensor is actually stick-like.
+    # Without this, near-isotropic background pixels (especially from TK's
+    # plate vote spreading) render at full saturation with a numerically
+    # arbitrary hue, drowning the real structure in colored noise.
+    ecc = ts._eccentricity(evals)[..., np.newaxis]
+    mag = np.linalg.norm(pred_T, axis=(-2, -1))
+    mag_norm = mag / (mag.max() + 1e-12)
+    weight = ecc * mag_norm[..., np.newaxis]
+    C[..., :3] = weight * C[..., :3] + (1 - weight) * 1.0
 
     im = ax.imshow(np.clip(C[..., :3], 0, 1))
 
+    if title:
+        ax.set_title(title, fontsize=10)
+
+
+def tensor_saliency(T, ax, title="", log=True, cmap="magma"):
+    """
+    Visualize tensor saliency = largest |eigenvalue| of T on ax, i.e. how
+    strong the local response is. log=True applies log1p for dynamic range.
+    """
+    evals, _ = ts.eigmag(T)
+    sal = np.abs(evals[..., 1])
+    ax.imshow(np.log1p(sal) if log else sal, cmap=cmap)
+    if title:
+        ax.set_title(title, fontsize=10)
+
+
+def tensor_eccentricity(T, ax, title="", cmap="viridis"):
+    """
+    Visualize tensor eccentricity of T on ax: how stick-like vs isotropic the
+    local tensor is (1 = perfect line, 0 = blob).
+    """
+    evals, _ = ts.eigmag(T)
+    ax.imshow(ts._eccentricity(evals), cmap=cmap, vmin=0.0, vmax=1.0)
     if title:
         ax.set_title(title, fontsize=10)

@@ -14,118 +14,6 @@ def _w_from_sigma(sigma1, sigma2):
     if w % 2 == 0: w += 1
     return w
 
-def _build_neighbor_table(w, sigma1, sigma2, power):
-    """
-    Precompute per-offset geometry and decay weights for a w×w voting window.
-
-    For each (di, dj) offset relative to the center, store:
-      - dx, dy      : normalized direction from voter to receiver
-      - c1, c2      : Gaussian decay exp(-l²/σ₁²), exp(-l²/σ₂²)
-      - Ra, Rb, Rc  : reflection matrix R = I − 2 d d^T components
-      - PVa,PVb,PVc : analytical plate kernel tensor components (N=0 closed form)
-
-    The analytical plate formula (from tk_vote2 with N=0) at offset (di, dj):
-      alpha = arctan2(dj, di)  (note: X0=di, X1=dj in the meshgrid)
-      cos2a = cos(2*alpha), sin2a = sin(2*alpha)
-      M00 = 0.25 * (cos2a + 2),  M01 = 0.25 * sin2a,  M11 = 0.25 * (2 - cos2a)
-      c_norm = 1 / (sigma1² + sigma2²)
-      PF[0,0] = c_norm * (c1 * (1 - M00) + c2 * M00)
-      PF[0,1] = c_norm * (c1 * (0 - M01) + c2 * M01)
-      PF[1,1] = c_norm * (c1 * (1 - M11) + c2 * M11)
-
-    Returns a list of dicts with keys: di, dj, dx, dy, c1, c2, Ra, Rb, Rc,
-                                        PVa, PVb, PVc
-    The list excludes offsets where both c1 and c2 are numerically zero (no vote).
-
-    Parameters
-    ----------
-    w       : int   — window side length (odd)
-    sigma1  : float — lateral sigma
-    sigma2  : float — axial sigma
-    power   : int   — refinement exponent (used only for stick; plate uses analytical
-                       N=0 formula valid only for power=1 in the original closed form,
-                       but the code stores the direct formula which is independent of
-                       power for the N=0 analytical plate)
-    """
-    hw = w // 2
-    invsig1_sq = 1.0 / (sigma1 * sigma1) if sigma1 > 0 else 0.0
-    invsig2_sq = 1.0 / (sigma2 * sigma2) if sigma2 > 0 else 0.0
-    c_norm = 1.0 / (sigma1 ** 2 + sigma2 ** 2)
-
-    # Normalization eta for stick vote (scalar, same as tk_vote2)
-    num = math.pi * math.factorial(2 * power)
-    den = 2 ** (2 * power) * (math.factorial(power) ** 2)
-    eta_val = den / (num * (sigma1 ** 2 + sigma2 ** 2))
-
-    neighbors = []
-    for di in range(-hw, hw + 1):        # row offset (X0 axis)
-        for dj in range(-hw, hw + 1):    # col offset (X1 axis)
-            l2 = float(di * di + dj * dj)
-            L  = math.sqrt(l2)
-
-            # Gaussian decay
-            if l2 == 0.0:
-                c1 = 1.0 if sigma1 == 0.0 else math.exp(-l2 * invsig1_sq)
-                c2 = 1.0 if sigma2 == 0.0 else math.exp(-l2 * invsig2_sq)
-            else:
-                c1 = 0.0 if sigma1 == 0.0 else math.exp(-l2 * invsig1_sq)
-                c2 = 0.0 if sigma2 == 0.0 else math.exp(-l2 * invsig2_sq)
-
-            if c1 == 0.0 and c2 == 0.0:
-                continue  # this offset contributes nothing — skip it
-
-            # Normalized direction (voter→receiver convention: d = offset/L)
-            # In tk_vote2: X0, X1 = np.meshgrid(x, x)
-            #   X0[row, col] = x[col]  => X0 is the COLUMN (fast/j) axis
-            #   X1[row, col] = x[row]  => X1 is the ROW    (slow/i) axis
-            # So: Dx = X0/L = dj/L,  Dy = X1/L = di/L
-            if l2 > 0.0:
-                inv_L = 1.0 / L
-                dx = float(dj) * inv_L   # column offset / L
-                dy = float(di) * inv_L   # row offset    / L
-            else:
-                dx = 0.0
-                dy = 0.0
-
-            # Reflection matrix R = I - 2 d d^T
-            Ra = 1.0 - 2.0 * dx * dx
-            Rb = -2.0 * dx * dy
-            Rc = 1.0 - 2.0 * dy * dy
-
-            # Analytical plate kernel (N=0, from arctan2(X1, X0) = arctan2(row_offset, col_offset))
-            # X1 = row offset = di,  X0 = col offset = dj
-            alpha    = math.atan2(float(di), float(dj))
-            two_a    = 2.0 * alpha
-            cos2a    = math.cos(two_a)
-            sin2a    = math.sin(two_a)
-            M00 = 0.25 * (cos2a + 2.0)
-            M01 = 0.25 * sin2a
-            M11 = 0.25 * (2.0 - cos2a)
-
-            if l2 == 0.0:
-                # Self-vote (ℓ=0): convention from VotingMath2.ipynb sets
-                # exp(-ℓ²/σ²) = 1 at ℓ=0 regardless of σ.
-                _c1 = 1.0
-                _c2 = 1.0
-            else:
-                _c1 = c1
-                _c2 = c2
-
-            PVa = c_norm * (_c1 * (1.0 - M00) + _c2 * M00)
-            PVb = c_norm * (_c1 * (0.0 - M01) + _c2 * M01)
-            PVc = c_norm * (_c1 * (1.0 - M11) + _c2 * M11)
-
-            neighbors.append({
-                'di': di, 'dj': dj,
-                'dx': dx, 'dy': dy,
-                'c1': c1, 'c2': c2,
-                'Ra': Ra, 'Rb': Rb, 'Rc': Rc,
-                'PVa': PVa, 'PVb': PVb, 'PVc': PVc,
-                'eta': eta_val,
-            })
-    return neighbors
-
-
 def tk_vote2_fast(field, sigma1=3, sigma2=0, power=1):
     """
     Optimized TK tensor voting (N=0 analytical plate, stick+plate).
@@ -317,20 +205,50 @@ def optimize_blur(G, I, bounds=(0.1, 50.0)):
     return res.x, B_opt, res.fun
 
 
+# Minimizes SIMF(G, structure(gaussian_filter(image, σ))) over scalar σ.
+#
+# Image-domain pre-blur: unlike optimize_blur (which smooths a tensor FIELD),
+# this smooths the IMAGE before the structure tensor is built, denoising the
+# gradients that form it. structure_fn maps an image -> (H,W,2,2) tensor field
+# (e.g. tensors.structure). sigma=0 means no blur (raw image).
+def optimize_preblur(G, image, structure_fn, bounds=(0.0, 8.0)):
+    def vote(sg):
+        img = scipy.ndimage.gaussian_filter(image, sg) if sg > 0 else image
+        return structure_fn(img)
+
+    def objective(sg):
+        B = vote(sg)
+        if B.shape != G.shape:
+            return np.inf
+        return metrics.simf(G, B)
+
+    res = _grid_then_refine(objective, bounds, n_grid=40)
+    return res.x, vote(res.x), res.fun
+
+
 # Minimizes SIMF(G, ATV(I, σ)) over scalar σ.
 #
 # Same fix as optimize_blur: replaced bare minimize_scalar with grid scan +
 # Brent refinement to handle a potentially non-unimodal SIMF landscape.
-def optimize_atv(G, I, bounds=(0.5, 20.0)):
+def optimize_atv(G, I, bounds=(0.5, 20.0), cuda=False):
+    # cuda=True votes on the GPU (tensors_lib.cuda_wrappers.atv_vote2_cuda),
+    # which is ~1000x faster than the CPU ts.atv_vote2 the grid scan calls
+    # ~30 times — the difference between a sub-second and a ~20min optimize.
+    if cuda:
+        from tensors_lib.cuda_wrappers import atv_vote2_cuda
+        vote = lambda sg: atv_vote2_cuda(I, sigma=sg)
+    else:
+        vote = lambda sg: ts.atv_vote2(I, sigma=sg)
+
     def objective(sigma):
-        B = ts.atv_vote2(I, sigma=sigma)
+        B = vote(sigma)
         if B.shape != G.shape:
             return np.inf
         return metrics.simf(G, B)
 
     # res = minimize_scalar(objective, bounds=bounds, method='bounded')
     res = _grid_then_refine(objective, bounds, n_grid=30)
-    return res.x, ts.atv_vote2(I, sigma=res.x), res.fun
+    return res.x, vote(res.x), res.fun
 
 
 # Minimizes SIMF(G, TK(I, σ1, σ2, power, plate=True)) over (σ1, σ2, power)
