@@ -77,7 +77,7 @@ def polar_diff(gt_T, pred_T, ax, title="", clim=None, color_clim=None, show_colo
         ecc_lim = float(np.max(np.abs(ecc_diff_flat))) if len(ecc_diff_flat) > 0 else 1.0
         ecc_lim = max(ecc_lim, 1e-9)
 
-    scatter = ax.scatter(theta_flat, rho_flat, c=ecc_diff_flat, alpha=0.5, cmap='managua', s=10, edgecolors='black',
+    scatter = ax.scatter(theta_flat, rho_flat, c=ecc_diff_flat, alpha=0.3, cmap='managua', s=5,
                          vmin=-ecc_lim, vmax=ecc_lim)
 
     ax.set_rlim(0, rmax_val)
