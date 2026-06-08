@@ -4,6 +4,8 @@ import tensors_lib.metrics as metrics
 import tensors_lib.plots as plots
 import numpy as np
 import math
+from scipy.ndimage import distance_transform_edt, gaussian_filter
+from skimage.morphology import skeletonize
 
 def eigmag(T):
     
@@ -40,6 +42,93 @@ def structure(image, noise=0.0):
     T[:, :, 1, 0] = T[:, :, 0, 1]
 
     return T
+
+
+def gt_edt(mask, sigma=2.0):
+    """GT tensor field from a binary vessel annotation via EDT gradients.
+
+    Computes the Euclidean distance transform of the mask, smooths it, then
+    builds a symmetric tensor T = (grad edt)(grad edt)^T at each pixel. The
+    result has high energy throughout the vessel interior (peaks near the
+    medial axis) and falls to zero in the background. Orientation encodes the
+    boundary-normal direction; for segmentation this does not matter since
+    only eigenvalue magnitude is used for thresholding.
+
+    Args:
+        mask:  2-D binary array (True/1 = vessel).
+        sigma: Gaussian smoothing applied to the EDT before taking gradients.
+               Larger values give a smoother, less noisy GT field.
+
+    Returns:
+        T: float64 tensor field, shape (H, W, 2, 2).
+    """
+    edt = distance_transform_edt(mask > 0.5)
+    if sigma > 0:
+        edt = gaussian_filter(edt, sigma=sigma)
+    return structure(edt)
+
+
+def gt_hessian(mask, sigma=2.0):
+    """GT tensor field from a binary vessel annotation via the image Hessian.
+
+    Smooths the filled mask with a Gaussian (radius ~ vessel width), then
+    computes the Hessian matrix at each pixel. The Hessian naturally fires
+    inside tubular regions and encodes both saliency (large negative eigenvalue
+    where the profile is curved) and orientation (minor eigenvector points
+    along the vessel). This is the same geometric quantity Frangi filtering
+    uses as its foundation.
+
+    Args:
+        mask:  2-D binary array (True/1 = vessel).
+        sigma: Gaussian smoothing applied to the mask before computing the
+               Hessian. Should be roughly the vessel half-width in pixels.
+
+    Returns:
+        T: float64 tensor field, shape (H, W, 2, 2). Values can be negative
+           (Hessian is not guaranteed positive semi-definite).
+    """
+    smoothed = gaussian_filter(mask.astype(np.float64), sigma=sigma)
+    # Second-order partial derivatives via successive np.gradient calls.
+    dy, dx = np.gradient(smoothed)
+    dyy, dyx = np.gradient(dy)
+    dxy, dxx = np.gradient(dx)
+    T = np.zeros((*mask.shape, 2, 2))
+    T[..., 0, 0] = dxx
+    T[..., 0, 1] = dxy
+    T[..., 1, 0] = dyx
+    T[..., 1, 1] = dyy
+    return T
+
+
+def gt_skeleton(mask, sigma=1.0):
+    """GT tensor field from a binary vessel annotation via skeleton + distance field.
+
+    Skeletonizes the mask to a 1-pixel-wide medial axis, computes the distance
+    transform from that skeleton (so intensity peaks at the skeleton itself),
+    smooths the result, and builds a structure tensor from it. The tensor field
+    has its highest energy at skeleton pixels and decays outward, giving a
+    compact, centerline-focused GT. Useful when you want the GT to emphasize
+    the medial axis rather than the full vessel lumen.
+
+    Args:
+        mask:  2-D binary array (True/1 = vessel).
+        sigma: Gaussian smoothing applied after the inverse-skeleton EDT.
+
+    Returns:
+        T: float64 tensor field, shape (H, W, 2, 2).
+    """
+    skel = skeletonize(mask > 0.5)
+    # Distance from background to skeleton: peaks at skeleton pixels (dist=0
+    # from skeleton means the skeleton itself has value 0 from edt of ~skel,
+    # so we invert: use dist from non-skeleton pixels).
+    skel_dist = distance_transform_edt(~skel).astype(np.float64)
+    # Invert so skeleton gets the highest value.
+    skel_dist = skel_dist.max() - skel_dist
+    skel_dist = skel_dist / (skel_dist.max() + 1e-12)
+    if sigma > 0:
+        skel_dist = gaussian_filter(skel_dist, sigma=sigma)
+    return structure(skel_dist)
+
 
 def _eccentricity(evals):
     """Ellipse eccentricity sqrt(1 - (b/a)^2) from eigh-sorted eigenvalues (ascending)."""
