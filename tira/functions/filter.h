@@ -162,8 +162,6 @@ namespace tira::cpu {
 		// Calculate a 1D kernel
 		unsigned ksize = (unsigned)(6 * sigma);
 		KernelType* kernel = gaussian1d(ksize, (KernelType)0, sigma, (KernelType)1);
-		for (unsigned i = 0; i < ksize; i++)
-			printf("%f", kernel[i]);
 
 		ImageType* dest_x = convolve2<ImageType, KernelType>(input, in_sx, in_sy, kernel, ksize, 1, out_sx, out_sy);
 		ImageType* dest_xy = convolve2<ImageType, KernelType>(dest_x, out_sx, out_sy, kernel, 1, ksize, out_sx, out_sy);
@@ -307,10 +305,10 @@ namespace tira::cuda {
 	ImageType* gaussian_convolve2(const ImageType* source, const unsigned in_sx, const unsigned in_sy,
 		float sigma1, float sigma2, unsigned int& out_width, unsigned int& out_height) {
 
-		unsigned int window_size_w = (unsigned int)(sigma1 * 6 + 1);		// calculate the window sizes for each kernel
-		unsigned int window_size_h = (unsigned int)(sigma2 * 6 + 1);
-		out_width = in_sx - window_size_w;									// calculate the size of the output image
-		out_height = in_sy - window_size_h;
+		unsigned int window_size_w = (unsigned int)(sigma1 * 6);			// calculate the window sizes for each kernel
+		unsigned int window_size_h = (unsigned int)(sigma2 * 6);
+		out_width = in_sx - (window_size_w - 1);							// calculate the size of the valid convolution output
+		out_height = in_sy - (window_size_h - 1);
 
 		size_t bytes = sizeof(ImageType) * in_sx * in_sy;					// calculate the number of bytes in the image
 
