@@ -225,9 +225,16 @@ def tensor_orientation(gt_T, pred_T, ax, title="", clim=None, color_clim=None, m
     # Without this, near-isotropic background pixels (especially from TK's
     # plate vote spreading) render at full saturation with a numerically
     # arbitrary hue, drowning the real structure in colored noise.
+    # Magnitude is normalized by a robust high percentile (not the raw global
+    # max) and gamma-stretched. A single outlier pixel -- e.g. a razor-sharp
+    # edge in an unsmoothed structure tensor -- otherwise sets mag.max() so high
+    # that every other pixel's weight collapses and the whole field washes to
+    # white. The 99th percentile divisor plus sqrt stretch keeps mid-magnitude
+    # structure visible while still desaturating genuine low-energy background.
     ecc = ts._eccentricity(evals)[..., np.newaxis]
     mag = np.linalg.norm(pred_T, axis=(-2, -1))
-    mag_norm = mag / (mag.max() + 1e-12)
+    mag_norm = mag / (np.percentile(mag, 99) + 1e-12)
+    mag_norm = np.sqrt(np.clip(mag_norm, 0.0, 1.0))
     weight = ecc * mag_norm[..., np.newaxis]
     C[..., :3] = weight * C[..., :3] + (1 - weight) * 1.0
 

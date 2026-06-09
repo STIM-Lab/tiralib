@@ -5,6 +5,7 @@ import tensors_lib.plots as plots
 import numpy as np
 import math
 from scipy.ndimage import distance_transform_edt, gaussian_filter
+from scipy.signal import convolve as _convolve
 from skimage.morphology import skeletonize
 
 def eigmag(T):
@@ -21,18 +22,26 @@ def eigmag(T):
     
     return sortedValues, sortedVectors
 
-# calculate the structure tensor for the input array, optionally adding noise to the tensor components
-def structure(image, noise=0.0):
+# calculate the structure tensor for the input array, optionally smoothing the
+# tensor field (sigma x sigma box filter) and/or adding noise to the components
+def structure(image, sigma=0, noise=0.0):
+    """2D structure tensor of an image, optionally smoothed.
+
+    sigma > 0 smooths the TENSOR field with a sigma x sigma box filter (same as
+    image2tensor.structure2d in the tensor repo), so callers no longer need a
+    separate scipy blur step. sigma=0 leaves the raw gradient outer-product
+    field untouched.
+    """
     # Calculate the image gradient
     dIdy = np.gradient(image, axis=0, edge_order=2)
     dIdx = np.gradient(image, axis=1, edge_order=2)
-    
+
     # Create the structure tensor
     T = np.zeros((image.shape[0], image.shape[1], 2, 2))
-    
-    T[:, :, 0, 0] = dIdx * dIdx        
+
+    T[:, :, 0, 0] = dIdx * dIdx
     T[:, :, 1, 1] = dIdy * dIdy
-    T[:, :, 0, 1] = dIdx * dIdy        
+    T[:, :, 0, 1] = dIdx * dIdy
 
     if noise > 0:
         T[:, :, 0, 0] = T[:, :, 0, 0] + np.abs(np.random.normal(0.0, noise, T[:, :, 0, 0].shape))
@@ -40,6 +49,11 @@ def structure(image, noise=0.0):
         T[:, :, 0, 1] = T[:, :, 0, 1] + np.random.normal(0.0, noise, T[:, :, 0, 1].shape)
 
     T[:, :, 1, 0] = T[:, :, 0, 1]
+
+    # Smooth the tensor field with a sigma x sigma box filter (sigma=0 -> none).
+    if sigma > 0:
+        window = np.ones((sigma, sigma, 1, 1))
+        T = _convolve(T, window, mode="same")
 
     return T
 
