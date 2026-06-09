@@ -191,14 +191,21 @@ def plot_fields(fields_dict, gt_T, plot_fn, title="", subplot_kw=None, figsize_p
 
 def tensor_orientation(gt_T, pred_T, ax, title="", clim=None, color_clim=None, minor=False, **_):
     """
-    Visualize an eigenvector orientation of pred_T on ax.
-    Hue encodes angle in [0, pi], saturation is scaled by eccentricity.
+    Visualize an eigenvector orientation of pred_T on ax, matching the tvote2
+    interactive tool's Vector Display (default settings, Magnitude = Lighten).
+
+    Hue encodes the selected eigenvector angle via the cyclic HSV colormap. The
+    color is then blended toward white by two sequential "Lighten" steps -- by
+    eccentricity, then by magnitude -- so the plot shows orientation only where
+    the tensor is both stick-like AND strong. This is the tvote2 recipe:
+    isotropic regions (low eccentricity) and low-energy background (low magnitude)
+    both wash to white, leaving only the salient structure colored.
 
     minor=False -> dominant (largest-eigenvalue) eigenvector.
     minor=True  -> minor (smallest-eigenvalue) eigenvector.
     """
     # Degenerate vote fields (e.g. sigma collapsing to an empty grid) produce a
-    # zero-size tensor array. Render blank instead of crashing on mag.max().
+    # zero-size tensor array. Render blank instead of crashing on l1.max().
     if pred_T.size == 0 or pred_T.shape[0] == 0 or pred_T.shape[1] == 0:
         ax.imshow(np.ones((1, 1, 3)))
         if title:
@@ -220,25 +227,23 @@ def tensor_orientation(gt_T, pred_T, ax, title="", clim=None, color_clim=None, m
     zero_mask = evals[..., 1] < 1e-12              # largest eigenvalue ~ 0 -> zero tensor
     C[zero_mask] = [1, 1, 1, 1]                    # white
 
-    # Desaturate isotropic / low-magnitude regions toward white so the plot
-    # shows orientation ONLY where the tensor is actually stick-like.
-    # Without this, near-isotropic background pixels (especially from TK's
-    # plate vote spreading) render at full saturation with a numerically
-    # arbitrary hue, drowning the real structure in colored noise.
-    # Magnitude is normalized by a robust high percentile (not the raw global
-    # max) and gamma-stretched. A single outlier pixel -- e.g. a razor-sharp
-    # edge in an unsmoothed structure tensor -- otherwise sets mag.max() so high
-    # that every other pixel's weight collapses and the whole field washes to
-    # white. The 99th percentile divisor plus sqrt stretch keeps mid-magnitude
-    # structure visible while still desaturating genuine low-energy background.
+    # tvote2 Lighten blends: color toward white by (1 - weight) for eccentricity
+    # then magnitude, applied as two separate passes (not a single combined
+    # weight). Magnitude uses |lambda1| normalized linearly by its global max --
+    # tvote2's threshold -- not a percentile/gamma stretch, so genuinely weak
+    # background washes out instead of being boosted into saturated hue noise.
     ecc = ts._eccentricity(evals)[..., np.newaxis]
-    mag = np.linalg.norm(pred_T, axis=(-2, -1))
-    mag_norm = mag / (np.percentile(mag, 99) + 1e-12)
-    mag_norm = np.sqrt(np.clip(mag_norm, 0.0, 1.0))
-    weight = ecc * mag_norm[..., np.newaxis]
-    C[..., :3] = weight * C[..., :3] + (1 - weight) * 1.0
+    l1 = np.abs(evals[..., 1])
+    l1_max = float(l1.max())
+    mag_norm = np.clip(l1 / l1_max, 0.0, 1.0) if l1_max > 0 else np.zeros_like(l1)
+    mag_norm = mag_norm[..., np.newaxis]
 
-    im = ax.imshow(np.clip(C[..., :3], 0, 1))
+    rgb = C[..., :3]
+    rgb = rgb * ecc + (1.0 - ecc) * 1.0            # eccentricity Lighten
+    rgb = rgb * mag_norm + (1.0 - mag_norm) * 1.0  # magnitude Lighten
+    C[..., :3] = rgb
+
+    ax.imshow(np.clip(C[..., :3], 0, 1))
 
     if title:
         ax.set_title(title, fontsize=10)
