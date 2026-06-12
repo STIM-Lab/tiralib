@@ -93,10 +93,10 @@ def stacks_to_npy(out_directory, cube_dim):
                 
                 # allocate an array to store all of the files
                 F0 = ski.io.imread(stack_directory + files[0])
-                Stack = np.zeros((F0.shape[0], F0.shape[1], len(files)))
+                Stack = np.zeros((F0.shape[0], F0.shape[1], len(files)), dtype=np.float32)
                 
                 for fi in range(len(files)):
-                    Stack[:, :, fi] = ski.io.imread(stack_directory + files[fi])
+                    Stack[:, :, fi] = ski.io.imread(stack_directory + files[fi]).astype(np.float32)
                 stack_filename = out_directory + stack_name + ".npy"
                 np.save(stack_filename, Stack)
                 pbar.update(1)
@@ -142,12 +142,15 @@ def otsu_batch(input_npy_dir, output_mask_dir):
         thresh = ski.filters.threshold_otsu(vol)
 
         #print(f"otsu threshold : {thresh}")
+        
+        inside = vol <= thresh
 
         # binary segmentation
-        mask = vol > thresh
+        mask = np.ones(vol.shape, dtype=np.float32) * 255.0
+        mask[inside] = 0.0
 
         # convert boolean to uint8
-        mask = mask.astype(np.uint8)
+        #mask = mask.astype(np.float32) * 255.0
 
         # save binary cube
         out_file = output_mask_dir / f"{npy_file.stem}_otsu3d.npy"
@@ -169,8 +172,86 @@ def otsu_batch(input_npy_dir, output_mask_dir):
 #  @param wf is the weight for the fitting term
 #  @param cuda is a true/false value defining whether or not the GPU is used
 #  @param dp is a triple defining the size of the volume along each spatial dimension
-def rsf_batch(exec_dir, bin_dir, raw_dir, sigma_l=2.0, sigma_k=2.0, T=1000, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.3, ws=0.3, wf=0.3, cuda=True):
-    # write batch function here
+def rsf_batch(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.1, ws=0.1, wf=0.1, cuda=True):
+
+    exec_dir = Path(exec_dir)
+    bin_dir = Path(bin_dir)
+    raw_dir = Path(raw_dir)
+
+    # create output directory
+    output_dir = raw_dir.parent / "rsf_output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # locate rsf executable
+    exe_path = exec_dir / "rsf_gpu.exe"
+
+    if not exe_path.exists():
+        raise FileNotFoundError("could not find rsf_gpu executable")
+
+    # get all raw volumes
+    raw_files = sorted(raw_dir.glob("*.npy"))
+
+    print("Running RSF Batch Processing...")
+    pbar = tqdm(total=len(raw_files))
+
+    for ri in range(len(raw_files)):
+
+        raw_file = raw_files[ri]
+
+        # locate corresponding binary volume
+        bin_file = bin_dir / f"{raw_file.stem}_otsu3d.npy"
+
+        if not bin_file.exists():
+            print("missing binary file for " + raw_file.name)
+            pbar.update(1)
+            continue
+
+        # generate output filename
+        out_file = output_dir / f"{raw_file.stem}_rsf.npy"
+
+        # select cpu or gpu execution
+        if cuda:
+            cuda_device = 0
+        else:
+            cuda_device = -1
+
+        # build command line arguments
+        cmd = [
+            str(exe_path),
+            "--binary", str(bin_file),
+            "--image", str(raw_file),
+            "--output", str(out_file),
+            "--sigma", str(sigma_l),
+            "--sigmaf", str(sigma_k),
+            "--t", str(T),
+            "--dt", str(dt),
+            "--wr", str(wr),
+            "--ws", str(ws),
+            "--wf", str(wf),
+            "--dx", str(dp[0]),
+            "--dy", str(dp[1]),
+            "--dz", str(dp[2]),
+            "--cuda", str(cuda_device),
+            
+        ]
+
+        # execute rsf
+        result = subprocess.run(
+                 cmd,
+                 cwd=str(exec_dir),
+                 capture_output=True,
+                 text=True
+         )
+        
+        if result.returncode != 0:
+           print("rsf failed on " + raw_file.name)
+           print(result.stdout)
+           print(result.stderr)
+
+
+        pbar.update(1)
+
+    pbar.close()
 
 
 
