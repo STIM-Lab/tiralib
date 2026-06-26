@@ -1,13 +1,14 @@
 import numpy as np
 import skimage as ski
 import os
+import re
 from tqdm import tqdm
 from pathlib import Path
 
 
 ## @package cubify
-#  This package contains functions for converting a large image stack
-#  into a set of cubes that can be processed in parallel.
+#  This package contains functions for converting between image stacks
+#  and sets of cubes that can be processed in parallel.
 
 # performs a ceiling division
 def ceildiv(a, b):
@@ -117,142 +118,46 @@ def cubify(in_directory, out_directory, cube_size):
     # convert each stack to a NumPy file
     stacks_to_npy(out_directory, cube_dimension)
 
+def decubify(in_directory, out_directory, cube_size=200):
+
+    in_directory = 'filename'
+    out_directory = 'filename'
+    os.makedirs(out_directory, exist_ok=True)
     
-def otsu_batch(input_npy_dir, output_mask_dir):
-
-    input_npy_dir = Path(input_npy_dir)
-    output_mask_dir = Path(output_mask_dir)
-
-    # make output folder
-    output_mask_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Reading 3D cubes from: {in_directory}")
+    print(f"Saving 2D slices to: {out_directory}\n")
     
-    sorted_npy = sorted(input_npy_dir.glob("*.npy"))
-
-    # process all npy cubes
-    for ni in tqdm(range(len(sorted(input_npy_dir.glob("*.npy"))))):
-        
-        npy_file = sorted_npy[ni]
-
-        #print(f"processing : {npy_file.name}")
-
-        # load cube
-        vol = np.load(npy_file).astype(np.float32)
-
-        # compute global 3d otsu threshold
-        thresh = ski.filters.threshold_otsu(vol)
-
-        #print(f"otsu threshold : {thresh}")
-        
-        inside = vol <= thresh
-
-        # binary segmentation
-        mask = np.ones(vol.shape, dtype=np.float32) * 255.0
-        mask[inside] = 0.0
-
-        # convert boolean to uint8
-        #mask = mask.astype(np.float32) * 255.0
-
-        # save binary cube
-        out_file = output_mask_dir / f"{npy_file.stem}_otsu3d.npy"
-        np.save(out_file, mask)
-
-## This function executes the RSF GPU code for each volume in a specified directory.
-#  The volumes are assumed consist of (1) a raw image volume and (2) an initial
-#  binary segmentation.
-#
-#  @param exec_dir is the directory of the rsf_gpu executable
-#  @param bin_dir is the directory containing the initial binary segmentation
-#  @param raw_dir is the directory containing the raw image volumes corresponding to the binary segmentations
-#  @param sigma_l is the standard deviation of the blur kernel used in the localization function
-#  @param sigma_k is the standard deviation of the blur kernel used in the fitting function
-#  @param T is the number of time steps to simulate
-#  @param dt is the size of each time step
-#  @param wr is the weight for the regularization term
-#  @param ws is the weight for the smoothing term
-#  @param wf is the weight for the fitting term
-#  @param cuda is a true/false value defining whether or not the GPU is used
-#  @param dp is a triple defining the size of the volume along each spatial dimension
-def rsf_batch(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.1, ws=0.1, wf=0.1, cuda=True):
-
-    exec_dir = Path(exec_dir)
-    bin_dir = Path(bin_dir)
-    raw_dir = Path(raw_dir)
-
-    # create output directory
-    output_dir = raw_dir.parent / "rsf_output"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # locate rsf executable
-    exe_path = exec_dir / "rsf_gpu.exe"
-
-    if not exe_path.exists():
-        raise FileNotFoundError("could not find rsf_gpu executable")
-
-    # get all raw volumes
-    raw_files = sorted(raw_dir.glob("*.npy"))
-
-    print("Running RSF Batch Processing...")
-    pbar = tqdm(total=len(raw_files))
-
-    for ri in range(len(raw_files)):
-
-        raw_file = raw_files[ri]
-
-        # locate corresponding binary volume
-        bin_file = bin_dir / f"{raw_file.stem}_otsu3d.npy"
-
-        if not bin_file.exists():
-            print("missing binary file for " + raw_file.name)
-            pbar.update(1)
-            continue
-
-        # generate output filename
-        out_file = output_dir / f"{raw_file.stem}_rsf.npy"
-
-        # select cpu or gpu execution
-        if cuda:
-            cuda_device = 0
-        else:
-            cuda_device = -1
-
-        # build command line arguments
-        cmd = [
-            str(exe_path),
-            "--binary", str(bin_file),
-            "--image", str(raw_file),
-            "--output", str(out_file),
-            "--sigma", str(sigma_l),
-            "--sigmaf", str(sigma_k),
-            "--t", str(T),
-            "--dt", str(dt),
-            "--wr", str(wr),
-            "--ws", str(ws),
-            "--wf", str(wf),
-            "--dx", str(dp[0]),
-            "--dy", str(dp[1]),
-            "--dz", str(dp[2]),
-            "--cuda", str(cuda_device),
+    # file proccesing
+    for filename in os.listdir(in_directory):
+        if filename.endswith('.npy'):
+            print(f"Decubifying file: {filename}")
             
-        ]
+            # Pull the grid coordinates out of the filename
+            numbers = re.findall(r'\d+', filename)
+            if len(numbers) >= 3:
+                cube_x = int(numbers[0])
+                cube_y = int(numbers[1])
+                cube_z = int(numbers[2])
+            else:
+                print(f"Skipped {filename}")
+                continue
+    
+            # load the 3D numpy volume data [X, Y, Z]
+            full_file_path = os.path.join(in_directory, filename)
+            cube_3d = np.load(full_file_path, allow_pickle=True)
+    
+            # finding the midpoint along the z axis
+            mid_z = cube_3d.shape[2] // 2
+            
+            # Slicing syntax: [all_x, all_y, exact_z_layer]
+            # This collapses the 3D array down into a flat 2D matrix
+            tile_2d = cube_3d[:, :, mid_z]
+    
+            # saving the 2d data and keeping the coordinates
+            output_filename = f"cube_2d_X{cube_x}_Y{cube_y}_Z{cube_z}.npy"
+            full_output_path = os.path.join(out_directory, output_filename)
+            
+            np.save(full_output_path, tile_2d)
+            print(f"saved 2D slice data to: {output_filename}")
 
-        # execute rsf
-        result = subprocess.run(
-                 cmd,
-                 cwd=str(exec_dir),
-                 capture_output=True,
-                 text=True
-         )
-        
-        if result.returncode != 0:
-           print("rsf failed on " + raw_file.name)
-           print(result.stdout)
-           print(result.stderr)
-
-
-        pbar.update(1)
-
-    pbar.close()
-
-
-
-
+    
