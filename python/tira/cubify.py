@@ -6,6 +6,7 @@ from tqdm import tqdm
 from pathlib import Path
 
 
+
 ## @package cubify
 #  This package contains functions for converting between image stacks
 #  and sets of cubes that can be processed in parallel.
@@ -52,7 +53,7 @@ def split_stacks(in_directory, out_directory, cube_size):
     build_directories(out_directory, cube_dim)
     
     # for each file in the large image stack
-    print("Splitting Images Into Sub-Directories...")
+    print("Splitting images into subdirectories...")
     for fi in tqdm(range(len(files))):
         
         zi = int(fi / cube_size)
@@ -76,7 +77,7 @@ def split_stacks(in_directory, out_directory, cube_size):
                 
 # convert the image stacks to numpy files
 def stacks_to_npy(out_directory, cube_dim):
-    print("Converting Image Stacks into .npy Arrays")
+    print("Converting image stacks into .npy arrays")
     cubes = cube_dim[0] * cube_dim[1] * cube_dim[2]
     pbar = tqdm(total=cubes)
     
@@ -117,47 +118,131 @@ def cubify(in_directory, out_directory, cube_size):
     
     # convert each stack to a NumPy file
     stacks_to_npy(out_directory, cube_dimension)
+    
+## Retrieve the cube tile indices from a filename
+def tilenum(filename):
+    # Pull the grid coordinates out of the filename
+    numbers = re.findall(r'\d+', filename)
+    if len(numbers) < 3:
+        raise Exception("A filename (" + filename + ") has an unexpected format: at least three numbers are expected in the filename")
+    cube_x = int(numbers[0])
+    cube_y = int(numbers[1])
+    cube_z = int(numbers[2])
+    
+    return (cube_x, cube_y, cube_z)
+    
+## Generate a grid of tiles, where each grid position provides the filename of the associated tile
+def namegrid(filenames):
+    
+    #find the maximum index for each dimension
+    max_x = 0
+    max_y = 0
+    max_z = 0
+    
+    for f in filenames:
+        indices = tilenum(f.name)
+        if max_x < indices[0]:
+            max_x = indices[0]
+        if max_y < indices[1]:
+            max_y = indices[1]
+        if max_z < indices[2]:
+            max_z = indices[2]
+    
+    NameGrid = np.full((max_x + 1, max_y + 1, max_z + 1), "", dtype=object)
+    
+    for f in filenames:
+        indices = tilenum(f.name)
+        NameGrid[indices[0], indices[1], indices[2]] = f
+        
+    return NameGrid
 
+## Calculates the size of an XY slice of the entire volume from a NameGrid. The main problem
+#  here is that the last tile along any dimension may be smaller than the other tiles inside
+#  the grid. This is because the entire volume may not be evenly divisible by the cube size.
+#  Since the cube at the starting point of the grid (0, 0, 0) will be the largest, we start
+#  there and then update the size based on the size of the last cube along that dimension.
+def slicedim(namegrid):
+    
+    # get the number of cubes along each dimension
+    num_cubes = namegrid.shape
+    
+    # load the size of the corner cube at 0,0,0
+    filename = namegrid[0, 0, 0]
+    CornerCube = np.load(filename)
+    corner_shape = CornerCube.shape
+    
+    # get the size of the slice EXCLUDING the last cube (which may be a different size)
+    x_size = corner_shape[0] * (num_cubes[0] - 1)
+    y_size = corner_shape[1] * (num_cubes[1] - 1)
+    
+    # add the size of the last cube
+    LastCube = np.load(namegrid[-1, -1, 0])
+    x_size = x_size + LastCube.shape[0]
+    y_size = y_size + LastCube.shape[1]
+    
+    return (x_size, y_size)
+
+## Returns the data type of the cubes in a tiled grid
+def dtype(namegrid):
+    filename = namegrid[0, 0, 0]
+    CornerCube = np.load(filename)
+    return CornerCube.dtype
+
+## Returns the number of slices in the current Z plank (based on the number of slices in the
+#  corner cube)
+def cubeshape(namegrid, zi):
+    filename = namegrid[0, 0, 0]
+    CornerCube = np.load(filename)
+    return CornerCube.shape
+
+## Combines a set of equally-sized cubes (generated using the cubify function) into
+#  a set of 2D slices across the entire volume.
 def decubify(in_directory, out_directory, cube_size=200):
 
-    in_directory = 'filename'
-    out_directory = 'filename'
+    # create the output directory (if it doesn't already exist)
     os.makedirs(out_directory, exist_ok=True)
     
-    print(f"Reading 3D cubes from: {in_directory}")
-    print(f"Saving 2D slices to: {out_directory}\n")
+    # get all of the NPY files in the input directory (we assume these are all cubes)
+    npy_files = list(Path(in_directory).glob("*.npy"))
+
+    # create a tiled "filename grid" of all of the NPY files    
+    NameGrid = namegrid(npy_files)
     
-    # file proccesing
-    for filename in os.listdir(in_directory):
-        if filename.endswith('.npy'):
-            print(f"Decubifying file: {filename}")
+    # calculate the size of a 2D slice from the FileGrid
+    SliceDim = slicedim(NameGrid)
+    
+    # allocate a 2D slice using the same data type as the NPY cubes
+    data_type = dtype(NameGrid)
+    Slice = np.zeros(SliceDim, dtype=data_type)
+    
+    slice_counter = 0
+    
+    # for each "plank" (layer of cubes) along the Z axis
+    for zi in range(NameGrid.shape[2]):
+        
+        # get the number of slices in the plank
+        cube_shape = cubeshape(NameGrid, zi)
+        
+        # iterate through each slice in the plank
+        for si in range(cube_shape[2]):
             
-            # Pull the grid coordinates out of the filename
-            numbers = re.findall(r'\d+', filename)
-            if len(numbers) >= 3:
-                cube_x = int(numbers[0])
-                cube_y = int(numbers[1])
-                cube_z = int(numbers[2])
-            else:
-                print(f"Skipped {filename}")
-                continue
-    
-            # load the 3D numpy volume data [X, Y, Z]
-            full_file_path = os.path.join(in_directory, filename)
-            cube_3d = np.load(full_file_path, allow_pickle=True)
-    
-            # finding the midpoint along the z axis
-            mid_z = cube_3d.shape[2] // 2
-            
-            # Slicing syntax: [all_x, all_y, exact_z_layer]
-            # This collapses the 3D array down into a flat 2D matrix
-            tile_2d = cube_3d[:, :, mid_z]
-    
-            # saving the 2d data and keeping the coordinates
-            output_filename = f"cube_2d_X{cube_x}_Y{cube_y}_Z{cube_z}.npy"
-            full_output_path = os.path.join(out_directory, output_filename)
-            
-            np.save(full_output_path, tile_2d)
-            print(f"saved 2D slice data to: {output_filename}")
+            # iterate through each XY tile in the slice
+            for xi in range(NameGrid.shape[0]):
+                for yi in range(NameGrid.shape[1]):
+                    
+                    # load the corresponding cube
+                    Cube = np.load(NameGrid[xi, yi, zi])
+                    
+                    # copy the slice from the cube to the volume slice
+                    x_start = xi * cube_shape[0]
+                    x_end = x_start + Cube.shape[0]
+                    y_start = yi * cube_shape[1]
+                    y_end = y_start + Cube.shape[1]
+                    Slice[x_start:x_end, y_start:y_end] = Cube[:, :, si]
+                    
+            # save the entire slice to disk
+            slice_filename = out_directory + "/" + str(slice_counter) + ".npy"
+            np.save(slice_filename, Slice)
+            slice_counter = slice_counter + 1
 
     

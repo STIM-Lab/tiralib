@@ -5,6 +5,9 @@ from tqdm import tqdm
 from skimage import measure
 import os
 import subprocess
+import trimesh
+import re
+import matplotlib.pyplot as plt
 
 # This function sums all tiff images in a directory 
 def sum(directory):
@@ -31,19 +34,21 @@ def mip(directory):
 
 def otsu(input_npy_dir, output_mask_dir):
 
-    input_npy_dir = Path(input_npy_dir)
-    output_mask_dir = Path(output_mask_dir)
+    input_path = Path(input_npy_dir)
+    output_path = Path(output_mask_dir)
 
     # make output folder
-    output_mask_dir.mkdir(parents=True, exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
     
-    sorted_npy = sorted(input_npy_dir.glob("*.npy"))
+    sorted_npy = sorted(input_path.glob("*.npy"))
+    
+    print("Applying Otsu's method to " + str(len(sorted_npy)) + " .npy arrays")
 
     # process all npy cubes
-    for ni in tqdm(range(len(sorted(input_npy_dir.glob("*.npy"))))):
+    for ni in tqdm(range(len(sorted(input_path.glob("*.npy"))))):
         
         npy_file = sorted_npy[ni]
-from skimage import measure
+#from skimage import measure
         #print(f"processing : {npy_file.name}")
 
         # load cube
@@ -64,7 +69,7 @@ from skimage import measure
         #mask = mask.astype(np.float32) * 255.0
         
         # save binary cube
-        out_file = output_mask_dir / f"{npy_file.stem}_otsu3d.npy"
+        out_file = output_path / f"{npy_file.stem}_otsu3d.npy"
         np.save(out_file, mask)
         
 ## This function executes the RSF GPU code for each volume in a specified directory.
@@ -83,7 +88,7 @@ from skimage import measure
 #  @param wf is the weight for the fitting termin_directory, out_directory
 #  @param cuda is a true/false value defining whether or not the GPU is used
 #  @param dp is a triple defining the size of the volume along each spatial dimension
-def rsf_batch(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.1, ws=0.1, wf=0.1, cuda=True):
+def rsf(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.1, ws=0.1, wf=0.1, cuda=True):
 
     exec_dir = Path(exec_dir)
     bin_dir = Path(bin_dir)
@@ -118,7 +123,7 @@ def rsf_batch(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1
             continue
 
         # generate output filename
-        out_file = output_dir / f"{rawfrom skimage import measure_file.stem}_rsf.npy"
+        out_file = output_dir / f"{raw_file.stem}_rsf.npy"
 
         # select cpu or gpu execution
         if cuda:
@@ -178,10 +183,10 @@ def npy2obj(input_npy_dir, output_dir, level):
 
             verts, faces, normals, values, = measure.marching_cubes(sdf_data, level=0.0)
 
-            output_dir = filename.replace('.npy', '_surface.obj')
+            output_file = output_dir + filename.replace('.npy', '_surface.obj')
 
             mesh = trimesh.Trimesh(vertices=verts, faces=faces)
-            mesh.export(output_filename)
+            mesh.export(output_file)
             
 def cmap2d(in_directory, out_directory):
    
@@ -262,7 +267,7 @@ def cmap2d(in_directory, out_directory):
             plt.savefig(full_output_path, bbox_inches='tight')
             plt.close()
 
-print(f"Successfully saved slice to {full_output_path}")
+    print(f"Successfully saved slice to {full_output_path}")
 
 def cmap3d(in_directory, out_directory):
     in_directory = ('foldername')
@@ -287,15 +292,15 @@ def cmap3d(in_directory, out_directory):
             print(f"processing files : {filename}")
             numbers = re.findall(r'\d+', filename)
             if len(numbers) >= 3:
-            cube_x, cube_y, cube_z = int(numbers[0]), int(numbers[1]), int(numbers[2])
+                cube_x, cube_y, cube_z = int(numbers[0]), int(numbers[1]), int(numbers[2])
             
-            global_x = cube_x * CUBE_SIZE
-            global_y = cube_y * CUBE_SIZE
-            global_z = cube_z * CUBE_SIZE
+                global_x = cube_x * CUBE_SIZE
+                global_y = cube_y * CUBE_SIZE
+                global_z = cube_z * CUBE_SIZE
             
             else:
-            print("skipped")
-            continue
+                print("skipped")
+                continue
             
             full_file_path = os.path.join(in_directory, filename)
             sdf_data = np.load(full_file_path, allow_pickle=True)
@@ -311,4 +316,4 @@ def cmap3d(in_directory, out_directory):
             
             output_filename = f"slice_X{global_x}_Y{global_y}_Z{global_z}.png"
             full_output_path = os.path.join(out_directory, output_filename)
-print(f"Successfully saved slice to {full_output_path}")
+            print(f"Successfully saved slice to {full_output_path}")
