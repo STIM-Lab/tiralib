@@ -106,6 +106,11 @@ def stacks_to_npy(out_directory, cube_dim):
         
     
 ## cubify script splits a large image stack into manageable cubes of size cube_size
+#
+#  @param in_directory is the directory containing volume slices that will be turned into cubes
+#  @param out_directory is the destination directory for the cubes
+#  @param cube_size is the maximum cube size: all of the "internal" cubes will be this size, but cubes at
+#         the edges may be smaller
 def cubify(in_directory, out_directory, cube_size):
     
     if in_directory[-1] != "/":
@@ -156,12 +161,12 @@ def namegrid(filenames):
         
     return NameGrid
 
-## Calculates the size of an XY slice of the entire volume from a NameGrid. The main problem
+## Calculates the size of the entire volume from a NameGrid. The main challenge
 #  here is that the last tile along any dimension may be smaller than the other tiles inside
 #  the grid. This is because the entire volume may not be evenly divisible by the cube size.
 #  Since the cube at the starting point of the grid (0, 0, 0) will be the largest, we start
 #  there and then update the size based on the size of the last cube along that dimension.
-def slicedim(namegrid):
+def volshape(namegrid):
     
     # get the number of cubes along each dimension
     num_cubes = namegrid.shape
@@ -174,13 +179,15 @@ def slicedim(namegrid):
     # get the size of the slice EXCLUDING the last cube (which may be a different size)
     x_size = corner_shape[0] * (num_cubes[0] - 1)
     y_size = corner_shape[1] * (num_cubes[1] - 1)
+    z_size = corner_shape[2] * (num_cubes[2] - 1)
     
     # add the size of the last cube
-    LastCube = np.load(namegrid[-1, -1, 0])
+    LastCube = np.load(namegrid[-1, -1, -1])
     x_size = x_size + LastCube.shape[0]
     y_size = y_size + LastCube.shape[1]
+    z_size = z_size + LastCube.shape[2]
     
-    return (x_size, y_size)
+    return (x_size, y_size, z_size)
 
 ## Returns the data type of the cubes in a tiled grid
 def dtype(namegrid):
@@ -197,7 +204,8 @@ def cubeshape(namegrid, zi):
 
 ## Combines a set of equally-sized cubes (generated using the cubify function) into
 #  a set of 2D slices across the entire volume.
-def decubify(in_directory, out_directory, cube_size=200):
+
+def decubify(in_directory, out_directory):
 
     # create the output directory (if it doesn't already exist)
     os.makedirs(out_directory, exist_ok=True)
@@ -209,14 +217,15 @@ def decubify(in_directory, out_directory, cube_size=200):
     NameGrid = namegrid(npy_files)
     
     # calculate the size of a 2D slice from the FileGrid
-    SliceDim = slicedim(NameGrid)
+    VolumeShape = volshape(NameGrid)
     
     # allocate a 2D slice using the same data type as the NPY cubes
     data_type = dtype(NameGrid)
-    Slice = np.zeros(SliceDim, dtype=data_type)
+    Slice = np.zeros((VolumeShape[0], VolumeShape[1]), dtype=data_type)
     
     slice_counter = 0
-    
+    print("Saving volume slices")
+    pbar = tqdm(total=VolumeShape[2])
     # for each "plank" (layer of cubes) along the Z axis
     for zi in range(NameGrid.shape[2]):
         
@@ -244,5 +253,7 @@ def decubify(in_directory, out_directory, cube_size=200):
             slice_filename = out_directory + "/" + str(slice_counter) + ".npy"
             np.save(slice_filename, Slice)
             slice_counter = slice_counter + 1
+            pbar.update(1)
+    pbar.close()
 
     

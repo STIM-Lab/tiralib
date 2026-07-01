@@ -9,7 +9,13 @@ import trimesh
 import re
 import matplotlib.pyplot as plt
 
-# This function sums all tiff images in a directory 
+## @package batch
+#  This package contains functions for processing multiple files in a directory.
+#  This is usually used to process large data sets out-of-core.
+
+## This function sums all images in a directory 
+#
+#  @param directory is the directory containing the images to sum
 def sum(directory):
     sum_imgs = 0  
     files = sorted (os.listdir(directory))
@@ -19,7 +25,9 @@ def sum(directory):
         sum_imgs = sum_imgs + img
     return sum_imgs
 
-# This function computes the maximum intensity projection of all tiff images in a directory
+## This function computes the maximum intensity projection of all tiff images in a directory
+#
+#  @param directory is the directory containing the images to sum
 def mip(directory):
     files = sorted (os.listdir(directory))
     images = []
@@ -31,11 +39,14 @@ def mip(directory):
     mip = np.max(images, axis = 0)
     return mip
 
+## Execute Otsu's method on all NPY files in a directory
+#
+#  @param input_dir is the source directory containing the files that will be analyzed
+#  @param output_dir is the destination directory that will contain the the binary thresholded results
+def otsu(input_dir, output_dir):
 
-def otsu(input_npy_dir, output_mask_dir):
-
-    input_path = Path(input_npy_dir)
-    output_path = Path(output_mask_dir)
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
 
     # make output folder
     output_path.mkdir(parents=True, exist_ok=True)
@@ -48,8 +59,6 @@ def otsu(input_npy_dir, output_mask_dir):
     for ni in tqdm(range(len(sorted(input_path.glob("*.npy"))))):
         
         npy_file = sorted_npy[ni]
-#from skimage import measure
-        #print(f"processing : {npy_file.name}")
 
         # load cube
         vol = np.load(npy_file).astype(np.float32)
@@ -65,9 +74,6 @@ def otsu(input_npy_dir, output_mask_dir):
         mask = np.ones(vol.shape, dtype=np.float32) * 255.0
         mask[inside] = 0.0
         
-        # convert boolean to uint8
-        #mask = mask.astype(np.float32) * 255.0
-        
         # save binary cube
         out_file = output_path / f"{npy_file.stem}_otsu3d.npy"
         np.save(out_file, mask)
@@ -76,9 +82,10 @@ def otsu(input_npy_dir, output_mask_dir):
 #  The volumes are assumed consist of (1) a raw image volume and (2) an initial
 #  binary segmentation.
 #
-#  @param exec_dir is the directory of the rsf_gpu executable
+#  @param exec_bin is the location of the rsf_gpu executable
 #  @param bin_dir is the directory containing the initial binary segmentation
-#  @param raw_dir is the directory contanpy filesining the raw image volumes corresponding to the binary segmentations
+#  @param raw_dir is the directory containing the raw image volumes corresponding to the binary segmentations
+#  @param out_dir is the directory where the resulting SDF files will be saved
 #  @param sigma_l is the standard deviation of the blur kernel used in the localization function
 #  @param sigma_k is the standard deviation of the blur kernel used in the fitting function
 #  @param T is the number of time steps to simulate
@@ -88,20 +95,21 @@ def otsu(input_npy_dir, output_mask_dir):
 #  @param wf is the weight for the fitting termin_directory, out_directory
 #  @param cuda is a true/false value defining whether or not the GPU is used
 #  @param dp is a triple defining the size of the volume along each spatial dimension
-def rsf(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.1, ws=0.1, wf=0.1, cuda=True):
+def rsf(exec_bin, bin_dir, raw_dir, out_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(1.0, 1.0, 1.0), wr=0.1, ws=0.1, wf=0.1, cuda=True):
 
-    exec_dir = Path(exec_dir)
+    exec_path = Path(exec_bin)
     bin_dir = Path(bin_dir)
     raw_dir = Path(raw_dir)
+    out_dir = Path(out_dir)
 
     # create output directory
-    output_dir = raw_dir.parent / "rsf_output"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    #output_dir = raw_dir.parent / "rsf_output"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # locate rsf executable
-    exe_path = exec_dir / "rsf_gpu.exe"
+    #exe_path = exec_dir / "rsf_gpu.exe"
 
-    if not exe_path.exists():
+    if not exec_path.exists():
         raise FileNotFoundError("could not find rsf_gpu executable")
 
     # get all raw volumes
@@ -123,7 +131,7 @@ def rsf(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(
             continue
 
         # generate output filename
-        out_file = output_dir / f"{raw_file.stem}_rsf.npy"
+        out_file = out_dir / f"{raw_file.stem}_rsf.npy"
 
         # select cpu or gpu execution
         if cuda:
@@ -133,7 +141,7 @@ def rsf(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(
 
         # build command line arguments
         cmd = [
-            str(exe_path),
+            str(exec_path),
             "--binary", str(bin_file),
             "--image", str(raw_file),
             "--output", str(out_file),
@@ -154,7 +162,7 @@ def rsf(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(
         # execute rsf
         result = subprocess.run(
                  cmd,
-                 cwd=str(exec_dir),
+#                 cwd=str(exec_path),
                  capture_output=True,
                  text=True
          )
@@ -171,7 +179,8 @@ def rsf(exec_dir, bin_dir, raw_dir, sigma_l=3.0, sigma_k=3.0, T=50, dt=0.1, dp=(
     
 def npy2obj(input_npy_dir, output_dir, level):
     input_npy_dir = os.path.join('foldername')
-
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
     filenames = os.listdir(input_npy_dir)
     for fid in range(len(filenames)):
         filename = filenames[fid]
@@ -187,87 +196,72 @@ def npy2obj(input_npy_dir, output_dir, level):
 
             mesh = trimesh.Trimesh(vertices=verts, faces=faces)
             mesh.export(output_file)
-            
-def cmap2d(in_directory, out_directory):
-   
-    in_directory = ('foldername')
-    out_directory = ('foldername')
+
+## Apply a color map to a series of two-dimensional arrays and save the resulting images as PNG files
+#
+#  @param in_directory is the directory containing NPY files to which the color map will be applied
+#  @param out_directory is the destination directory that will contain the color mapped images
+#  @param color_map is the Matplotlib color map that will be applied
+#  @param zero_center is a boolean value that sets whether or not the colormap will be scaled so that the center is at zero
+def cmap2d(in_directory, out_directory, color_map="RdYlBu_r", zero_center=True):
+    print("Applying colormaps")
+    
     os.makedirs(out_directory, exist_ok=True)
-
-    CUBE_SIZE = 200
-
-    print(f"Reading slices from: {in_directory}\n")
-    print(f"saving images to: {out_directory}\n")
-
-    def check_file_exists(path):
-        try:
-            os.stat(path)
-        except (OSError, ValueError):
-            return False
-        return True 
-    file_count = 0
-
-
-    for filename in os.listdir(in_directory):   
-        if filename.endswith('.npy'):
-            print(f"processing files : {filename}")
-            numbers = re.findall(r'\d+', filename)
-            z_layer = numbers[0] if numbers else "Unknown"
-             
-            full_file_path = os.path.join(in_directory, filename)
-            slice_2d = np.load(full_file_path, allow_pickle=True)
-             
-            plt.figure(figsize=(8, 8))
-            plt.imshow(slice_2d, cmap='RdYlBu')
-            plt.title(f"Master Volume - Global Z Slice: {z_layer}")
-            plt.axis('off')
-             
-            output_filename = f"plot_Z{z_layer}.png"
-            full_output_path = os.path.join(out_directory, output_filename)
+    
+    # get a list of NPY files in the input directory
+    filenames = os.listdir(in_directory)
+    
+    # get the smallest and largest values across all images
+    
+    print("Calculating minimum and maximum colormap values")
+    for fi in tqdm(range(len(filenames))):
+        in_filename = os.path.join(in_directory, filenames[fi])
+        Slice = np.load(in_filename)
+        if fi == 0:
+            v_min = np.min(Slice)
+            v_max = np.max(Slice)
+        else:
+            v_min = min(v_min, np.min(Slice))
+            v_max = max(v_max, np.max(Slice))
             
-     
-        #  Save it in_directory = ('foldername')
-        out_directory = ('foldername')
-        os.makedirs(out_directory, exist_ok=True)
-
-        CUBE_SIZE = 200
-
-        print(f"Reading slices from: {in_directory}\n")
-        print(f"saving images to: {out_directory}\n")
-
-        def check_file_exists(path):
-            try:
-                os.stat(path)
-            except (OSError, ValueError):
-                return False
-            return True 
-        file_count = 0
-
-        for filename in os.listdir(in_directory):   
-            if filename.endswith('.npy'):
-                print(f"processing files : {filename}")
-                numbers = re.findall(r'\d+', filename)
-                z_layer = numbers[0] if numbers else "Unknown"
-                 
-                full_file_path = os.path.join(in_directory, filename)
-                slice_2d = np.load(full_file_path, allow_pickle=True)
-                 
-                plt.figure(figsize=(8, 8))
-                plt.imshow(slice_2d, cmap='RdYlBu')
-                plt.title(f"Master Volume - Global Z Slice: {z_layer}")
-                plt.axis('off')
-                 
-                output_filename = f"plot_Z{z_layer}.png"
-                full_output_path = os.path.join(out_directory, output_filename)
-                
-         
-            #  Save it 
-                plt.savefig(full_output_path, bbox_inches='tight')
-                plt.close()
-            plt.savefig(full_output_path, bbox_inches='tight')
-            plt.close()
-
-    print(f"Successfully saved slice to {full_output_path}")
+    if zero_center == True:
+        if v_min < 0 and v_max > 0:
+            v_max = max(abs(v_min), abs(v_max))
+            v_min = -v_max
+        else:
+            print("WARNING: Cannot zero center the colormap since the minimum and maximum values do not surround zero")
+            
+        
+    print("Applying colormaps")
+    for fi in tqdm(range(len(filenames))):
+        in_filename = os.path.join(in_directory, filenames[fi])
+        Slice = np.load(in_filename)
+        output_file = os.path.join(out_directory, filenames[fi].replace('.npy', '.jpg'))
+        plt.imsave(output_file, Slice, vmin=v_min, vmax=v_max, cmap=color_map)
+       
+## Apply a threshold to a series of NPY files
+#
+#  @param in_directory is the source containing NPY files that will be thresholded
+#  @param out_directory is the destination directory that will store the binary output files
+#  @param threshold is the (inclusive) value used to separate the interior and exterior values
+def threshold(in_directory, out_directory, threshold=0):    
+    
+    os.makedirs(out_directory, exist_ok=True)
+    
+    # get a list of NPY files in the input directory
+    filenames = os.listdir(in_directory)
+        
+    print("Applying threshold (" + str(threshold) + ")")
+    for fi in tqdm(range(len(filenames))):
+        in_filename = os.path.join(in_directory, filenames[fi])
+        Slice = np.load(in_filename)
+        
+        Mask = np.zeros_like(Slice, dtype=np.uint8)
+        Mask[Slice <= threshold] = 255
+        output_file = os.path.join(out_directory, filenames[fi].replace('.npy', '.jpg'))
+        np.save(output_file, Mask)
+        
+    
 
 def cmap3d(in_directory, out_directory):
     in_directory = ('foldername')
