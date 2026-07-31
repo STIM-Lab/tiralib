@@ -77,6 +77,14 @@ def otsu(input_dir, output_dir):
         # save binary cube
         out_file = output_path / f"{npy_file.stem}_otsu3d.npy"
         np.save(out_file, mask)
+
+## This function executes the OpenVDB C++ code to convert a stack of binary images (stored as 8-bit raster images)
+#  into a single OpenVDB volumetric file.
+#
+#  @param exec_bin is the location of the compiled C++ executable
+#  @param in_dir is the location of the 8-bit binary image files
+#  @param out_file is the file name for the OpenVDB output file
+def stack2vdb(exec_bin, in_dir, out_file):
         
 ## This function executes the RSF GPU code for each volume in a specified directory.
 #  The volumes are assumed consist of (1) a raw image volume and (2) an initial
@@ -242,7 +250,7 @@ def cmap2d(in_directory, out_directory, color_map="RdYlBu_r", zero_center=True):
 ## Apply a threshold to a series of NPY files
 #
 #  @param in_directory is the source containing NPY files that will be thresholded
-#  @param out_directory is the destination directory that will store the binary output files
+#  @param out_directory is the destination directory that will store the 8-bit binary images (0 = 0, 1 = 255)
 #  @param threshold is the (inclusive) value used to separate the interior and exterior values
 def threshold(in_directory, out_directory, threshold=0):    
     
